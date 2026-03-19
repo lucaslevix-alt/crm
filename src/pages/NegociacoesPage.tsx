@@ -41,10 +41,10 @@ export function NegociacoesPage() {
     loadProdutos()
   }, [loadProdutos])
 
-  function addLinha() {
+  function addLinha(produtoId?: string) {
     setLinhas((current) => [
       ...current,
-      { uid: `${Date.now()}-${Math.random()}`, produtoId: produtos[0]?.id ?? '', quantidade: 1 }
+      { uid: `${Date.now()}-${Math.random()}`, produtoId: produtoId ?? produtos[0]?.id ?? '', quantidade: 1 }
     ])
   }
 
@@ -86,183 +86,242 @@ export function NegociacoesPage() {
 
   return (
     <div className="content">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>🤝 Negociações</h2>
-          <p style={{ color: 'var(--text2)' }}>Selecione os produtos e negocie os valores com o cliente</p>
+      <div className="neg-header">
+        <div className="neg-header-text">
+          <h2 className="neg-title">🤝 Negociações</h2>
+          <p className="neg-subtitle">Selecione os produtos e apresente as opções de pagamento ao cliente</p>
         </div>
         <button
           type="button"
-          className="btn btn-primary"
-          style={{ width: 'auto', padding: '10px 20px' }}
-          onClick={addLinha}
+          className="btn btn-primary neg-btn-add"
+          onClick={() => addLinha()}
           disabled={loading || !produtos.length}
         >
-          + Adicionar produto
+          <span className="neg-btn-icon">+</span>
+          Adicionar produto
         </button>
       </div>
 
       {error && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="empty">
-            <p>{error}</p>
-          </div>
+        <div className="neg-error">
+          <span className="neg-error-icon">⚠️</span>
+          <p>{error}</p>
         </div>
       )}
 
       {!loading && !produtos.length && !error && (
-        <div className="card">
-          <div className="empty">
-            <div className="empty-icon">📦</div>
-            <p>
-              Nenhum produto cadastrado.<br />
-              Cadastre produtos no menu <strong>Produtos</strong> para negociar.
-            </p>
-          </div>
+        <div className="neg-empty">
+          <div className="neg-empty-icon">📦</div>
+          <h3 className="neg-empty-title">Nenhum produto cadastrado</h3>
+          <p className="neg-empty-text">
+            Cadastre produtos no menu <strong>Produtos</strong> para negociar valores com seus clientes.
+          </p>
         </div>
       )}
 
       {!loading && produtos.length > 0 && (
-        <>
-          <div className="card" style={{ marginBottom: 24 }}>
-            <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 15 }}>Produtos disponíveis</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {produtos.map((p) => {
-                const parcCartao = valorParcela(p.valorCartao, p.parcelasCartao)
-                const parcBoleto = valorParcela(p.valorBoleto, p.parcelasBoleto)
-                return (
-                  <div
-                    key={p.id}
-                    style={{
-                      padding: '10px 14px',
-                      borderRadius: 8,
-                      background: 'var(--bg2)',
-                      border: '1px solid var(--border2)',
-                      fontSize: 13
-                    }}
-                  >
-                    <strong>{p.nome}</strong>
-                    <span style={{ color: 'var(--text2)', marginLeft: 6 }}>
-                      Cartão: {fmt(p.valorCartao)} ({p.parcelasCartao ?? '—'}x {fmt(parcCartao)} sem juros) · Boleto: {fmt(p.valorBoleto)} ({p.parcelasBoleto ?? '—'}x {fmt(parcBoleto)}) · À vista: {fmt(p.aVista)}
-                    </span>
-                  </div>
-                )
-              })}
+        <div className="neg-layout">
+          <div className="neg-main">
+            <div className="neg-section">
+              <h3 className="neg-section-title">Produtos disponíveis</h3>
+              <p className="neg-section-hint">Clique em um produto para adicionar à negociação</p>
+              <div className="neg-produtos-grid">
+                {produtos.map((p) => {
+                  const parcCartao = valorParcela(p.valorCartao, p.parcelasCartao)
+                  const parcBoleto = valorParcela(p.valorBoleto, p.parcelasBoleto)
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className="neg-produto-card"
+                      onClick={() => addLinha(p.id)}
+                    >
+                      <div className="neg-produto-nome">{p.nome}</div>
+                      <div className="neg-produto-precos">
+                        <div className="neg-preco-item">
+                          <span className="neg-preco-label">💵 À vista</span>
+                          <span className="neg-preco-valor neg-preco-avista">{fmt(p.aVista)}</span>
+                        </div>
+                        <div className="neg-preco-item">
+                          <span className="neg-preco-label">💳 Cartão</span>
+                          {(p.parcelasCartao ?? 0) > 0 ? (
+                            <>
+                              <span className="neg-preco-row">
+                                <span className="neg-preco-valor">{fmt(parcCartao)}</span>
+                                <span className="neg-preco-parcela">
+                                  {p.parcelasCartao}x <em>s/ juros</em>
+                                </span>
+                              </span>
+                              <span className="neg-preco-total">Total: {fmt(p.valorCartao)}</span>
+                            </>
+                          ) : (
+                            <span className="neg-preco-valor">{fmt(p.valorCartao)}</span>
+                          )}
+                        </div>
+                        <div className="neg-preco-item">
+                          <span className="neg-preco-label">📄 Boleto</span>
+                          {(p.parcelasBoleto ?? 0) > 0 ? (
+                            <>
+                              <span className="neg-preco-row">
+                                <span className="neg-preco-valor">{fmt(parcBoleto)}</span>
+                                <span className="neg-preco-parcela">{p.parcelasBoleto}x</span>
+                              </span>
+                              <span className="neg-preco-total">Total: {fmt(p.valorBoleto)}</span>
+                            </>
+                          ) : (
+                            <span className="neg-preco-valor">{fmt(p.valorBoleto)}</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="neg-produto-add">+ Adicionar</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="neg-section">
+              <div className="neg-section-header">
+                <h3 className="neg-section-title">Sua negociação</h3>
+                <span className="neg-badge-juros">💳 Parcelas no cartão sem juros</span>
+              </div>
+              {linhas.length === 0 ? (
+                <div className="neg-empty-linhas">
+                  <div className="neg-empty-linhas-icon">🛒</div>
+                  <p>Nenhum produto na negociação</p>
+                  <p className="neg-empty-linhas-hint">Clique em um produto acima ou em <strong>Adicionar produto</strong></p>
+                </div>
+              ) : (
+                <div className="neg-linhas">
+                  {linhas.map((l) => {
+                    const p = produtos.find((x) => x.id === l.produtoId)
+                    if (!p) {
+                      return (
+                        <div key={l.uid} className="neg-linha neg-linha-invalida">
+                          <select
+                            value={l.produtoId}
+                            onChange={(e) => updateLinha(l.uid, 'produtoId', e.target.value)}
+                            className="neg-select"
+                          >
+                            <option value="">Selecione um produto</option>
+                            {produtos.map((pr) => (
+                              <option key={pr.id} value={pr.id}>
+                                {pr.nome}
+                              </option>
+                            ))}
+                          </select>
+                          <button type="button" className="neg-btn-remove" onClick={() => removeLinha(l.uid)} title="Remover">
+                            ✕
+                          </button>
+                        </div>
+                      )
+                    }
+                    const vCartao = (p.valorCartao ?? 0) * l.quantidade
+                    const parcCartao = valorParcela(p.valorCartao, p.parcelasCartao)
+                    const linhaParcCartao = (parcCartao ?? 0) * l.quantidade
+                    const vBoleto = (p.valorBoleto ?? 0) * l.quantidade
+                    const parcBoleto = valorParcela(p.valorBoleto, p.parcelasBoleto)
+                    const linhaParcBoleto = (parcBoleto ?? 0) * l.quantidade
+                    const av = (p.aVista ?? 0) * l.quantidade
+                    return (
+                      <div key={l.uid} className="neg-linha">
+                        <div className="neg-linha-produto">
+                          <select
+                            value={l.produtoId}
+                            onChange={(e) => updateLinha(l.uid, 'produtoId', e.target.value)}
+                            className="neg-select neg-select-produto"
+                          >
+                            {produtos.map((pr) => (
+                              <option key={pr.id} value={pr.id}>
+                                {pr.nome}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="neg-linha-qtd">
+                            <button
+                              type="button"
+                              className="neg-qtd-btn"
+                              onClick={() => updateLinha(l.uid, 'quantidade', Math.max(1, l.quantidade - 1))}
+                              disabled={l.quantidade <= 1}
+                            >
+                              −
+                            </button>
+                            <span className="neg-qtd-valor">{l.quantidade}</span>
+                            <button
+                              type="button"
+                              className="neg-qtd-btn"
+                              onClick={() => updateLinha(l.uid, 'quantidade', l.quantidade + 1)}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <div className="neg-linha-valores">
+                          <div className="neg-linha-val">
+                            <span className="neg-linha-val-label">À vista</span>
+                            <span className="neg-linha-val-num neg-linha-val-avista">{fmt(av)}</span>
+                          </div>
+                          <div className="neg-linha-val">
+                            <span className="neg-linha-val-label">Cartão</span>
+                            <span className="neg-linha-val-destaque">
+                              <span className="neg-linha-val-num">{fmt(linhaParcCartao)}</span>
+                              <span className="neg-linha-val-parc">/parc</span>
+                            </span>
+                            <span className="neg-linha-val-total">Total: {fmt(vCartao)}</span>
+                          </div>
+                          <div className="neg-linha-val">
+                            <span className="neg-linha-val-label">Boleto</span>
+                            <span className="neg-linha-val-destaque">
+                              <span className="neg-linha-val-num">{fmt(linhaParcBoleto)}</span>
+                              <span className="neg-linha-val-parc">/parc</span>
+                            </span>
+                            <span className="neg-linha-val-total">Total: {fmt(vBoleto)}</span>
+                          </div>
+                        </div>
+                        <button type="button" className="neg-btn-remove" onClick={() => removeLinha(l.uid)} title="Remover">
+                          ✕
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="card">
-            <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: 15 }}>Linhas de negociação</span>
-              <span style={{ fontSize: 12, color: 'var(--text3)', padding: '4px 8px', background: 'var(--bg2)', borderRadius: 6 }}>
-                💳 Parcelas no cartão são <strong>sem juros</strong>
-              </span>
-            </div>
-            {linhas.length === 0 ? (
-              <div className="empty" style={{ padding: 32 }}>
-                <p style={{ color: 'var(--text2)' }}>
-                  Clique em <strong>+ Adicionar produto</strong> para montar sua negociação.
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="tw">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Produto</th>
-                        <th>Qtd</th>
-                        <th>Valor cartão</th>
-                        <th>Parcela cartão (s/ juros)</th>
-                        <th>Valor boleto</th>
-                        <th>Parcela boleto</th>
-                        <th>À vista</th>
-                        <th style={{ width: 44 }} />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {linhas.map((l) => {
-                        const p = produtos.find((x) => x.id === l.produtoId)
-                        if (!p) {
-                          return (
-                            <tr key={l.uid}>
-                              <td colSpan={6} style={{ color: 'var(--text3)' }}>
-                                Selecione um produto
-                              </td>
-                              <td>
-                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeLinha(l.uid)}>
-                                  ✕
-                                </button>
-                              </td>
-                            </tr>
-                          )
-                        }
-                        const vCartao = (p.valorCartao ?? 0) * l.quantidade
-                        const parcCartao = valorParcela(p.valorCartao, p.parcelasCartao)
-                        const linhaParcCartao = (parcCartao ?? 0) * l.quantidade
-                        const vBoleto = (p.valorBoleto ?? 0) * l.quantidade
-                        const parcBoleto = valorParcela(p.valorBoleto, p.parcelasBoleto)
-                        const linhaParcBoleto = (parcBoleto ?? 0) * l.quantidade
-                        const av = (p.aVista ?? 0) * l.quantidade
-                        return (
-                          <tr key={l.uid}>
-                            <td>
-                              <select
-                                value={l.produtoId}
-                                onChange={(e) => updateLinha(l.uid, 'produtoId', e.target.value)}
-                                style={{ minWidth: 180 }}
-                              >
-                                {produtos.map((pr) => (
-                                  <option key={pr.id} value={pr.id}>
-                                    {pr.nome}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                min={1}
-                                value={l.quantidade}
-                                onChange={(e) => updateLinha(l.uid, 'quantidade', e.target.value)}
-                                style={{ width: 60, padding: '6px 8px' }}
-                              />
-                            </td>
-                            <td style={{ color: 'var(--green)' }}>{fmt(vCartao)}</td>
-                            <td>{fmt(linhaParcCartao)}</td>
-                            <td style={{ color: 'var(--green)' }}>{fmt(vBoleto)}</td>
-                            <td>{fmt(linhaParcBoleto)}</td>
-                            <td>{fmt(av)}</td>
-                            <td>
-                              <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeLinha(l.uid)}>
-                                ✕
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                    {linhasComDetalhes.length > 0 && (
-                      <tfoot>
-                        <tr style={{ background: 'var(--bg2)', fontWeight: 700 }}>
-                          <td colSpan={2} style={{ textAlign: 'right', paddingRight: 12 }}>
-                            Totais:
-                          </td>
-                          <td style={{ color: 'var(--green)' }}>{fmt(totalValorCartao)}</td>
-                          <td>{fmt(totalParcelaCartao)}</td>
-                          <td style={{ color: 'var(--green)' }}>{fmt(totalValorBoleto)}</td>
-                          <td>{fmt(totalParcelaBoleto)}</td>
-                          <td>{fmt(totalAVista)}</td>
-                          <td />
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
+          {linhasComDetalhes.length > 0 && (
+            <aside className="neg-resumo">
+              <div className="neg-resumo-card">
+                <h3 className="neg-resumo-title">Resumo</h3>
+                <div className="neg-resumo-linhas">
+                  <div className="neg-resumo-item neg-resumo-avista">
+                    <span className="neg-resumo-label">💵 À vista</span>
+                    <span className="neg-resumo-valor">{fmt(totalAVista)}</span>
+                  </div>
+                  <div className="neg-resumo-item">
+                    <span className="neg-resumo-label">💳 Cartão</span>
+                    <span className="neg-resumo-destaque">
+                      <span className="neg-resumo-valor">{fmt(totalParcelaCartao)}</span>
+                      <span className="neg-resumo-parc">/parc</span>
+                    </span>
+                    <span className="neg-resumo-total">Total: {fmt(totalValorCartao)}</span>
+                  </div>
+                  <div className="neg-resumo-item">
+                    <span className="neg-resumo-label">📄 Boleto</span>
+                    <span className="neg-resumo-destaque">
+                      <span className="neg-resumo-valor">{fmt(totalParcelaBoleto)}</span>
+                      <span className="neg-resumo-parc">/parc</span>
+                    </span>
+                    <span className="neg-resumo-total">Total: {fmt(totalValorBoleto)}</span>
+                  </div>
                 </div>
-              </>
-            )}
-          </div>
-        </>
+                <div className="neg-resumo-footer">
+                  <span>Use estes valores para apresentar ao cliente</span>
+                </div>
+              </div>
+            </aside>
+          )}
+        </div>
       )}
     </div>
   )

@@ -3,7 +3,11 @@ import { useAppStore } from '../../store/useAppStore'
 
 export function Sidebar() {
   const navigate = useNavigate()
-  const { sidebarOpen, currentUser, openModal } = useAppStore()
+  const { sidebarOpen, setSidebarOpen, currentUser, openModal } = useAppStore()
+
+  function handleToggle() {
+    setSidebarOpen(!sidebarOpen)
+  }
 
   function handleLogout() {
     useAppStore.getState().setCurrentUser(null)
@@ -11,9 +15,10 @@ export function Sidebar() {
   }
 
   return (
-    <aside className={sidebarOpen ? 'sidebar' : 'sidebar collapsed'}>
-      <div className="sidebar-logo">
-        <div className="logo-row">
+    <>
+      <aside className={sidebarOpen ? 'sidebar' : 'sidebar collapsed'}>
+        <div className="sidebar-logo">
+          <div className="logo-row">
           <div className="logo-icon">⚡</div>
           <div>
             <div className="logo-text">Comercial</div>
@@ -126,5 +131,15 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+      <button
+        type="button"
+        className="sidebar-toggle"
+        onClick={handleToggle}
+        title={sidebarOpen ? 'Recolher menu' : 'Expandir menu'}
+        aria-label={sidebarOpen ? 'Recolher menu' : 'Expandir menu'}
+      >
+        {sidebarOpen ? '◀' : '▶'}
+      </button>
+    </>
   )
 }
