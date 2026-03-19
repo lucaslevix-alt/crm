@@ -59,6 +59,27 @@ function fmt(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
 }
 
+const PIE_COLORS = [
+  'rgba(34,197,94,.95)',
+  'rgba(22,163,74,.95)',
+  'rgba(132,204,22,.92)',
+  'rgba(5,150,105,.9)',
+  'rgba(234,179,8,.95)'
+]
+
+function pieSlicePath(cx: number, cy: number, r: number, startFrac: number, endFrac: number): string {
+  const tau = 2 * Math.PI
+  const startRad = startFrac * tau - Math.PI / 2
+  const endRad = endFrac * tau - Math.PI / 2
+  const x1 = cx + r * Math.cos(startRad)
+  const y1 = cy + r * Math.sin(startRad)
+  const x2 = cx + r * Math.cos(endRad)
+  const y2 = cy + r * Math.sin(endRad)
+  const sweepDeg = (endFrac - startFrac) * 360
+  const largeArc = sweepDeg > 180 ? 1 : 0
+  return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`
+}
+
 const STATS: Array<{ key: keyof ReturnType<typeof totals>; icon: string; label: string; col: string; money?: boolean }> = [
   { key: 'ag', icon: '📅', label: 'Reuniões Agendadas', col: 'orange' },
   { key: 're', icon: '✅', label: 'Reuniões Realizadas', col: 'green' },
@@ -400,21 +421,31 @@ export function DashboardPage() {
                     </div>
                   )
                 }
-                const map = new Map<string, { qtd: number; total: number }>()
+                const map = new Map<string, { qtd: number; total: number; vendas: number }>()
                 for (const r of vendas) {
                   const any = (r as unknown as { produtosDetalhes?: { produtoId: string; quantidade: number }[]; produtosIds?: string[] })
                   if (Array.isArray(any.produtosDetalhes) && any.produtosDetalhes.length) {
+                    const jaContouVenda = new Set<string>()
                     any.produtosDetalhes.forEach((pd) => {
-                      const cur = map.get(pd.produtoId) ?? { qtd: 0, total: 0 }
+                      const cur = map.get(pd.produtoId) ?? { qtd: 0, total: 0, vendas: 0 }
                       cur.qtd += pd.quantidade || 0
                       cur.total += (r.valor || 0) * (pd.quantidade || 0)
+                      if (!jaContouVenda.has(pd.produtoId)) {
+                        jaContouVenda.add(pd.produtoId)
+                        cur.vendas += 1
+                      }
                       map.set(pd.produtoId, cur)
                     })
                   } else if (Array.isArray(any.produtosIds) && any.produtosIds.length) {
+                    const jaContouVenda = new Set<string>()
                     any.produtosIds.forEach((pid) => {
-                      const cur = map.get(pid) ?? { qtd: 0, total: 0 }
+                      const cur = map.get(pid) ?? { qtd: 0, total: 0, vendas: 0 }
                       cur.qtd += 1
                       cur.total += r.valor || 0
+                      if (!jaContouVenda.has(pid)) {
+                        jaContouVenda.add(pid)
+                        cur.vendas += 1
+                      }
                       map.set(pid, cur)
                     })
                   }
@@ -433,41 +464,98 @@ export function DashboardPage() {
                       id: produtoId,
                       nome: p?.nome ?? 'Produto',
                       qtd: v.qtd,
-                      total: v.total
+                      total: v.total,
+                      vendas: v.vendas
                     }
                   })
                   .sort((a, b) => b.qtd - a.qtd || b.total - a.total)
                   .slice(0, 5)
-                const maxQtd = Math.max(...rows.map((r) => r.qtd), 1)
+                const totalQtd = rows.reduce((s, r) => s + r.qtd, 0) || 1
+                const cx = 90
+                const cy = 90
+                const pr = 72
+                let acc = 0
+                const slices = rows.map((r, i) => {
+                  const frac = r.qtd / totalQtd
+                  const start = acc
+                  acc += frac
+                  return {
+                    ...r,
+                    startFrac: start,
+                    endFrac: acc,
+                    color: PIE_COLORS[i % PIE_COLORS.length],
+                    pct: Math.round(frac * 1000) / 10
+                  }
+                })
                 return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {rows.map((r) => (
-                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{r.nome}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text3)' }}>{r.qtd} unid.</div>
-                        </div>
-                        <div style={{ flex: 2 }}>
-                          <div
-                            style={{
-                              height: 8,
-                              borderRadius: 999,
-                              background: 'var(--border2)',
-                              overflow: 'hidden'
-                            }}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      gap: 16,
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <svg
+                      viewBox="0 0 180 180"
+                      width={180}
+                      height={180}
+                      style={{ flexShrink: 0 }}
+                      aria-label="Distribuição por quantidade vendida"
+                    >
+                      {rows.length === 1 ? (
+                        <circle cx={cx} cy={cy} r={pr} fill={PIE_COLORS[0]}>
+                          <title>
+                            {slices[0].nome}: {slices[0].qtd} unid. · {slices[0].vendas}{' '}
+                            {slices[0].vendas === 1 ? 'venda' : 'vendas'} · {fmt(slices[0].total)} (
+                            {slices[0].pct}%)
+                          </title>
+                        </circle>
+                      ) : (
+                        slices.map((s) => (
+                          <path
+                            key={s.id}
+                            d={pieSlicePath(cx, cy, pr, s.startFrac, s.endFrac)}
+                            fill={s.color}
+                            stroke="var(--border2)"
+                            strokeWidth={1}
                           >
-                            <div
-                              style={{
-                                width: `${(r.qtd / maxQtd) * 100}%`,
-                                height: '100%',
-                                background: 'linear-gradient(90deg, rgba(34,197,94,1), rgba(22,163,74,1))',
-                                transition: 'width .2s'
-                              }}
-                            />
+                            <title>
+                              {s.nome}: {s.qtd} unid. · {s.vendas}{' '}
+                              {s.vendas === 1 ? 'venda' : 'vendas'} · {fmt(s.total)} ({s.pct}%)
+                            </title>
+                          </path>
+                        ))
+                      )}
+                    </svg>
+                    <div style={{ flex: '1 1 160px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {slices.map((s) => (
+                        <div
+                          key={s.id}
+                          style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12 }}
+                        >
+                          <span
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: 2,
+                              background: s.color,
+                              marginTop: 3,
+                              flexShrink: 0
+                            }}
+                          />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, lineHeight: 1.3 }}>{s.nome}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.45 }}>
+                              {s.qtd} unid. · {s.pct}%
+                              <br />
+                              {s.vendas} {s.vendas === 1 ? 'venda' : 'vendas'} · faturamento {fmt(s.total)}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )
               })()}
