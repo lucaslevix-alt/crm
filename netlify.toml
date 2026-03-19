@@ -1,0 +1,10 @@
+# Build do Vite; ficheiros estáticos em dist/ têm prioridade sobre a regra abaixo.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# SPA (react-router): qualquer URL sem ficheiro correspondente serve index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
