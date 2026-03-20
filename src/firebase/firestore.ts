@@ -21,6 +21,29 @@ import type { CrmUser } from '../store/useAppStore'
 const app = initFirebaseApp()
 export const db = getFirestore(app)
 
+/** Valores persistidos no Firestore para vendas */
+export const FORMAS_PAGAMENTO_VENDA = [
+  { value: 'a_vista', label: 'À vista' },
+  { value: 'cartao_sj', label: 'Cartão s/j' },
+  { value: 'cartao_cj', label: 'Cartão c/j' },
+  { value: 'boleto_parcelado', label: 'Boleto parcelado' }
+] as const
+
+export type FormaPagamentoVenda = (typeof FORMAS_PAGAMENTO_VENDA)[number]['value']
+
+const FORMA_PAGAMENTO_VALUES = new Set<string>(FORMAS_PAGAMENTO_VENDA.map((x) => x.value))
+
+export function parseFormaPagamentoVenda(raw: string): FormaPagamentoVenda | null {
+  const t = raw.trim()
+  return FORMA_PAGAMENTO_VALUES.has(t) ? (t as FormaPagamentoVenda) : null
+}
+
+export function labelFormaPagamento(value: string | null | undefined): string {
+  if (!value) return '—'
+  const row = FORMAS_PAGAMENTO_VENDA.find((x) => x.value === value)
+  return row?.label ?? value
+}
+
 export interface RegistroRow {
   id: string
   data: string
@@ -32,6 +55,8 @@ export interface RegistroRow {
   valor: number
   cashCollected: number
   obs: string | null
+  /** Preenchido quando `tipo === 'venda'` */
+  formaPagamento?: string | null
   produtosIds?: string[]
   produtosDetalhes?: RegistroProdutoItem[]
   criadoEm?: { seconds: number }
@@ -56,6 +81,10 @@ function docToRegistro(d: { id: string; data: () => Record<string, unknown> }): 
     valor: Number(x.valor ?? 0),
     cashCollected: Number(x.cashCollected ?? 0),
     obs: x.obs != null ? String(x.obs) : null,
+    formaPagamento:
+      x.formaPagamento != null && String(x.formaPagamento).trim() !== ''
+        ? String(x.formaPagamento).trim()
+        : null,
     produtosIds: Array.isArray(x.produtosIds) ? x.produtosIds.map((v) => String(v)) : [],
     produtosDetalhes: Array.isArray(x.produtosDetalhes)
       ? x.produtosDetalhes.map((v) => ({
@@ -194,6 +223,7 @@ export async function addRegistro(params: {
   valor?: number
   cashCollected?: number
   obs?: string | null
+  formaPagamento?: string | null
   produtosIds?: string[]
   produtosDetalhes?: RegistroProdutoItem[]
 }): Promise<string> {
@@ -207,6 +237,7 @@ export async function addRegistro(params: {
     valor: params.valor ?? 0,
     cashCollected: params.cashCollected ?? 0,
     obs: params.obs ?? null,
+    formaPagamento: params.tipo === 'venda' ? (params.formaPagamento ?? null) : null,
     produtosIds: params.produtosIds ?? [],
     produtosDetalhes: params.produtosDetalhes ?? [],
     criadoEm: serverTimestamp()
@@ -226,6 +257,7 @@ export async function updateRegistro(
     valor?: number
     cashCollected?: number
     obs?: string | null
+    formaPagamento?: string | null
     produtosIds?: string[]
     produtosDetalhes?: RegistroProdutoItem[]
   }
@@ -241,6 +273,7 @@ export async function updateRegistro(
     valor: params.valor ?? 0,
     cashCollected: params.cashCollected ?? 0,
     obs: params.obs ?? null,
+    formaPagamento: params.tipo === 'venda' ? (params.formaPagamento ?? null) : null,
     produtosIds: params.produtosIds ?? [],
     produtosDetalhes: params.produtosDetalhes ?? []
   })

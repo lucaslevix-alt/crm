@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import { addRegistro, listUsers, getProdutos } from '../../firebase/firestore'
+import {
+  addRegistro,
+  listUsers,
+  getProdutos,
+  FORMAS_PAGAMENTO_VENDA,
+  parseFormaPagamentoVenda
+} from '../../firebase/firestore'
 import type { ProdutoRow } from '../../firebase/firestore'
 import type { CrmUser } from '../../store/useAppStore'
 import { useAppStore } from '../../store/useAppStore'
@@ -24,6 +30,7 @@ export function NewRegistroForm() {
   const [anuncio, setAnuncio] = useState('')
   const [valor, setValor] = useState('')
   const [cashCollected, setCashCollected] = useState('')
+  const [formaPagamento, setFormaPagamento] = useState('')
   const [obs, setObs] = useState('')
   const [saving, setSaving] = useState(false)
   const [produtoItems, setProdutoItems] = useState<ProdutoSelecionadoItem[]>([])
@@ -40,6 +47,7 @@ export function NewRegistroForm() {
     setAnuncio('')
     setValor('')
     setCashCollected('')
+    setFormaPagamento('')
     setObs('')
     setProdutoItems([])
   }
@@ -89,6 +97,10 @@ export function NewRegistroForm() {
       showToast('Informe o valor da venda', 'err')
       return
     }
+    if (tipo === 'venda' && !parseFormaPagamentoVenda(formaPagamento)) {
+      showToast('Selecione a forma de pagamento', 'err')
+      return
+    }
     const produtosDetalhes = produtoItems
       .map((item) => ({
         produtoId: item.produtoId,
@@ -111,6 +123,7 @@ export function NewRegistroForm() {
         anuncio: anuncio.trim() || null,
         valor: tipo === 'venda' ? parseFloat(valor) || 0 : 0,
         cashCollected: tipo === 'venda' ? parseFloat(cashCollected) || 0 : 0,
+        formaPagamento: tipo === 'venda' ? parseFormaPagamentoVenda(formaPagamento) : null,
         obs: obs.trim() || null,
         produtosIds: tipo === 'venda' ? produtosDetalhes.flatMap((item) => Array(item.quantidade).fill(item.produtoId)) : [],
         produtosDetalhes: tipo === 'venda' ? produtosDetalhes : []
@@ -194,6 +207,22 @@ export function NewRegistroForm() {
                   onChange={(e) => setCashCollected(e.target.value)}
                   placeholder="0,00"
                 />
+              </div>
+              <div className="fg">
+                <label>Forma de pagamento *</label>
+                <select
+                  className="di"
+                  value={formaPagamento}
+                  onChange={(e) => setFormaPagamento(e.target.value)}
+                  required={isVenda}
+                >
+                  <option value="">Selecionar...</option>
+                  {FORMAS_PAGAMENTO_VENDA.map((fp) => (
+                    <option key={fp.value} value={fp.value}>
+                      {fp.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="fg s2">
                 <label>Produtos (opcional)</label>

@@ -3,6 +3,7 @@ import {
   getRegistrosByRange,
   listUsers,
   deleteRegistro,
+  labelFormaPagamento,
   type RegistroRow
 } from '../firebase/firestore'
 import type { CrmUser } from '../store/useAppStore'
@@ -106,7 +107,8 @@ export function RegistrosPage() {
       const match =
         (r.anuncio ?? '').toLowerCase().includes(q) ||
         (r.userName ?? '').toLowerCase().includes(q) ||
-        (r.obs ?? '').toLowerCase().includes(q)
+        (r.obs ?? '').toLowerCase().includes(q) ||
+        labelFormaPagamento(r.formaPagamento).toLowerCase().includes(q)
       if (!match) return false
     }
     return true
@@ -124,6 +126,7 @@ export function RegistrosPage() {
       valor: rec.valor,
       cashCollected: rec.cashCollected,
       obs: rec.obs,
+      formaPagamento: rec.formaPagamento ?? null,
       produtosIds: rec.produtosIds ?? [],
       produtosDetalhes: rec.produtosDetalhes ?? []
     })
@@ -279,6 +282,7 @@ export function RegistrosPage() {
                       <th>Profissional</th>
                       <th>Anúncio</th>
                       <th>Valor</th>
+                      <th>Pagamento</th>
                       <th>Obs</th>
                       <th></th>
                     </tr>
@@ -311,6 +315,9 @@ export function RegistrosPage() {
                           )}
                         </td>
                         <td>{r.tipo === 'venda' ? fmt(r.valor) : '—'}</td>
+                        <td style={{ fontSize: 12 }}>
+                          {r.tipo === 'venda' ? labelFormaPagamento(r.formaPagamento) : '—'}
+                        </td>
                         <td
                           style={{
                             color: 'var(--text2)',

@@ -38,6 +38,7 @@ export interface EditingRegistroRow {
   valor: number
   cashCollected: number
   obs: string | null
+  formaPagamento?: string | null
   produtosIds?: string[]
   produtosDetalhes?: Array<{ produtoId: string; quantidade: number }>
 }
