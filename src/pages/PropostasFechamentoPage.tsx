@@ -25,7 +25,8 @@ function linhaResumo(l: LinhaNegociacaoRow): string {
 }
 
 export function PropostasFechamentoPage() {
-  const { showToast } = useAppStore()
+  const { showToast, currentUser } = useAppStore()
+  const podeEditar = currentUser?.cargo === 'admin'
   const [loading, setLoading] = useState(true)
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
   const [linhas, setLinhas] = useState<LinhaNegociacaoRow[]>([])
@@ -59,6 +60,13 @@ export function PropostasFechamentoPage() {
     load()
   }, [load])
 
+  useEffect(() => {
+    if (!podeEditar) {
+      setEditingId(null)
+      setEditDraft(null)
+    }
+  }, [podeEditar])
+
   const linhasPorProduto = useMemo(() => {
     const m = new Map<string, LinhaNegociacaoRow[]>()
     for (const l of linhas) {
@@ -78,6 +86,7 @@ export function PropostasFechamentoPage() {
     produtoId: string,
     draft: { rotulo: string; valorTotal: string; parcelas: string; linkCartao: string }
   ) {
+    if (!podeEditar) return
     const vt = parseFloat(draft.valorTotal.replace(',', '.'))
     const pc = parseInt(draft.parcelas, 10)
     if (!vt || vt <= 0) {
@@ -105,6 +114,7 @@ export function PropostasFechamentoPage() {
   }
 
   function startEdit(l: LinhaNegociacaoRow) {
+    if (!podeEditar) return
     setEditingId(l.id)
     setEditDraft({
       rotulo: l.rotulo ?? '',
@@ -120,7 +130,7 @@ export function PropostasFechamentoPage() {
   }
 
   async function saveEdit(id: string) {
-    if (!editDraft) return
+    if (!podeEditar || !editDraft) return
     const vt = parseFloat(editDraft.valorTotal.replace(',', '.'))
     const pc = parseInt(editDraft.parcelas, 10)
     if (!vt || vt <= 0) {
@@ -150,6 +160,7 @@ export function PropostasFechamentoPage() {
   }
 
   async function handleDelete(l: LinhaNegociacaoRow) {
+    if (!podeEditar) return
     if (!window.confirm('Remover esta linha de proposta?')) return
     try {
       await deleteLinhaNegociacao(l.id)
@@ -175,9 +186,18 @@ export function PropostasFechamentoPage() {
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>🔗 Propostas de fechamento</h2>
         <p style={{ color: 'var(--text2)', maxWidth: 720 }}>
-          Cadastre combinações de <strong>valor total</strong>, <strong>parcelas</strong> e{' '}
-          <strong>link de pagamento no cartão</strong> para cada produto. Útil na hora de enviar opções prontas ao
-          cliente.
+          {podeEditar ? (
+            <>
+              Cadastre combinações de <strong>valor total</strong>, <strong>parcelas</strong> e{' '}
+              <strong>link de pagamento no cartão</strong> para cada produto. O closer visualiza as propostas e usa{' '}
+              <strong>Abrir</strong> / <strong>Copiar</strong> no link.
+            </>
+          ) : (
+            <>
+              Visualize as propostas cadastradas e use <strong>Abrir</strong> ou <strong>Copiar</strong> no link de
+              pagamento no cartão. Apenas administradores alteram ou criam linhas.
+            </>
+          )}
         </p>
       </div>
 
@@ -218,6 +238,7 @@ export function PropostasFechamentoPage() {
             onDelete={handleDelete}
             onAdd={handleAdd}
             onCopyLink={copyLink}
+            podeEditar={podeEditar}
           />
         ))}
     </div>
@@ -236,10 +257,12 @@ function ProdutoPropostasBlock({
   onSaveEdit,
   onDelete,
   onAdd,
-  onCopyLink
+  onCopyLink,
+  podeEditar
 }: {
   produto: ProdutoRow
   linhas: LinhaNegociacaoRow[]
+  podeEditar: boolean
   editingId: string | null
   editDraft: { rotulo: string; valorTotal: string; parcelas: string; linkCartao: string } | null
   savingId: string | null
@@ -276,12 +299,12 @@ function ProdutoPropostasBlock({
                 <th>Rótulo</th>
                 <th>Resumo</th>
                 <th>Link cartão</th>
-                <th></th>
+                {podeEditar ? <th></th> : null}
               </tr>
             </thead>
             <tbody>
               {linhas.map((l, idx) => {
-                const isEd = editingId === l.id
+                const isEd = podeEditar && editingId === l.id
                 return (
                   <tr key={l.id}>
                     <td className="mono" style={{ fontSize: 12 }}>
@@ -359,32 +382,34 @@ function ProdutoPropostasBlock({
                         <span style={{ color: 'var(--text3)' }}>—</span>
                       )}
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {isEd ? (
-                        <>
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            disabled={savingId === l.id}
-                            onClick={() => onSaveEdit(l.id)}
-                          >
-                            {savingId === l.id ? '...' : 'Salvar'}
-                          </button>{' '}
-                          <button type="button" className="btn btn-ghost btn-sm" onClick={onCancelEdit}>
-                            Cancelar
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onStartEdit(l)}>
-                            Editar
-                          </button>{' '}
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => onDelete(l)}>
-                            Excluir
-                          </button>
-                        </>
-                      )}
-                    </td>
+                    {podeEditar ? (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {isEd ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={savingId === l.id}
+                              onClick={() => onSaveEdit(l.id)}
+                            >
+                              {savingId === l.id ? '...' : 'Salvar'}
+                            </button>{' '}
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={onCancelEdit}>
+                              Cancelar
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onStartEdit(l)}>
+                              Editar
+                            </button>{' '}
+                            <button type="button" className="btn btn-danger btn-sm" onClick={() => onDelete(l)}>
+                              Excluir
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 )
               })}
@@ -393,81 +418,83 @@ function ProdutoPropostasBlock({
         </div>
       )}
 
-      <div
-        style={{
-          marginTop: 16,
-          paddingTop: 16,
-          borderTop: '1px solid var(--border2)',
-          display: 'grid',
-          gap: 10,
-          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-          alignItems: 'end'
-        }}
-      >
-        <div className="fg" style={{ margin: 0, gridColumn: 'span 2' }}>
-          <label style={{ fontSize: 11 }}>Rótulo (opcional)</label>
-          <input
-            type="text"
-            className="di"
-            value={novo.rotulo}
-            onChange={(e) => setNovo((n) => ({ ...n, rotulo: e.target.value }))}
-            placeholder="Ex.: Entrada reduzida"
-          />
+      {podeEditar ? (
+        <div
+          style={{
+            marginTop: 16,
+            paddingTop: 16,
+            borderTop: '1px solid var(--border2)',
+            display: 'grid',
+            gap: 10,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+            alignItems: 'end'
+          }}
+        >
+          <div className="fg" style={{ margin: 0, gridColumn: 'span 2' }}>
+            <label style={{ fontSize: 11 }}>Rótulo (opcional)</label>
+            <input
+              type="text"
+              className="di"
+              value={novo.rotulo}
+              onChange={(e) => setNovo((n) => ({ ...n, rotulo: e.target.value }))}
+              placeholder="Ex.: Entrada reduzida"
+            />
+          </div>
+          <div className="fg" style={{ margin: 0 }}>
+            <label style={{ fontSize: 11 }}>Valor total (R$) *</label>
+            <input
+              type="number"
+              className="di"
+              step="0.01"
+              value={novo.valorTotal}
+              onChange={(e) => setNovo((n) => ({ ...n, valorTotal: e.target.value }))}
+              placeholder="5800"
+            />
+          </div>
+          <div className="fg" style={{ margin: 0 }}>
+            <label style={{ fontSize: 11 }}>Parcelas *</label>
+            <input
+              type="number"
+              className="di"
+              min={1}
+              value={novo.parcelas}
+              onChange={(e) => setNovo((n) => ({ ...n, parcelas: e.target.value }))}
+            />
+          </div>
+          <div className="fg" style={{ margin: 0, gridColumn: '1 / -1' }}>
+            <label style={{ fontSize: 11 }}>Link pagamento cartão</label>
+            <input
+              type="url"
+              className="di"
+              value={novo.linkCartao}
+              onChange={(e) => setNovo((n) => ({ ...n, linkCartao: e.target.value }))}
+              placeholder="https://checkout..."
+            />
+          </div>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: 'auto', padding: '10px 20px' }}
+              onClick={() => {
+                onAdd(produto.id, novo)
+                setNovo({ rotulo: '', valorTotal: '', parcelas: '1', linkCartao: '' })
+              }}
+            >
+              + Adicionar linha
+            </button>
+            {novo.valorTotal && novo.parcelas && (
+              <span style={{ fontSize: 12, color: 'var(--text2)' }}>
+                Prévia:{' '}
+                <strong>
+                  {fmt(parseFloat(novo.valorTotal) || 0)} em {parseInt(novo.parcelas, 10) || 1}x de{' '}
+                  {fmt(valorParcela(parseFloat(novo.valorTotal) || 0, parseInt(novo.parcelas, 10) || 1))}
+                </strong>
+              </span>
+            )}
+          </div>
         </div>
-        <div className="fg" style={{ margin: 0 }}>
-          <label style={{ fontSize: 11 }}>Valor total (R$) *</label>
-          <input
-            type="number"
-            className="di"
-            step="0.01"
-            value={novo.valorTotal}
-            onChange={(e) => setNovo((n) => ({ ...n, valorTotal: e.target.value }))}
-            placeholder="5800"
-          />
-        </div>
-        <div className="fg" style={{ margin: 0 }}>
-          <label style={{ fontSize: 11 }}>Parcelas *</label>
-          <input
-            type="number"
-            className="di"
-            min={1}
-            value={novo.parcelas}
-            onChange={(e) => setNovo((n) => ({ ...n, parcelas: e.target.value }))}
-          />
-        </div>
-        <div className="fg" style={{ margin: 0, gridColumn: '1 / -1' }}>
-          <label style={{ fontSize: 11 }}>Link pagamento cartão</label>
-          <input
-            type="url"
-            className="di"
-            value={novo.linkCartao}
-            onChange={(e) => setNovo((n) => ({ ...n, linkCartao: e.target.value }))}
-            placeholder="https://checkout..."
-          />
-        </div>
-        <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ width: 'auto', padding: '10px 20px' }}
-            onClick={() => {
-              onAdd(produto.id, novo)
-              setNovo({ rotulo: '', valorTotal: '', parcelas: '1', linkCartao: '' })
-            }}
-          >
-            + Adicionar linha
-          </button>
-          {novo.valorTotal && novo.parcelas && (
-            <span style={{ fontSize: 12, color: 'var(--text2)' }}>
-              Prévia:{' '}
-              <strong>
-                {fmt(parseFloat(novo.valorTotal) || 0)} em {parseInt(novo.parcelas, 10) || 1}x de{' '}
-                {fmt(valorParcela(parseFloat(novo.valorTotal) || 0, parseInt(novo.parcelas, 10) || 1))}
-              </strong>
-            </span>
-          )}
-        </div>
-      </div>
+      ) : null}
     </div>
   )
 }
