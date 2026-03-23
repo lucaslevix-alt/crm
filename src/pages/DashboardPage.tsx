@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getRegistrosByRange, getMetasConfig, getProdutos } from '../firebase/firestore'
 import type { RegistroRow, MetasConfig, ProdutoRow } from '../firebase/firestore'
 import { ProjectionChart } from '../components/dashboard/ProjectionChart'
+import { metaPctParts } from '../utils/metaProgress'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
@@ -209,9 +210,8 @@ export function DashboardPage() {
             {STATS.map((s) => {
               const val = s.money ? (t as Record<string, number>)[s.key] as number : (t as Record<string, number>)[s.key]
               const metaVal = metas[metaKeys[STATS.indexOf(s)] as keyof MetasConfig] as number | undefined
-              const pct = metaVal != null && metaVal > 0
-                ? Math.min(100, Math.round((Number(val) / metaVal) * 100))
-                : null
+              const metaP =
+                metaVal != null && metaVal > 0 ? metaPctParts(Number(val), metaVal) : null
               const display = s.money ? fmt(val) : String(val)
               return (
                 <div key={s.key} className={`stat-card ${s.col}`}>
@@ -226,16 +226,16 @@ export function DashboardPage() {
                       <span style={{ color: 'var(--text3)', fontSize: 11 }}>
                         Meta: {s.money ? fmt(metaVal) : metaVal}
                       </span>
-                      {pct != null && (
+                      {metaP != null && (
                         <div className="prog-wrap">
                           <div className="prog-label">
                             <span>Progresso</span>
-                            <span>{pct}%</span>
+                            <span title={metaP.superacaoPct != null ? metaP.labelLong : undefined}>{metaP.labelShort}</span>
                           </div>
                           <div className="prog-bar">
                             <div
-                              className={`prog-fill ${pct >= 100 ? 'green' : pct >= 70 ? 'orange' : pct >= 40 ? 'amber' : 'red'}`}
-                              style={{ width: `${pct}%` }}
+                              className={`prog-fill ${metaP.rawPct >= 100 ? 'green' : metaP.rawPct >= 70 ? 'orange' : metaP.rawPct >= 40 ? 'amber' : 'red'}`}
+                              style={{ width: `${metaP.barPct}%` }}
                             />
                           </div>
                         </div>
@@ -265,7 +265,9 @@ export function DashboardPage() {
                   money?: boolean
                   field?: 'valor' | 'cashCollected'
                 }> = [
-                  { key: 'ag', title: 'Projeção — Reuniões', icon: '📅', color: '#f84a08', tipos: ['reuniao_agendada'] },
+                  { key: 'ag', title: 'Projeção — Reuniões agendadas', icon: '📅', color: '#f84a08', tipos: ['reuniao_agendada'] },
+                  { key: 're', title: 'Projeção — Reuniões realizadas', icon: '✅', color: '#22c55e', tipos: ['reuniao_realizada'] },
+                  { key: 'cl', title: 'Projeção — Reuniões closer', icon: '🤝', color: '#a855f7', tipos: ['reuniao_closer'] },
                   { key: 'vn', title: 'Projeção — Vendas', icon: '💼', color: '#fbbf24', tipos: ['venda'] },
                   { key: 'ft', title: 'Projeção — Faturamento', icon: '💰', color: '#22c55e', tipos: ['venda'], money: true, field: 'valor' },
                   { key: 'ca', title: 'Projeção — Cash Collected', icon: '💵', color: '#06b6d4', tipos: ['venda'], money: true, field: 'cashCollected' }
@@ -281,10 +283,17 @@ export function DashboardPage() {
 
                 return projItems.map((pi) => {
                   const metaKey =
-                    pi.key === 'ag' ? 'meta_reunioes_agendadas'
-                    : pi.key === 'vn' ? 'meta_vendas'
-                    : pi.key === 'ft' ? 'meta_faturamento'
-                    : 'meta_cash'
+                    pi.key === 'ag'
+                      ? 'meta_reunioes_agendadas'
+                      : pi.key === 're'
+                        ? 'meta_reunioes_realizadas'
+                        : pi.key === 'cl'
+                          ? 'meta_reunioes_closer'
+                          : pi.key === 'vn'
+                            ? 'meta_vendas'
+                            : pi.key === 'ft'
+                              ? 'meta_faturamento'
+                              : 'meta_cash'
                   const metaVal = metas[metaKey as keyof MetasConfig] as number | undefined
 
                   const dailyMap = new Map<string, number>()
@@ -306,7 +315,6 @@ export function DashboardPage() {
 
                   const lastReal = realPoints.length > 0 ? realPoints[realPoints.length - 1] : 0
                   const projected = Math.round(lastReal * factor)
-                  const projPct = metaVal && metaVal > 0 ? Math.min(200, Math.round((projected / metaVal) * 100)) : null
                   const fmtVal = (v: number) => pi.money ? fmt(v) : String(v)
                   const fmtShort = (v: number) => {
                     if (!pi.money) return String(v)
@@ -331,7 +339,6 @@ export function DashboardPage() {
                       projectedCumulative={projectedCumulative}
                       allDates={allDates}
                       projected={projected}
-                      projPct={projPct}
                       fmtVal={fmtVal}
                       fmtShort={fmtShort}
                       metaVal={metaVal}
@@ -370,7 +377,7 @@ export function DashboardPage() {
                               : k === 'meta_faturamento'
                                 ? t.ft
                                 : t.ca
-                    const pct = Math.min(150, Math.round((Number(atual) / alvo) * 100))
+                    const mp = metaPctParts(Number(atual), alvo)
                     const label =
                       k === 'meta_reunioes_agendadas'
                         ? 'Reuniões agendadas'
@@ -388,14 +395,15 @@ export function DashboardPage() {
                       <div key={k} style={{ fontSize: 13 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                           <span>{label}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                            {isMoney ? fmt(atual) : atual} / {isMoney ? fmt(alvo) : alvo} ({pct}%)
+                          <span style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'right' }}>
+                            {isMoney ? fmt(atual) : atual} / {isMoney ? fmt(alvo) : alvo}{' '}
+                            <span title={mp.superacaoPct != null ? mp.labelLong : undefined}>({mp.labelShort})</span>
                           </span>
                         </div>
                         <div className="prog-bar">
                           <div
-                            className={`prog-fill ${pct >= 100 ? 'green' : pct >= 70 ? 'orange' : pct >= 40 ? 'amber' : 'red'}`}
-                            style={{ width: `${Math.min(pct, 100)}%` }}
+                            className={`prog-fill ${mp.rawPct >= 100 ? 'green' : mp.rawPct >= 70 ? 'orange' : mp.rawPct >= 40 ? 'amber' : 'red'}`}
+                            style={{ width: `${mp.barPct}%` }}
                           />
                         </div>
                       </div>

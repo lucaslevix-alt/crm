@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { projMetaBadge } from '../../utils/metaProgress'
 
 interface ProjectionChartProps {
   chartKey: string
@@ -9,7 +10,6 @@ interface ProjectionChartProps {
   projectedCumulative: number[]
   allDates: string[]
   projected: number
-  projPct: number | null
   fmtVal: (v: number) => string
   fmtShort: (v: number) => string
   metaVal?: number
@@ -31,7 +31,6 @@ export function ProjectionChart({
   projectedCumulative,
   allDates,
   projected,
-  projPct,
   fmtVal,
   fmtShort,
   metaVal,
@@ -96,6 +95,7 @@ export function ProjectionChart({
   }
 
   const gradientId = `proj-grad-${chartKey}`
+  const projBadge = projMetaBadge(projected, metaVal)
 
   return (
     <div className="proj-card">
@@ -108,8 +108,8 @@ export function ProjectionChart({
           <span className="proj-badge-icon">🎯</span>
           <span className="proj-badge-text">
             Proj:{' '}
-            <span className="proj-badge-pct" style={{ color }}>
-              {projPct != null ? `${projPct}%` : '—'}
+            <span className="proj-badge-pct" style={{ color }} title={metaVal != null && metaVal > 0 ? `Meta: ${fmtVal(metaVal)}` : undefined}>
+              {projBadge}
             </span>
             <span className="proj-badge-val" style={{ color: `${color}99` }}>
               {' '}({fmtVal(projected)})

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { getRegistrosByRange, listUsers } from '../firebase/firestore'
 import { today, mRange, wRange } from '../lib/dates'
 import type { CrmUser } from '../store/useAppStore'
+import { RankingPodiumThree } from '../components/ranking/RankingPodium'
 
 type RpPeriod = 'mes' | 'semana' | 'hoje'
 
@@ -229,7 +230,7 @@ export function RankingCloserPage() {
         <div style={{ marginTop: 16 }}>
           <div className="card mb">
             <div className="card-header">
-              <span className="card-title">🏆 Pódio Closer — Faturamento & Conversão</span>
+              <span className="card-title">🏆 Pódio Closer — Faturamento</span>
             </div>
             <div style={{ padding: 16 }}>
               {list.length === 0 ? (
@@ -240,98 +241,33 @@ export function RankingCloserPage() {
                 <>
                   {(() => {
                     const podium = list.slice(0, 3)
-                    const renderCircle = (s: CloserStat, rank: number) => {
-                      const conv = s.cl > 0 ? Math.round((s.vn / s.cl) * 100) : 0
-                      const size = rank === 1 ? 80 : 64
-                      const borderColor = rank === 1 ? 'var(--green)' : rank === 2 ? 'var(--amber)' : 'var(--purple)'
-                      const bg = '#111827'
-                      return (
-                        <div
-                          key={s.id}
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            flex: 1,
-                            transform: rank === 1 ? 'translateY(-8px)' : 'translateY(6px)'
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: size,
-                              height: size,
-                              borderRadius: '50%',
-                              border: `3px solid ${borderColor}`,
-                              background: s.photoUrl ? 'center/cover no-repeat' : bg,
-                              backgroundImage: s.photoUrl ? `url(${s.photoUrl})` : undefined,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#fff',
-                              fontWeight: 700,
-                              boxShadow: '0 0 0 2px rgba(15,23,42,0.6)'
-                            }}
-                          >
-                            {!s.photoUrl && (s.nome || '?').charAt(0).toUpperCase()}
-                          </div>
-                          <div style={{ marginTop: 8, fontSize: 13, fontWeight: 600 }}>{s.nome}</div>
-                          <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text3)' }}>
-                            {s.vn} vendas · {fmt(s.ft)}
-                          </div>
-                          <div style={{ marginTop: 2, fontSize: 11, color: 'var(--green)' }}>
-                            {conv}% conv.
-                          </div>
-                          <div
-                            style={{
-                              marginTop: 8,
-                              padding: '4px 12px',
-                              borderRadius: 999,
-                              background:
-                                rank === 1
-                                  ? 'linear-gradient(135deg,#22c55e,#16a34a)'
-                                  : 'rgba(31,41,55,.9)',
-                              color: '#fff',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              boxShadow: rank === 1 ? '0 10px 30px rgba(16,185,129,.5)' : undefined
-                            }}
-                          >
-                            {rank}º lugar
-                          </div>
-                        </div>
-                      )
-                    }
+                    const toPerson = (s: CloserStat) => ({
+                      id: s.id,
+                      nome: s.nome,
+                      photoUrl: s.photoUrl,
+                      valueMain: fmt(s.ft),
+                      valueLabel: 'faturamento',
+                      sub: `${s.vn} vendas`
+                    })
                     return (
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-end',
-                          justifyContent: 'space-between',
-                          gap: 16,
-                          marginBottom: 24
-                        }}
-                      >
-                        {podium[1] && renderCircle(podium[1], 2)}
-                        {podium[0] && renderCircle(podium[0], 1)}
-                        {podium[2] && renderCircle(podium[2], 3)}
-                      </div>
+                      <RankingPodiumThree
+                        first={podium[0] ? toPerson(podium[0]) : null}
+                        second={podium[1] ? toPerson(podium[1]) : null}
+                        third={podium[2] ? toPerson(podium[2]) : null}
+                      />
                     )
                   })()}
-                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                  <div className="rpodium-table">
                     <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1.5fr repeat(4, 0.7fr)',
-                        fontSize: 11,
-                        color: 'var(--text3)',
-                        marginBottom: 4
-                      }}
+                      className="rpodium-table-head"
+                      style={{ gridTemplateColumns: '32px 1.15fr repeat(4, minmax(0, 0.68fr))' }}
                     >
+                      <span className="rpodium-medal-col">#</span>
                       <span>Nome</span>
-                      <span style={{ textAlign: 'right' }}>Reuniões</span>
+                      <span style={{ textAlign: 'right' }}>Reun.</span>
                       <span style={{ textAlign: 'right' }}>Conv.</span>
                       <span style={{ textAlign: 'right' }}>Vendas</span>
-                      <span style={{ textAlign: 'right' }}>Cash Collected</span>
+                      <span style={{ textAlign: 'right' }}>Faturamento</span>
                     </div>
                     {list.map((s, idx) => {
                       const conv = s.cl > 0 ? Math.round((s.vn / s.cl) * 100) : 0
@@ -340,21 +276,25 @@ export function RankingCloserPage() {
                       return (
                         <div
                           key={s.id}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1.5fr repeat(4, 0.7fr)',
-                            fontSize: 12,
-                            padding: '4px 0',
-                            borderTop: idx === 0 ? '1px solid var(--border2)' : '1px solid rgba(148,163,184,.2)'
-                          }}
+                          className={`rpodium-table-row ${idx === 0 ? 'rpodium-table-row--first' : ''}`}
+                          style={{ gridTemplateColumns: '32px 1.15fr repeat(4, minmax(0, 0.68fr))' }}
                         >
-                          <span>{s.nome}</span>
+                          <span className="rpodium-medal-col">{MEDALS[idx] ?? idx + 1}</span>
+                          <span style={{ fontWeight: 600 }}>{s.nome}</span>
                           <span style={{ textAlign: 'right' }}>{s.cl}</span>
                           <span style={{ textAlign: 'right', color: convColor }}>
                             {s.cl > 0 ? `${conv}%` : '—'}
                           </span>
                           <span style={{ textAlign: 'right' }}>{s.vn}</span>
-                          <span style={{ textAlign: 'right' }}>{fmt(s.cc)}</span>
+                          <span
+                            style={{
+                              textAlign: 'right',
+                              fontWeight: idx === 0 ? 800 : 600,
+                              color: idx === 0 ? 'var(--green)' : undefined
+                            }}
+                          >
+                            {fmt(s.ft)}
+                          </span>
                         </div>
                       )
                     })}

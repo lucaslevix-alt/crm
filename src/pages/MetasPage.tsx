@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getRegistrosByRange, getMetasConfig } from '../firebase/firestore'
 import type { RegistroRow, MetasConfig } from '../firebase/firestore'
+import { metaPctParts } from '../utils/metaProgress'
 
 function mRange(mv: string): { start: string; end: string } {
   const [y, m] = mv.split('-').map(Number)
@@ -118,7 +119,7 @@ export function MetasPage() {
               const meta = metas[it.key]
               const tKey = { meta_reunioes_agendadas: 'ag', meta_reunioes_realizadas: 're', meta_reunioes_closer: 'cl', meta_vendas: 'vn', meta_faturamento: 'ft', meta_cash: 'ca' }[it.key]
               const val = t[tKey as keyof typeof t]
-              const pct = meta != null && meta > 0 ? Math.min(100, Math.round((Number(val) / meta) * 100)) : 0
+              const mp = meta != null && meta > 0 ? metaPctParts(Number(val), meta) : null
               return (
                 <div key={it.key} className="card">
                   <div style={{ fontWeight: 700, marginBottom: 8 }}>{it.lb}</div>
@@ -128,15 +129,17 @@ export function MetasPage() {
                   <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                     Meta: {meta != null ? (it.money ? fmt(meta) : String(meta)) : '—'}
                   </div>
-                  {meta != null && (
+                  {meta != null && mp != null && (
                     <>
                       <div className="prog-bar" style={{ height: 6, marginTop: 8 }}>
                         <div
-                          className={`prog-fill ${pct >= 100 ? 'green' : pct >= 70 ? 'orange' : 'amber'}`}
-                          style={{ width: `${pct}%` }}
+                          className={`prog-fill ${mp.rawPct >= 100 ? 'green' : mp.rawPct >= 70 ? 'orange' : 'amber'}`}
+                          style={{ width: `${mp.barPct}%` }}
                         />
                       </div>
-                      <div style={{ fontSize: 11, marginTop: 4 }}>{pct}%</div>
+                      <div style={{ fontSize: 11, marginTop: 4 }} title={mp.superacaoPct != null ? mp.labelLong : undefined}>
+                        {mp.labelShort}
+                      </div>
                     </>
                   )}
                 </div>

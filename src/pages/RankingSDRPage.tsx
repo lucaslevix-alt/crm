@@ -3,6 +3,7 @@ import { getRegistrosByRange, getLeadsSdrByRange, listUsers } from '../firebase/
 import { today, mRange, wRange } from '../lib/dates'
 import { useAppStore } from '../store/useAppStore'
 import type { CrmUser } from '../store/useAppStore'
+import { RankingPodiumThree } from '../components/ranking/RankingPodium'
 
 type RpPeriod = 'mes' | 'semana' | 'hoje'
 
@@ -332,136 +333,83 @@ export function RankingSDRPage() {
         <div style={{ marginTop: 16 }}>
           <div className="card mb">
             <div className="card-header">
-              <span className="card-title">🏆 Pódio SDR — Leads & Conversão</span>
+              <span className="card-title">🏆 Pódio SDR — Reuniões realizadas</span>
             </div>
             <div style={{ padding: 16 }}>
-              {byLeads.length === 0 ? (
+              {byRe.length === 0 ? (
                 <div className="empty">
-                  <p>Nenhum lead registrado</p>
+                  <p>Sem dados para o período</p>
                 </div>
               ) : (
                 <>
                   {(() => {
-                    const podium = [...byLeads]
-                      .filter((s) => s.leads > 0 || s.ag > 0)
-                      .slice(0, 3)
-                    const getConv = (s: SdrStat) =>
-                      s.leads > 0 ? Math.round((s.ag / s.leads) * 100) : 0
-                    const renderCircle = (s: SdrStat, rank: number) => {
-                      const conv = getConv(s)
-                      const size = rank === 1 ? 80 : 64
-                      const borderColor = rank === 1 ? 'var(--green)' : rank === 2 ? 'var(--amber)' : 'var(--purple)'
-                      const bg = '#111827'
+                    const podium = byRe.filter((s) => s.re > 0).slice(0, 3)
+                    if (podium.length === 0) {
                       return (
-                        <div
-                          key={s.id}
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            flex: 1,
-                            transform: rank === 1 ? 'translateY(-8px)' : 'translateY(6px)'
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: size,
-                              height: size,
-                              borderRadius: '50%',
-                              border: `3px solid ${borderColor}`,
-                              background: s.photoUrl ? 'center/cover no-repeat' : bg,
-                              backgroundImage: s.photoUrl ? `url(${s.photoUrl})` : undefined,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#fff',
-                              fontWeight: 700,
-                              boxShadow: '0 0 0 2px rgba(15,23,42,0.6)'
-                            }}
-                          >
-                            {!s.photoUrl && (s.nome || '?').charAt(0).toUpperCase()}
-                          </div>
-                          <div style={{ marginTop: 8, fontSize: 13, fontWeight: 600 }}>{s.nome}</div>
-                          <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text3)' }}>
-                            {s.leads} leads · {s.ag} agendadas
-                          </div>
-                          <div style={{ marginTop: 2, fontSize: 11, color: 'var(--green)' }}>
-                            {conv}% conv.
-                          </div>
-                          <div
-                            style={{
-                              marginTop: 8,
-                              padding: '4px 12px',
-                              borderRadius: 999,
-                              background:
-                                rank === 1
-                                  ? 'linear-gradient(135deg,#22c55e,#16a34a)'
-                                  : 'rgba(31,41,55,.9)',
-                              color: '#fff',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              boxShadow: rank === 1 ? '0 10px 30px rgba(16,185,129,.5)' : undefined
-                            }}
-                          >
-                            {rank}º lugar
-                          </div>
+                        <div className="empty" style={{ marginBottom: 16 }}>
+                          <p>Nenhuma reunião realizada no período</p>
                         </div>
                       )
                     }
+                    const toPerson = (s: SdrStat) => ({
+                      id: s.id,
+                      nome: s.nome,
+                      photoUrl: s.photoUrl,
+                      valueMain: String(s.re),
+                      valueLabel: 'reun. realizadas',
+                      sub: `${s.ag} agend.`
+                    })
                     return (
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-end',
-                          justifyContent: 'space-between',
-                          gap: 16,
-                          marginBottom: 24
-                        }}
-                      >
-                        {podium[1] && renderCircle(podium[1], 2)}
-                        {podium[0] && renderCircle(podium[0], 1)}
-                        {podium[2] && renderCircle(podium[2], 3)}
-                      </div>
+                      <RankingPodiumThree
+                        first={podium[0] ? toPerson(podium[0]) : null}
+                        second={podium[1] ? toPerson(podium[1]) : null}
+                        third={podium[2] ? toPerson(podium[2]) : null}
+                      />
                     )
                   })()}
-                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                  <div className="rpodium-table">
                     <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1.5fr repeat(4, 0.7fr)',
-                        fontSize: 11,
-                        color: 'var(--text3)',
-                        marginBottom: 4
-                      }}
+                      className="rpodium-table-head"
+                      style={{ gridTemplateColumns: '32px 1.2fr repeat(5, minmax(0, 0.62fr))' }}
                     >
+                      <span className="rpodium-medal-col">#</span>
                       <span>Nome</span>
+                      <span style={{ textAlign: 'right' }}>Reun.</span>
+                      <span style={{ textAlign: 'right' }}>Cmp.</span>
+                      <span style={{ textAlign: 'right' }}>Ag.</span>
+                      <span style={{ textAlign: 'right' }}>L→A</span>
                       <span style={{ textAlign: 'right' }}>Leads</span>
-                      <span style={{ textAlign: 'right' }}>Conv. Leads → Ag.</span>
-                      <span style={{ textAlign: 'right' }}>Agendadas</span>
-                      <span style={{ textAlign: 'right' }}>Realizadas</span>
                     </div>
-                    {byLeads.map((s, idx) => {
-                      const conv = s.leads > 0 ? Math.round((s.ag / s.leads) * 100) : 0
-                      const convColor =
-                        s.leads === 0 ? 'var(--text3)' : conv >= 30 ? 'var(--green)' : conv >= 15 ? 'var(--amber)' : 'var(--red)'
+                    {byRe.map((s, idx) => {
+                      const convLeadAg = s.leads > 0 ? Math.round((s.ag / s.leads) * 100) : 0
+                      const convLeadColor =
+                        s.leads === 0
+                          ? 'var(--text3)'
+                          : convLeadAg >= 30
+                            ? 'var(--green)'
+                            : convLeadAg >= 15
+                              ? 'var(--amber)'
+                              : 'var(--red)'
+                      const cmp = s.ag > 0 ? Math.round((s.re / s.ag) * 100) : 0
+                      const cmpColor =
+                        s.ag === 0 ? 'var(--text3)' : cmp >= 50 ? 'var(--green)' : cmp >= 30 ? 'var(--amber)' : 'var(--red)'
                       return (
                         <div
                           key={s.id}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1.5fr repeat(4, 0.7fr)',
-                            fontSize: 12,
-                            padding: '4px 0',
-                            borderTop: idx === 0 ? '1px solid var(--border2)' : '1px solid rgba(148,163,184,.2)'
-                          }}
+                          className={`rpodium-table-row ${idx === 0 ? 'rpodium-table-row--first' : ''}`}
+                          style={{ gridTemplateColumns: '32px 1.2fr repeat(5, minmax(0, 0.62fr))' }}
                         >
-                          <span>{s.nome}</span>
-                          <span style={{ textAlign: 'right' }}>{s.leads}</span>
-                          <span style={{ textAlign: 'right', color: convColor }}>
-                            {s.leads > 0 ? `${conv}%` : '—'}
+                          <span className="rpodium-medal-col">{MEDALS[idx] ?? idx + 1}</span>
+                          <span style={{ fontWeight: 600 }}>{s.nome}</span>
+                          <span style={{ textAlign: 'right', fontWeight: idx === 0 ? 700 : undefined }}>{s.re}</span>
+                          <span style={{ textAlign: 'right', color: cmpColor }}>
+                            {s.ag > 0 ? `${cmp}%` : '—'}
                           </span>
                           <span style={{ textAlign: 'right' }}>{s.ag}</span>
-                          <span style={{ textAlign: 'right' }}>{s.re}</span>
+                          <span style={{ textAlign: 'right', color: convLeadColor }}>
+                            {s.leads > 0 ? `${convLeadAg}%` : '—'}
+                          </span>
+                          <span style={{ textAlign: 'right' }}>{s.leads}</span>
                         </div>
                       )
                     })}
