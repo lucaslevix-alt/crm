@@ -17,6 +17,23 @@ function valorParcela(valor: number | null, parcelas: number | null): number | n
   return valor / parcelas
 }
 
+/** Resumo textual das parcelas no card lateral (único Nx ou faixa se produtos diferirem). */
+function textoParcelasNegocio(
+  linhas: Array<{ produto: ProdutoRow }>,
+  modo: 'cartao' | 'boleto'
+): string | null {
+  const pk = modo === 'cartao' ? 'parcelasCartao' : 'parcelasBoleto'
+  const vk = modo === 'cartao' ? 'valorCartao' : 'valorBoleto'
+  const vals = linhas
+    .filter((l) => (l.produto[pk] ?? 0) > 0 && (l.produto[vk] ?? 0) > 0)
+    .map((l) => l.produto[pk] as number)
+  if (!vals.length) return null
+  const sorted = [...new Set(vals)].sort((a, b) => a - b)
+  const suffix = modo === 'cartao' ? ' sem juros' : ''
+  if (sorted.length === 1) return `${sorted[0]}x${suffix}`
+  return `${sorted[0]}x a ${sorted[sorted.length - 1]}x${suffix}`
+}
+
 export function NegociacoesPage() {
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
   const [linhas, setLinhas] = useState<LinhaNegociacao[]>([])
@@ -83,6 +100,9 @@ export function NegociacoesPage() {
     return s + (vp ?? 0) * l.quantidade
   }, 0)
   const totalAVista = linhasComDetalhes.reduce((s, l) => s + (l.produto.aVista ?? 0) * l.quantidade, 0)
+
+  const resumoParcelasCartaoTxt = textoParcelasNegocio(linhasComDetalhes, 'cartao')
+  const resumoParcelasBoletoTxt = textoParcelasNegocio(linhasComDetalhes, 'boleto')
 
   return (
     <div className="content">
@@ -300,6 +320,11 @@ export function NegociacoesPage() {
                   </div>
                   <div className="neg-resumo-item">
                     <span className="neg-resumo-label">💳 Cartão</span>
+                    {resumoParcelasCartaoTxt ? (
+                      <span className="neg-resumo-parcelas-qtd">Parcelas: {resumoParcelasCartaoTxt}</span>
+                    ) : (
+                      <span className="neg-resumo-parcelas-qtd neg-resumo-parcelas-qtd--muted">Parcelas: —</span>
+                    )}
                     <span className="neg-resumo-destaque">
                       <span className="neg-resumo-valor">{fmt(totalParcelaCartao)}</span>
                       <span className="neg-resumo-parc">/parc</span>
@@ -308,6 +333,11 @@ export function NegociacoesPage() {
                   </div>
                   <div className="neg-resumo-item">
                     <span className="neg-resumo-label">📄 Boleto</span>
+                    {resumoParcelasBoletoTxt ? (
+                      <span className="neg-resumo-parcelas-qtd">Parcelas: {resumoParcelasBoletoTxt}</span>
+                    ) : (
+                      <span className="neg-resumo-parcelas-qtd neg-resumo-parcelas-qtd--muted">Parcelas: —</span>
+                    )}
                     <span className="neg-resumo-destaque">
                       <span className="neg-resumo-valor">{fmt(totalParcelaBoleto)}</span>
                       <span className="neg-resumo-parc">/parc</span>

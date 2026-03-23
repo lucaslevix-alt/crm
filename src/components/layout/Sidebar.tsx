@@ -45,6 +45,15 @@ export function Sidebar() {
           <span className="nav-icon">🤝</span>
           <span className="nav-label">Negociações</span>
         </NavLink>
+        {(currentUser?.cargo === 'admin' || currentUser?.cargo === 'closer') && (
+          <NavLink
+            to="/propostas-fechamento"
+            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+          >
+            <span className="nav-icon">🔗</span>
+            <span className="nav-label">Propostas de fechamento</span>
+          </NavLink>
+        )}
         <NavLink to="/funil" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <span className="nav-icon">🔽</span>
           <span className="nav-label">Funil</span>

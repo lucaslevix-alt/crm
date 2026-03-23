@@ -8,6 +8,7 @@ import { RankingSDRPage } from './pages/RankingSDRPage'
 import { RankingCloserPage } from './pages/RankingCloserPage'
 import { MetaAdsPage } from './pages/MetaAdsPage'
 import { NegociacoesPage } from './pages/NegociacoesPage'
+import { PropostasFechamentoPage } from './pages/PropostasFechamentoPage'
 import { UsuariosPage } from './pages/UsuariosPage'
 import { ProdutosPage } from './pages/ProdutosPage'
 import { ConfigPage } from './pages/ConfigPage'
@@ -35,6 +36,13 @@ function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function AdminOrCloserRoute({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useAppStore()
+  const ok = currentUser?.cargo === 'admin' || currentUser?.cargo === 'closer'
+  if (!ok) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <div className="text-sm text-[var(--text)] bg-[var(--bg)] min-h-screen">
@@ -54,6 +62,14 @@ export default function App() {
             <Route path="config" element={<ConfigPage />} />
             <Route path="auditoria" element={<AuditoriaPage />} />
             <Route path="negociacoes" element={<NegociacoesPage />} />
+            <Route
+              path="propostas-fechamento"
+              element={
+                <AdminOrCloserRoute>
+                  <PropostasFechamentoPage />
+                </AdminOrCloserRoute>
+              }
+            />
             <Route path="meta-ads" element={<MetaAdsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

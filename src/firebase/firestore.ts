@@ -426,6 +426,83 @@ export async function deleteProduto(id: string): Promise<void> {
   await deleteDoc(doc(db, 'produtos', id))
 }
 
+/** Linhas de proposta (valor + parcelas + link de cartão) por produto — menu Propostas de fechamento */
+export interface LinhaNegociacaoRow {
+  id: string
+  produtoId: string
+  valorTotal: number
+  parcelas: number
+  linkCartao: string | null
+  rotulo: string | null
+  ordem: number
+}
+
+function docToLinhaNegociacao(d: { id: string; data: () => Record<string, unknown> }): LinhaNegociacaoRow {
+  const x = d.data()
+  return {
+    id: d.id,
+    produtoId: String(x.produtoId ?? ''),
+    valorTotal: Number(x.valorTotal ?? 0),
+    parcelas: Math.max(1, Math.floor(Number(x.parcelas ?? 1))),
+    linkCartao: x.linkCartao != null && String(x.linkCartao).trim() !== '' ? String(x.linkCartao).trim() : null,
+    rotulo: x.rotulo != null && String(x.rotulo).trim() !== '' ? String(x.rotulo).trim() : null,
+    ordem: Number(x.ordem ?? 0)
+  }
+}
+
+export async function getLinhasNegociacaoAll(): Promise<LinhaNegociacaoRow[]> {
+  const snapshot = await getDocs(collection(db, 'linhas_negociacao'))
+  const rows = snapshot.docs.map(docToLinhaNegociacao)
+  rows.sort((a, b) => {
+    if (a.produtoId !== b.produtoId) return a.produtoId.localeCompare(b.produtoId)
+    return a.ordem - b.ordem || a.id.localeCompare(b.id)
+  })
+  return rows
+}
+
+export async function addLinhaNegociacao(params: {
+  produtoId: string
+  valorTotal: number
+  parcelas: number
+  linkCartao?: string | null
+  rotulo?: string | null
+  ordem?: number
+}): Promise<string> {
+  const ref = await addDoc(collection(db, 'linhas_negociacao'), {
+    produtoId: params.produtoId,
+    valorTotal: params.valorTotal,
+    parcelas: Math.max(1, Math.floor(params.parcelas)),
+    linkCartao: params.linkCartao?.trim() || null,
+    rotulo: params.rotulo?.trim() || null,
+    ordem: params.ordem ?? 0,
+    criadoEm: serverTimestamp()
+  })
+  return ref.id
+}
+
+export async function updateLinhaNegociacao(
+  id: string,
+  params: {
+    valorTotal: number
+    parcelas: number
+    linkCartao?: string | null
+    rotulo?: string | null
+    ordem?: number
+  }
+): Promise<void> {
+  await updateDoc(doc(db, 'linhas_negociacao', id), {
+    valorTotal: params.valorTotal,
+    parcelas: Math.max(1, Math.floor(params.parcelas)),
+    linkCartao: params.linkCartao?.trim() || null,
+    rotulo: params.rotulo?.trim() || null,
+    ...(params.ordem !== undefined ? { ordem: params.ordem } : {})
+  })
+}
+
+export async function deleteLinhaNegociacao(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'linhas_negociacao', id))
+}
+
 export interface AuditLogRow {
   id: string
   ts: { seconds: number } | null

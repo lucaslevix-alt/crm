@@ -927,6 +927,18 @@ body.sidebar-collapsed .main {
     color: var(--text2)
 }
 
+.neg-resumo-parcelas-qtd {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.35
+}
+
+.neg-resumo-parcelas-qtd--muted {
+    font-weight: 500;
+    color: var(--text3)
+}
+
 .neg-resumo-valor {
     font-size: 18px;
     font-weight: 700;
