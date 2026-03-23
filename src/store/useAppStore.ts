@@ -46,7 +46,6 @@ export interface EditingRegistroRow {
 interface AppStoreState {
   currentUser: CrmUser | null
   fbConfig: FirebaseConfig | null
-  sidebarOpen: boolean
   quickBarHidden: boolean
   activeModalId: string | null
   toast: ToastState
@@ -90,7 +89,6 @@ interface AppStoreState {
   } | null) => void
   incrementProdutosVersion: () => void
   setFbConfig: (config: FirebaseConfig | null) => void
-  setSidebarOpen: (open: boolean) => void
   setQuickBarHidden: (hidden: boolean) => void
   openModal: (id: string) => void
   closeModal: () => void
@@ -136,7 +134,6 @@ function loadQuickBarHidden(): boolean {
 export const useAppStore = create<AppStoreState>((set) => ({
   currentUser: typeof window !== 'undefined' ? loadUserFromStorage() : null,
   fbConfig: typeof window !== 'undefined' ? loadFbConfigFromStorage() : null,
-  sidebarOpen: true,
   quickBarHidden: typeof window !== 'undefined' ? loadQuickBarHidden() : false,
   activeModalId: null,
   toast: { message: null, variant: 'ok' },
@@ -169,8 +166,6 @@ export const useAppStore = create<AppStoreState>((set) => ({
     }
     set({ fbConfig: config })
   },
-
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   setQuickBarHidden: (hidden) => {
     if (typeof window !== 'undefined') {

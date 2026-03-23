@@ -1,8 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   Award,
-  ChevronLeft,
-  ChevronRight,
   Filter,
   Handshake,
   LayoutDashboard,
@@ -24,11 +22,7 @@ import { icNav } from '../../lib/icon-sizes'
 
 export function Sidebar() {
   const navigate = useNavigate()
-  const { sidebarOpen, setSidebarOpen, currentUser, openModal } = useAppStore()
-
-  function handleToggle() {
-    setSidebarOpen(!sidebarOpen)
-  }
+  const { currentUser, openModal } = useAppStore()
 
   function handleLogout() {
     useAppStore.getState().setCurrentUser(null)
@@ -36,8 +30,11 @@ export function Sidebar() {
   }
 
   return (
-    <>
-      <aside className={sidebarOpen ? 'sidebar' : 'sidebar collapsed'}>
+    <div
+      className="sidebar-wrap"
+      title="Passe o rato na margem esquerda para abrir o menu"
+    >
+      <aside className="sidebar" aria-label="Menu principal de navegação">
         <div className="sidebar-logo">
           <div className="logo-row">
             <div className="logo-icon" aria-hidden>
@@ -168,15 +165,6 @@ export function Sidebar() {
           </div>
         </div>
       </aside>
-      <button
-        type="button"
-        className="sidebar-toggle"
-        onClick={handleToggle}
-        title={sidebarOpen ? 'Recolher menu' : 'Expandir menu'}
-        aria-label={sidebarOpen ? 'Recolher menu' : 'Expandir menu'}
-      >
-        {sidebarOpen ? <ChevronLeft size={16} strokeWidth={2} /> : <ChevronRight size={16} strokeWidth={2} />}
-      </button>
-    </>
+    </div>
   )
 }

@@ -6,7 +6,7 @@ import { QuickRegBar } from './QuickRegBar'
 import { useAppStore } from '../../store/useAppStore'
 
 export function AppLayout() {
-  const { activeModalId, closeModal, openModal, sidebarOpen } = useAppStore()
+  const { activeModalId, closeModal, openModal } = useAppStore()
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -27,7 +27,7 @@ export function AppLayout() {
   return (
     <div id="app" className="app-shell" style={{ flexDirection: 'row', minHeight: '100vh' }}>
       <Sidebar />
-      <main className={`main ${!sidebarOpen ? 'sidebar-collapsed' : ''}`}>
+      <main className="main">
         <Topbar />
         <AnimatedOutlet />
       </main>

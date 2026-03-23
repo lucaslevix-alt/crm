@@ -176,60 +176,38 @@ select[multiple] option:checked {
     border-radius: 8px
 }
 
-.sidebar {
-    width: 228px;
-    background: linear-gradient(180deg, rgba(10, 12, 18, .98), rgba(8, 10, 15, .99));
-    border-right: 1px solid var(--border);
+/* Faixa esquerda sensível ao hover: menu fora do ecrã e desliza por cima do conteúdo */
+.sidebar-wrap {
     position: fixed;
     top: 0;
     left: 0;
     bottom: 0;
+    width: var(--sidebar-hit, 18px);
+    z-index: 100;
+    overflow: visible;
+    pointer-events: auto
+}
+
+.sidebar {
+    --sidebar-panel-w: 228px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--sidebar-panel-w);
+    background: linear-gradient(180deg, rgba(10, 12, 18, .98), rgba(8, 10, 15, .99));
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    z-index: 100;
     box-shadow: 4px 0 40px rgba(0, 0, 0, .45), inset -1px 0 0 rgba(248, 74, 8, .06);
-    transition: width .25s cubic-bezier(.4, 0, .2, 1)
+    transform: translateX(-100%);
+    transition: transform .24s cubic-bezier(.4, 0, .2, 1), box-shadow .24s ease
 }
 
-.sidebar.collapsed {
-    width: 0;
-    overflow: hidden
-}
-
-.sidebar-toggle {
-    position: fixed;
-    top: 15px;
-    left: 238px;
-    z-index: 110;
-    width: 28px;
-    height: 28px;
-    background: var(--bg2);
-    border: 1px solid var(--border2);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 13px;
-    color: var(--text2);
-    transition: left .25s cubic-bezier(.4, 0, .2, 1), color .15s, background .15s
-}
-
-.sidebar-toggle:hover {
-    background: var(--bg3);
-    color: var(--text)
-}
-
-.sidebar.collapsed~.sidebar-toggle, .sidebar.collapsed+.sidebar-toggle {
-    left: 10px
-}
-
-body.sidebar-collapsed .sidebar-toggle {
-    left: 10px
-}
-
-body.sidebar-collapsed .main {
-    margin-left: 0
+.sidebar-wrap:hover .sidebar,
+.sidebar-wrap:focus-within .sidebar {
+    transform: translateX(0);
+    box-shadow: 12px 0 48px rgba(0, 0, 0, .55), inset -1px 0 0 rgba(248, 74, 8, .08)
 }
 
 .sidebar-logo {
@@ -301,7 +279,8 @@ body.sidebar-collapsed .main {
     font-weight: 700;
     user-select: none;
     text-decoration: none;
-    border-left: 2px solid transparent
+    border-left: 2px solid transparent;
+    min-width: 0
 }
 
 .nav-item:hover {
@@ -338,7 +317,10 @@ body.sidebar-collapsed .main {
 
 .nav-label {
     display: block;
-    line-height: 1.2
+    line-height: 1.25;
+    min-width: 0;
+    overflow-wrap: break-word;
+    hyphens: auto
 }
 
 .sidebar-footer {
@@ -411,13 +393,12 @@ body.sidebar-collapsed .main {
 }
 
 .main {
-    margin-left: 228px;
+    flex: 1;
+    min-width: 0;
+    margin-left: 0;
     min-height: 100vh;
-    transition: margin-left .25s cubic-bezier(.4, 0, .2, 1)
-}
-
-.main.sidebar-collapsed {
-    margin-left: 0
+    display: flex;
+    flex-direction: column
 }
 
 .topbar {
@@ -430,10 +411,12 @@ body.sidebar-collapsed .main {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     position: sticky;
     top: 0;
     z-index: 50;
-    box-shadow: 0 1px 0 rgba(255, 255, 255, .03)
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .03);
+    min-width: 0
 }
 
 .topbar-title {
@@ -441,13 +424,18 @@ body.sidebar-collapsed .main {
     font-weight: 700;
     letter-spacing: -.3px;
     color: var(--text);
-    text-shadow: 0 0 28px rgba(248, 74, 8, .12)
+    text-shadow: 0 0 28px rgba(248, 74, 8, .12);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap
 }
 
 .topbar-right {
     display: flex;
     align-items: center;
-    gap: 10px
+    gap: 10px;
+    flex-shrink: 0
 }
 
 .topbar-ghost-btn {
@@ -487,7 +475,12 @@ body.sidebar-collapsed .main {
 }
 
 .content {
-    padding: 24px 28px
+    padding: 24px 28px;
+    min-width: 0;
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch
 }
 
 .card {
@@ -3611,20 +3604,12 @@ tr:hover td {
 }
 
 @media(max-width:900px) {
+    .sidebar-wrap {
+        --sidebar-hit: 22px
+    }
+
     .sidebar {
-        width: 60px
-    }
-
-    .logo-text, .logo-sub, .nav-label, .u-name, .u-role {
-        display: none
-    }
-
-    .nav-item {
-        justify-content: center
-    }
-
-    .main {
-        margin-left: 60px
+        --sidebar-panel-w: min(280px, 88vw)
     }
 
     .g2, .g3, .g4 {
@@ -3650,7 +3635,12 @@ tr:hover td {
 }
 
 .page-enter {
-    animation: pageEnter .38s cubic-bezier(.22, 1, .36, 1) both
+    animation: pageEnter .38s cubic-bezier(.22, 1, .36, 1) both;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column
 }
 
 @keyframes shimmer {
@@ -3731,6 +3721,10 @@ tr:hover td {
 @media (prefers-reduced-motion: reduce) {
     .page-enter {
         animation: none
+    }
+
+    .sidebar {
+        transition: none
     }
 
     .route-fallback-bar::after,
