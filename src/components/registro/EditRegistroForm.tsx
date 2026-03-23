@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Pencil } from 'lucide-react'
 import {
   listUsers,
   getProdutos,
@@ -134,7 +135,10 @@ export function EditRegistroForm() {
   return (
     <div style={{ padding: 24 }}>
       <div className="mh">
-        <div className="mt">✏️ Editar Registro</div>
+        <div className="mt modal-title-ic">
+          <Pencil size={20} strokeWidth={1.65} aria-hidden />
+          Editar Registro
+        </div>
         <button type="button" className="mc" onClick={() => { setEditingRegistro(null); closeModal() }}>
           ✕
         </button>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { CalendarClock, Handshake, RefreshCw } from 'lucide-react'
 import { getRegistrosCloserByRange, type AgendaReuniaoRow } from '../firebase/firestore'
 import { today, wRange } from '../lib/dates'
 import { useAppStore } from '../store/useAppStore'
@@ -55,11 +56,16 @@ export function ReunioesPage() {
     return (
       <div className="content">
         <div style={{ marginBottom: 20 }}>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>🤝 Minhas Reuniões</h2>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            <Handshake size={24} strokeWidth={1.65} aria-hidden />
+            Minhas Reuniões
+          </h2>
           <p style={{ color: 'var(--text2)' }}>Confirme realizadas e converta em vendas</p>
         </div>
         <div className="agenda-empty">
-          <div className="agenda-empty-icon">🤝</div>
+          <div className="agenda-empty-icon" aria-hidden>
+            <Handshake size={56} strokeWidth={1.25} />
+          </div>
           <p>Área exclusiva para Closers.</p>
         </div>
       </div>
@@ -70,11 +76,20 @@ export function ReunioesPage() {
     <div className="content">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>🤝 Minhas Reuniões</h2>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            <Handshake size={24} strokeWidth={1.65} aria-hidden />
+            Minhas Reuniões
+          </h2>
           <p style={{ color: 'var(--text2)' }}>Confirme realizadas e converta em vendas</p>
         </div>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => loadAgenda()}>
-          ↺ Atualizar
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          onClick={() => loadAgenda()}
+        >
+          <RefreshCw size={16} strokeWidth={1.65} aria-hidden />
+          Atualizar
         </button>
       </div>
       <div className="agenda-tabs">
@@ -101,7 +116,9 @@ export function ReunioesPage() {
       )}
       {!loading && !error && !recs.length && (
         <div className="agenda-empty">
-          <div className="agenda-empty-icon">📅</div>
+          <div className="agenda-empty-icon" aria-hidden>
+            <CalendarClock size={56} strokeWidth={1.25} />
+          </div>
           <p>Nenhuma reunião encontrada</p>
         </div>
       )}

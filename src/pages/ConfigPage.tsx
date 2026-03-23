@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Target } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getMetasConfig, setMetasConfig, type MetasConfig } from '../firebase/firestore'
 import { useAppStore } from '../store/useAppStore'
@@ -76,7 +77,10 @@ export function ConfigPage() {
         <>
           <div className="card mb">
             <div className="card-header">
-              <span className="card-title">🎯 Metas Mensais</span>
+              <span className="card-title card-title--ic">
+                <Target size={16} strokeWidth={1.65} aria-hidden />
+                Metas Mensais
+              </span>
             </div>
             <form onSubmit={handleSaveMetas}>
               <div className="fg2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16 }}>

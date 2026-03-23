@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CalendarDays } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getRegistrosByRange, getMetasConfig } from '../firebase/firestore'
 import type { RegistroRow, MetasConfig } from '../firebase/firestore'
@@ -112,7 +113,10 @@ export function MetasPage() {
       {!loading && !error && (
         <>
           <div style={{ marginBottom: 20 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700 }}>📆 {monthLabel}</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CalendarDays size={20} strokeWidth={1.65} aria-hidden style={{ color: 'var(--accent)' }} />
+              {monthLabel}
+            </h3>
           </div>
           <div className="g2">
             {META_ITEMS.map((it) => {

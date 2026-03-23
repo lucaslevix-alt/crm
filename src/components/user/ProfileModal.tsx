@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { User } from 'lucide-react'
 import { getAuth, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
 import { initFirebaseApp } from '../../firebase/config'
 import { updateUser } from '../../firebase/firestore'
@@ -69,7 +70,7 @@ export function ProfileModal() {
         hasPassword: nextHasPassword
       })
       setCurrentUser({ ...currentUser, nome: n, hasPassword: nextHasPassword })
-      showToast('Perfil atualizado ✓')
+      showToast('Perfil atualizado')
       closeModal()
     } catch (err) {
       showToast(`Erro: ${err instanceof Error ? err.message : 'Erro'}`, 'err')
@@ -83,7 +84,10 @@ export function ProfileModal() {
   return (
     <div style={{ padding: 24 }}>
       <div className="mh" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div className="mt" style={{ fontSize: 18, fontWeight: 700 }}>👤 Meu perfil</div>
+        <div className="mt modal-title-ic" style={{ fontSize: 18, fontWeight: 700 }}>
+          <User size={22} strokeWidth={1.65} aria-hidden />
+          Meu perfil
+        </div>
         <button type="button" className="mc" onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text2)' }}>
           ✕
         </button>

@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
+import { CalendarCheck, CalendarPlus, CircleDollarSign, Handshake, Target, Zap } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
 import { addRegistro } from '../../firebase/firestore'
+import { icSm } from '../../lib/icon-sizes'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
 }
 
 const tipoLabels: Record<string, string> = {
-  reuniao_agendada: '📅 Agendei reunião',
-  reuniao_realizada: '✅ Realizei reunião',
-  reuniao_closer: '🤝 Reunião realizada'
+  reuniao_agendada: 'Agendei reunião',
+  reuniao_realizada: 'Realizei reunião',
+  reuniao_closer: 'Reunião closer'
 }
 
 export function QuickRegBar() {
@@ -36,10 +38,13 @@ export function QuickRegBar() {
         anuncio: campanhaVal?.trim() || null
       })
       const msg =
-        tipo === 'reuniao_agendada' ? '✅ Reunião agendada!' :
-        tipo === 'reuniao_realizada' ? '✅ Reunião realizada!' :
-        tipo === 'reuniao_closer' ? '✅ Reunião closer registrada!' :
-        'Registro salvo!'
+        tipo === 'reuniao_agendada'
+          ? 'Reunião agendada.'
+          : tipo === 'reuniao_realizada'
+            ? 'Reunião realizada.'
+            : tipo === 'reuniao_closer'
+              ? 'Reunião closer registrada.'
+              : 'Registro salvo.'
       useAppStore.getState().showToast(msg)
     } catch (err) {
       useAppStore.getState().showToast('Erro: ' + (err instanceof Error ? err.message : String(err)), 'err')
@@ -79,12 +84,17 @@ export function QuickRegBar() {
         className={`quick-reg-bar sdr-bar${showSdr ? ' active' : ''}`}
         style={{ display: showSdr ? 'flex' : 'none' }}
       >
-        <span className="qrb-label">⚡ SDR:</span>
+        <span className="qrb-label">
+          <Zap size={14} strokeWidth={2} style={{ opacity: 0.85 }} />
+          SDR
+        </span>
         <button type="button" className="qrb-btn qrb-ag" onClick={() => handleQuickAction('reuniao_agendada')}>
-          📅 Agendei reunião
+          <CalendarPlus {...icSm} />
+          Agendei reunião
         </button>
         <button type="button" className="qrb-btn qrb-re" onClick={() => handleQuickAction('reuniao_realizada')}>
-          ✅ Realizei reunião
+          <CalendarCheck {...icSm} />
+          Realizei reunião
         </button>
         <button
           type="button"
@@ -92,7 +102,8 @@ export function QuickRegBar() {
           style={{ background: 'rgba(124,58,237,.15)', borderColor: 'rgba(124,58,237,.3)', color: '#a78bfa' }}
           onClick={openModalRegistro}
         >
-          🎯 Registrar Leads
+          <Target {...icSm} />
+          Registrar leads
         </button>
         <span className="qrb-sep">|</span>
         <span style={{ fontSize: 11, color: 'var(--text3)' }}>
@@ -104,12 +115,17 @@ export function QuickRegBar() {
         className={`quick-reg-bar closer-bar${showCloser ? ' active' : ''}`}
         style={{ display: showCloser ? 'flex' : 'none', bottom: showSdr ? 96 : 28 }}
       >
-        <span className="qrb-label">⚡ Closer:</span>
+        <span className="qrb-label">
+          <Zap size={14} strokeWidth={2} style={{ opacity: 0.85 }} />
+          Closer
+        </span>
         <button type="button" className="qrb-btn qrb-cl" onClick={() => handleQuickAction('reuniao_closer')}>
-          🤝 Reunião realizada
+          <Handshake {...icSm} />
+          Reunião realizada
         </button>
         <button type="button" className="qrb-btn qrb-vd" onClick={openModalRegistroVenda}>
-          💰 Registrar venda
+          <CircleDollarSign {...icSm} />
+          Registrar venda
         </button>
         <span className="qrb-sep">|</span>
         <span style={{ fontSize: 11, color: 'var(--text3)' }}>
@@ -128,7 +144,9 @@ export function QuickRegBar() {
             justifyContent: 'center',
             zIndex: 9999
           }}
-          onClick={(e) => { if (e.target === e.currentTarget) cancelCampanha() }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) cancelCampanha()
+          }}
         >
           <div
             style={{
@@ -152,7 +170,9 @@ export function QuickRegBar() {
               value={campanha}
               onChange={(e) => setCampanha(e.target.value)}
               autoFocus
-              onKeyDown={(e) => { if (e.key === 'Enter') confirmCampanha() }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') confirmCampanha()
+              }}
               style={{
                 width: '100%',
                 marginBottom: 20,
@@ -181,7 +201,7 @@ export function QuickRegBar() {
                   cursor: 'pointer'
                 }}
               >
-                Cancel
+                Cancelar
               </button>
               <button
                 type="button"

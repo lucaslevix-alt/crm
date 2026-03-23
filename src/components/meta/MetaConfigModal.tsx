@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Info, Megaphone } from 'lucide-react'
 import { metaFetch, metaSaveToken, metaSaveMode, metaLoadSaved, type MetaConvMode } from '../../lib/meta-ads'
 import { useAppStore } from '../../store/useAppStore'
 
@@ -46,7 +47,10 @@ export function MetaConfigModal() {
   return (
     <div style={{ padding: 24 }}>
       <div className="mh" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div className="mt" style={{ fontSize: 18, fontWeight: 700 }}>📣 Conectar Meta Ads</div>
+        <div className="mt modal-title-ic" style={{ fontSize: 18, fontWeight: 700 }}>
+          <Megaphone size={22} strokeWidth={1.65} aria-hidden />
+          Conectar Meta Ads
+        </div>
         <button type="button" className="mc" onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text2)' }}>
           ✕
         </button>
@@ -81,8 +85,21 @@ export function MetaConfigModal() {
           <option value="visita">Cliques no link</option>
         </select>
       </div>
-      <div style={{ margin: '12px 0', padding: '12px 16px', background: 'var(--bg3)', borderRadius: 10, fontSize: 12, color: 'var(--text3)' }}>
-        💡 O token é salvo localmente no seu navegador e nunca enviado para servidores externos.
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          alignItems: 'flex-start',
+          margin: '12px 0',
+          padding: '12px 16px',
+          background: 'var(--bg3)',
+          borderRadius: 10,
+          fontSize: 12,
+          color: 'var(--text3)'
+        }}
+      >
+        <Info size={18} strokeWidth={1.65} aria-hidden style={{ flexShrink: 0, color: 'var(--accent)', marginTop: 1 }} />
+        <span>O token é salvo localmente no seu navegador e nunca enviado para servidores externos.</span>
       </div>
       <button
         type="button"

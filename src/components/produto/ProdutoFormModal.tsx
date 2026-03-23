@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { CreditCard, FileText, Package, Pencil } from 'lucide-react'
 import { addProduto, updateProduto } from '../../firebase/firestore'
 import { useAppStore } from '../../store/useAppStore'
 
@@ -73,7 +74,7 @@ export function ProdutoFormModal() {
           aVista: aV,
           desc: d
         })
-        showToast(`${n} atualizado ✓`)
+        showToast(`${n} atualizado`)
       } else {
         await addProduto({
           nome: n,
@@ -84,7 +85,7 @@ export function ProdutoFormModal() {
           aVista: aV,
           desc: d
         })
-        showToast(`${n} cadastrado ✓`)
+        showToast(`${n} cadastrado`)
       }
       setEditingProduto(null)
       closeModal()
@@ -104,7 +105,10 @@ export function ProdutoFormModal() {
   return (
     <div style={{ padding: 24 }}>
       <div className="mh" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div className="mt" style={{ fontSize: 18, fontWeight: 700 }}>{isEdit ? '✏️ Editar Produto' : '📦 Novo Produto'}</div>
+        <div className="mt modal-title-ic" style={{ fontSize: 18, fontWeight: 700 }}>
+          {isEdit ? <Pencil size={22} strokeWidth={1.65} aria-hidden /> : <Package size={22} strokeWidth={1.65} aria-hidden />}
+          {isEdit ? 'Editar Produto' : 'Novo Produto'}
+        </div>
         <button type="button" className="mc" onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text2)' }}>
           ✕
         </button>
@@ -116,7 +120,10 @@ export function ProdutoFormModal() {
         </div>
 
         <div style={{ marginTop: 20, padding: '12px 0', borderTop: '1px solid var(--border2)' }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>💳 Cartão (sem juros)</div>
+          <div style={{ fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CreditCard size={18} strokeWidth={1.65} aria-hidden style={{ color: 'var(--accent)', flexShrink: 0 }} />
+            Cartão (sem juros)
+          </div>
           <div className="fg">
             <label htmlFor="p-valor-cartao">Valor do produto no cartão (R$)</label>
             <input id="p-valor-cartao" type="number" step="0.01" value={valorCartao} onChange={(e) => setValorCartao(e.target.value)} placeholder="0,00" />
@@ -134,7 +141,10 @@ export function ProdutoFormModal() {
         </div>
 
         <div style={{ marginTop: 20, padding: '12px 0', borderTop: '1px solid var(--border2)' }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>📄 Boleto</div>
+          <div style={{ fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileText size={18} strokeWidth={1.65} aria-hidden style={{ color: 'var(--accent)', flexShrink: 0 }} />
+            Boleto
+          </div>
           <div className="fg">
             <label htmlFor="p-valor-boleto">Valor do produto no boleto (R$)</label>
             <input id="p-valor-boleto" type="number" step="0.01" value={valorBoleto} onChange={(e) => setValorBoleto(e.target.value)} placeholder="0,00" />

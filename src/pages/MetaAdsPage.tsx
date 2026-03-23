@@ -1,5 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  BarChart3,
+  Briefcase,
+  CalendarClock,
+  CheckCircle2,
+  CircleDollarSign,
+  Coins,
+  Layers,
+  Megaphone,
+  RefreshCw,
+  Search,
+  Settings,
+  Star,
+  Target,
+  TrendingUp,
+  Trophy
+} from 'lucide-react'
+import {
   metaFetch,
   metaLoadSaved,
   metaSaveAccId,
@@ -12,6 +29,7 @@ import {
   type MetaInsightRow,
   type MetaCampaign
 } from '../lib/meta-ads'
+import { RankMarker } from '../components/ui/RankMarker'
 import { getRegistrosByRange } from '../firebase/firestore'
 import { useAppStore } from '../store/useAppStore'
 
@@ -390,11 +408,16 @@ export function MetaAdsPage() {
     return (
       <div className="content">
         <div style={{ marginBottom: 16 }}>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>📣 Meta Ads + CRM</h2>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            <Megaphone size={24} strokeWidth={1.65} aria-hidden />
+            Meta Ads + CRM
+          </h2>
           <p style={{ color: 'var(--text2)' }}>Desempenho dos anúncios cruzado com o comercial</p>
         </div>
         <div style={{ textAlign: 'center', padding: 48, color: 'var(--text3)' }}>
-          <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.3 }}>📣</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, opacity: 0.35 }} aria-hidden>
+            <Megaphone size={48} strokeWidth={1.25} />
+          </div>
           <p>Conecte sua conta Meta Ads para visualizar</p>
           <button
             type="button"
@@ -413,7 +436,10 @@ export function MetaAdsPage() {
     <div className="content">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>📣 Meta Ads + CRM</h2>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            <Megaphone size={24} strokeWidth={1.65} aria-hidden />
+            Meta Ads + CRM
+          </h2>
           <p style={{ color: 'var(--text2)' }} id="meta-period-label">
             Período: {dateLabel}
           </p>
@@ -436,18 +462,26 @@ export function MetaAdsPage() {
             <span>●</span>
             <span>{selectedAccountName || '—'}</span>
           </div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => openModal('modal-meta-config')}>
-            ⚙ Reconfigurar
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={() => openModal('modal-meta-config')}
+          >
+            <Settings size={16} strokeWidth={1.65} aria-hidden />
+            Reconfigurar
           </button>
           <button
             type="button"
             className="btn btn-ghost btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             onClick={() => {
               setMetaConnectedAt(Date.now())
               loadMetaPage()
             }}
           >
-            ↺ Atualizar
+            <RefreshCw size={16} strokeWidth={1.65} aria-hidden />
+            Atualizar
           </button>
         </div>
       </div>
@@ -515,7 +549,7 @@ export function MetaAdsPage() {
                   borderRadius: 10,
                   color: 'var(--text)',
                   padding: '8px 12px',
-                  fontFamily: 'Nexa, sans-serif',
+                  fontFamily: 'var(--font-sans)',
                   fontSize: 13
                 }}
               >
@@ -530,7 +564,7 @@ export function MetaAdsPage() {
                     })
                     .map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.id === favAccId ? '⭐ ' : ''}
+                        {a.id === favAccId ? '★ ' : ''}
                         {a.name}
                       </option>
                     ))
@@ -542,12 +576,16 @@ export function MetaAdsPage() {
                 onClick={toggleFav}
                 className="btn btn-ghost btn-sm"
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
                   whiteSpace: 'nowrap',
                   color: favAccId === accId ? 'var(--amber)' : 'var(--text2)',
                   borderColor: favAccId === accId ? 'rgba(245,158,11,.4)' : 'var(--border2)'
                 }}
               >
-                {favAccId === accId ? '⭐ Favorita' : '☆ Favoritar'}
+                <Star size={16} strokeWidth={favAccId === accId ? 2.25 : 1.65} aria-hidden fill={favAccId === accId ? 'currentColor' : 'none'} />
+                {favAccId === accId ? 'Favorita' : 'Favoritar'}
               </button>
             </div>
           </div>
@@ -571,21 +609,25 @@ export function MetaAdsPage() {
           marginBottom: 24
         }}
       >
-        {[
-          { id: 'spend', icon: '💸', label: 'Gasto Meta', value: kpis ? fmtCurrency(kpis.spend) : '…', col: 'orange' },
-          { id: 'leads', icon: '🎯', label: 'Leads (Meta)', value: kpis ? (kpis.metaLeads > 0 ? Math.round(kpis.metaLeads).toString() : '—') : '…', col: 'purple' },
-          { id: 'cpl', icon: '💰', label: 'CPL', value: kpis && kpis.cpl > 0 ? fmtCurrency(kpis.cpl) : '—', col: 'amber' },
-          { id: 'cpra', icon: '📅', label: 'Custo/Reunião Agendada', value: kpis && kpis.cpra > 0 ? fmtCurrency(kpis.cpra) : '—', col: 'green' },
-          { id: 'cprr', icon: '✅', label: 'Custo/Reunião Realizada', value: kpis && kpis.cprr > 0 ? fmtCurrency(kpis.cprr) : '—', col: 'cyan' },
-          { id: 'cac', icon: '🏆', label: 'CAC', value: kpis && kpis.cac > 0 ? fmtCurrency(kpis.cac) : '—', col: 'amber' },
-          { id: 'roas', icon: '📈', label: 'ROAS', value: kpis && kpis.roas > 0 ? `${kpis.roas.toFixed(2)}x` : '—', col: 'green' },
-          { id: 'vendas', icon: '💼', label: 'Vendas CRM', value: kpis != null ? String(kpis.vendas) : '…', col: 'purple' }
-        ].map((s) => (
-          <div key={s.id} className={`stat-card ${s.col}`}>
+        {(
+          [
+            { id: 'spend', Icon: CircleDollarSign, label: 'Gasto Meta', value: kpis ? fmtCurrency(kpis.spend) : '…', col: 'orange' },
+            { id: 'leads', Icon: Target, label: 'Leads (Meta)', value: kpis ? (kpis.metaLeads > 0 ? Math.round(kpis.metaLeads).toString() : '—') : '…', col: 'purple' },
+            { id: 'cpl', Icon: Coins, label: 'CPL', value: kpis && kpis.cpl > 0 ? fmtCurrency(kpis.cpl) : '—', col: 'amber' },
+            { id: 'cpra', Icon: CalendarClock, label: 'Custo/Reunião Agendada', value: kpis && kpis.cpra > 0 ? fmtCurrency(kpis.cpra) : '—', col: 'green' },
+            { id: 'cprr', Icon: CheckCircle2, label: 'Custo/Reunião Realizada', value: kpis && kpis.cprr > 0 ? fmtCurrency(kpis.cprr) : '—', col: 'cyan' },
+            { id: 'cac', Icon: Trophy, label: 'CAC', value: kpis && kpis.cac > 0 ? fmtCurrency(kpis.cac) : '—', col: 'amber' },
+            { id: 'roas', Icon: TrendingUp, label: 'ROAS', value: kpis && kpis.roas > 0 ? `${kpis.roas.toFixed(2)}x` : '—', col: 'green' },
+            { id: 'vendas', Icon: Briefcase, label: 'Vendas CRM', value: kpis != null ? String(kpis.vendas) : '…', col: 'purple' }
+          ] as const
+        ).map(({ id, Icon, label, value, col }) => (
+          <div key={id} className={`stat-card ${col}`}>
             <div className="glow-dot" />
-            <div className="stat-icon">{s.icon}</div>
-            <div className="stat-value">{s.value}</div>
-            <div className="stat-label">{s.label}</div>
+            <div className="stat-icon">
+              <Icon size={22} strokeWidth={1.65} aria-hidden />
+            </div>
+            <div className="stat-value">{value}</div>
+            <div className="stat-label">{label}</div>
           </div>
         ))}
       </div>
@@ -593,7 +635,10 @@ export function MetaAdsPage() {
       <div className="g2" style={{ marginBottom: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
         <div className="card">
           <div className="card-header">
-            <span className="card-title">🔽 Funil de Conversão</span>
+            <span className="card-title card-title--ic">
+              <Layers size={16} strokeWidth={1.65} aria-hidden />
+              Funil de Conversão
+            </span>
           </div>
           <div style={{ padding: '8px 0' }}>
             {funilSteps.length === 0 ? (
@@ -614,7 +659,10 @@ export function MetaAdsPage() {
         </div>
         <div className="card">
           <div className="card-header">
-            <span className="card-title">📊 Gasto Diário</span>
+            <span className="card-title card-title--ic">
+              <BarChart3 size={16} strokeWidth={1.65} aria-hidden />
+              Gasto Diário
+            </span>
             <span style={{ fontSize: 11, color: 'var(--text3)' }}>{dateLabel}</span>
           </div>
           <div style={{ position: 'relative', height: 180, display: 'flex', alignItems: 'flex-end', gap: 2, padding: '12px 8px' }}>
@@ -647,7 +695,10 @@ export function MetaAdsPage() {
 
       <div className="card">
         <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <span className="card-title">🎯 Desempenho por Campanha — Cruzado com CRM</span>
+          <span className="card-title card-title--ic">
+            <Target size={16} strokeWidth={1.65} aria-hidden />
+            Desempenho por Campanha — Cruzado com CRM
+          </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ position: 'relative' }}>
               <input
@@ -690,7 +741,9 @@ export function MetaAdsPage() {
             <div className="empty">
               {campaignFilter ? (
                 <>
-                  <div className="empty-icon">🔍</div>
+                  <div className="empty-icon" aria-hidden>
+                    <Search size={40} strokeWidth={1.4} />
+                  </div>
                   <p>
                     Nenhuma campanha encontrada para &quot;<strong>{campaignFilter}</strong>&quot;
                   </p>
@@ -729,10 +782,19 @@ export function MetaAdsPage() {
                   </thead>
                   <tbody>
                     {filteredCampaigns.map((a, idx) => {
-                      const rank = a.hasCrm ? (idx < 3 ? ['🥇', '🥈', '🥉'][idx] : idx + 1) : '–'
                       return (
                         <tr key={a.name + idx} className={a.hasCrm ? 'meta-ad-row-crm' : ''}>
-                          <td style={{ fontWeight: 700, color: 'var(--text2)', fontSize: 13 }}>{rank}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--text2)', fontSize: 13 }}>
+                            {a.hasCrm ? (
+                              idx < 3 ? (
+                                <RankMarker index={idx} />
+                              ) : (
+                                idx + 1
+                              )
+                            ) : (
+                              '–'
+                            )}
+                          </td>
                           <td title={a.name}>
                             <span style={{ color: a.hasCrm ? 'var(--green)' : 'var(--text3)', marginRight: 5 }}>{a.hasCrm ? '●' : '○'}</span>
                             <strong>{a.name}</strong>

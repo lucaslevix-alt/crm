@@ -1,8 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  Activity,
+  Award,
+  Banknote,
+  BriefcaseBusiness,
+  CalendarCheck,
+  CalendarClock,
+  CalendarPlus,
+  CheckCircle2,
+  CircleDollarSign,
+  ClipboardList,
+  Handshake,
+  Package,
+  Target,
+  Trophy,
+  Wallet
+} from 'lucide-react'
 import { getRegistrosByRange, getMetasConfig, getProdutos } from '../firebase/firestore'
 import type { RegistroRow, MetasConfig, ProdutoRow } from '../firebase/firestore'
 import { ProjectionChart } from '../components/dashboard/ProjectionChart'
 import { metaPctParts } from '../utils/metaProgress'
+import { icLg } from '../lib/icon-sizes'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
@@ -60,6 +79,84 @@ function fmt(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
 }
 
+function dailyFaturamentoSpark(recs: RegistroRow[], start: string, end: string): number[] {
+  if (!start || !end) return []
+  const map = new Map<string, number>()
+  const days: string[] = []
+  const d = new Date(start + 'T12:00:00')
+  const endD = new Date(end + 'T12:00:00')
+  while (d <= endD) {
+    const ds = d.toISOString().split('T')[0]
+    days.push(ds)
+    map.set(ds, 0)
+    d.setDate(d.getDate() + 1)
+  }
+  for (const r of recs) {
+    if (r.tipo !== 'venda' || !r.data) continue
+    if (!map.has(r.data)) continue
+    map.set(r.data, (map.get(r.data) ?? 0) + (r.valor || 0))
+  }
+  const last = days.slice(-14)
+  return last.map((dt) => map.get(dt) ?? 0)
+}
+
+function RevenueSparkline({ points }: { points: number[] }) {
+  const w = 520
+  const h = 76
+  const padY = 8
+  if (!points.length) {
+    return (
+      <div style={{ height: h, display: 'flex', alignItems: 'center', fontSize: 12, color: 'var(--text3)' }}>
+        Sem faturamento diário neste recorte
+      </div>
+    )
+  }
+  const max = Math.max(...points, 1)
+  const innerH = h - padY * 2
+  const step = points.length > 1 ? (w - 4) / (points.length - 1) : 0
+  const coords = points.map((v, i) => {
+    const x = 2 + i * step
+    const y = padY + innerH * (1 - v / max)
+    return [x, y] as const
+  })
+  let areaD = `M ${coords[0][0]} ${h} L ${coords[0][0]} ${coords[0][1]}`
+  for (let i = 1; i < coords.length; i++) areaD += ` L ${coords[i][0]} ${coords[i][1]}`
+  areaD += ` L ${coords[coords.length - 1][0]} ${h} Z`
+  const linePts = coords.map(([x, y]) => `${x},${y}`).join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <linearGradient id="db-spark-area" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor="#f84a08" stopOpacity="0" />
+          <stop offset="100%" stopColor="#f84a08" stopOpacity="0.28" />
+        </linearGradient>
+        <linearGradient id="db-spark-line" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#ff8c60" />
+          <stop offset="100%" stopColor="#f84a08" />
+        </linearGradient>
+        <filter id="db-spark-glow" x="-15%" y="-15%" width="130%" height="130%">
+          <feGaussianBlur stdDeviation="1.6" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      <path d={areaD} fill="url(#db-spark-area)" />
+      <polyline
+        fill="none"
+        stroke="url(#db-spark-line)"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={linePts}
+        filter="url(#db-spark-glow)"
+      />
+    </svg>
+  )
+}
+
 const PIE_COLORS = [
   'rgba(34,197,94,.95)',
   'rgba(22,163,74,.95)',
@@ -67,6 +164,13 @@ const PIE_COLORS = [
   'rgba(5,150,105,.9)',
   'rgba(234,179,8,.95)'
 ]
+
+function dbRankBadgeMod(idx: number): string {
+  if (idx === 0) return 'db-rank-badge--gold'
+  if (idx === 1) return 'db-rank-badge--silver'
+  if (idx === 2) return 'db-rank-badge--bronze'
+  return ''
+}
 
 function pieSlicePath(cx: number, cy: number, r: number, startFrac: number, endFrac: number): string {
   const tau = 2 * Math.PI
@@ -81,13 +185,19 @@ function pieSlicePath(cx: number, cy: number, r: number, startFrac: number, endF
   return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`
 }
 
-const STATS: Array<{ key: keyof ReturnType<typeof totals>; icon: string; label: string; col: string; money?: boolean }> = [
-  { key: 'ag', icon: '📅', label: 'Reuniões Agendadas', col: 'orange' },
-  { key: 're', icon: '✅', label: 'Reuniões Realizadas', col: 'green' },
-  { key: 'cl', icon: '🤝', label: 'Reuniões Closer', col: 'purple' },
-  { key: 'vn', icon: '💼', label: 'Vendas', col: 'amber' },
-  { key: 'ft', icon: '💰', label: 'Faturamento', col: 'orange', money: true },
-  { key: 'ca', icon: '💵', label: 'Cash Collected', col: 'cyan', money: true }
+const STATS: Array<{
+  key: keyof ReturnType<typeof totals>
+  Icon: LucideIcon
+  label: string
+  col: string
+  money?: boolean
+}> = [
+  { key: 'ag', Icon: CalendarClock, label: 'Reuniões Agendadas', col: 'orange' },
+  { key: 're', Icon: CheckCircle2, label: 'Reuniões Realizadas', col: 'green' },
+  { key: 'cl', Icon: Handshake, label: 'Reuniões Closer', col: 'purple' },
+  { key: 'vn', Icon: BriefcaseBusiness, label: 'Vendas', col: 'amber' },
+  { key: 'ft', Icon: Wallet, label: 'Faturamento', col: 'orange', money: true },
+  { key: 'ca', Icon: Banknote, label: 'Cash Collected', col: 'cyan', money: true }
 ]
 
 export function DashboardPage() {
@@ -138,75 +248,134 @@ export function DashboardPage() {
     'meta_cash'
   ]
 
+  const sparkFt = useMemo(
+    () => dailyFaturamentoSpark(recs, periodStart, periodEnd),
+    [recs, periodStart, periodEnd]
+  )
+
   return (
-    <div className="content">
-      <div className="ctrl-row">
-        <span className="ctrl-label">📅 Período:</span>
-        <button
-          type="button"
-          className={`prd-btn ${dp === 'hoje' ? 'active' : ''}`}
-          onClick={() => setDp('hoje')}
-        >
-          Hoje
-        </button>
-        <button
-          type="button"
-          className={`prd-btn ${dp === 'semana' ? 'active' : ''}`}
-          onClick={() => setDp('semana')}
-        >
-          Semana
-        </button>
-        <button
-          type="button"
-          className={`prd-btn ${dp === 'mes' ? 'active' : ''}`}
-          onClick={() => setDp('mes')}
-        >
-          Mês
-        </button>
-        <button
-          type="button"
-          className={`prd-btn ${dp === 'custom' ? 'active' : ''}`}
-          onClick={() => setDp('custom')}
-        >
-          Personalizado
-        </button>
-        {dp === 'custom' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="date"
-              className="di"
-              style={{ width: 140 }}
-              value={customStart}
-              onChange={(e) => setCustomStart(e.target.value)}
-            />
-            <span style={{ color: 'var(--text3)', fontSize: 12 }}>até</span>
-            <input
-              type="date"
-              className="di"
-              style={{ width: 140 }}
-              value={customEnd}
-              onChange={(e) => setCustomEnd(e.target.value)}
-            />
+    <div className="content db-page">
+      <header className="db-head">
+        <div>
+          <h1 className="db-title">Dashboard</h1>
+          <p className="db-sub">Visão geral comercial · escolha o período</p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+          <div className="db-pill-wrap">
+            <button
+              type="button"
+              className={`db-pill ${dp === 'hoje' ? 'active' : ''}`}
+              onClick={() => setDp('hoje')}
+            >
+              Hoje
+            </button>
+            <button
+              type="button"
+              className={`db-pill ${dp === 'semana' ? 'active' : ''}`}
+              onClick={() => setDp('semana')}
+            >
+              Semana
+            </button>
+            <button
+              type="button"
+              className={`db-pill ${dp === 'mes' ? 'active' : ''}`}
+              onClick={() => setDp('mes')}
+            >
+              Mês
+            </button>
+            <button
+              type="button"
+              className={`db-pill ${dp === 'custom' ? 'active' : ''}`}
+              onClick={() => setDp('custom')}
+            >
+              Personalizado
+            </button>
           </div>
-        )}
-      </div>
+          {dp === 'custom' && (
+            <div className="db-pill-dates">
+              <input
+                type="date"
+                className="di"
+                style={{ width: 140 }}
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+              />
+              <span style={{ color: 'var(--text3)', fontSize: 12 }}>até</span>
+              <input
+                type="date"
+                className="di"
+                style={{ width: 140 }}
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+      </header>
 
       {loading && (
-        <div className="loading">
-          <div className="spin" />
-          Carregando...
+        <div className="db-loading">
+          <div className="db-loading-spin" aria-hidden />
+          <span>Sincronizando métricas…</span>
         </div>
       )}
 
-      {error && (
-        <div style={{ color: 'var(--red)', padding: 16 }}>
-          Erro: {error}
-        </div>
-      )}
+      {error && <div className="db-error">Erro: {error}</div>}
 
       {!loading && !error && (
         <>
-          <div className="stats-grid">
+          <section className="db-bento db-bento--hero">
+            <div className="db-card db-card--hero">
+              <div className="db-card-label">Faturamento no período</div>
+              <div className="db-hero-value">{fmt(t.ft)}</div>
+              <div className="db-hero-meta">
+                <span className="db-hero-chip">
+                  <strong>{t.vn}</strong> vendas
+                </span>
+                <span className="db-hero-chip">
+                  Cash <strong>{fmt(t.ca)}</strong>
+                </span>
+                <span className="db-hero-chip">
+                  Reun. realiz. <strong>{t.re}</strong>
+                </span>
+              </div>
+              <div className="db-spark">
+                <RevenueSparkline points={sparkFt} />
+              </div>
+            </div>
+            <div className="db-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 210 }}>
+              <div className="db-kpi-strip-title">Pipeline rápido</div>
+              <div className="db-kpi-grid">
+                <div className="db-kpi-mini">
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--accent2)' }}>
+                    {t.ag}
+                  </div>
+                  <div className="db-kpi-mini-lbl">Agendadas</div>
+                </div>
+                <div className="db-kpi-mini">
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--green)' }}>
+                    {t.re}
+                  </div>
+                  <div className="db-kpi-mini-lbl">Realizadas</div>
+                </div>
+                <div className="db-kpi-mini">
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--purple)' }}>
+                    {t.cl}
+                  </div>
+                  <div className="db-kpi-mini-lbl">Closer</div>
+                </div>
+                <div className="db-kpi-mini">
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--amber)' }}>
+                    {t.vn}
+                  </div>
+                  <div className="db-kpi-mini-lbl">Vendas</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="db-section-title">Indicadores do período</div>
+          <div className="db-stats-grid">
             {STATS.map((s) => {
               const val = s.money ? (t as Record<string, number>)[s.key] as number : (t as Record<string, number>)[s.key]
               const metaVal = metas[metaKeys[STATS.indexOf(s)] as keyof MetasConfig] as number | undefined
@@ -216,7 +385,9 @@ export function DashboardPage() {
               return (
                 <div key={s.key} className={`stat-card ${s.col}`}>
                   <div className="glow-dot" />
-                  <div className="stat-icon">{s.icon}</div>
+                  <div className="stat-icon" aria-hidden>
+                    <s.Icon {...icLg} />
+                  </div>
                   <div className={`stat-value${s.col === 'orange' ? ' v-orange' : ''}`}>
                     {display}
                   </div>
@@ -249,7 +420,11 @@ export function DashboardPage() {
 
           {/* Projeções — gráficos de linha com acumulado diário + projeção tracejada */}
           {periodStart && periodEnd && (
-            <div className="g4 mb" style={{ marginTop: 24 }}>
+            <>
+              <div className="db-section-title" style={{ marginTop: 8 }}>
+                Projeções
+              </div>
+              <div className="db-proj-grid mb">
               {(() => {
                 const totalDays = daysBetweenInclusive(periodStart, periodEnd)
                 const todayStr = today()
@@ -259,18 +434,58 @@ export function DashboardPage() {
                 const projItems: Array<{
                   key: string
                   title: string
-                  icon: string
+                  TitleIcon: LucideIcon
                   color: string
                   tipos: string[]
                   money?: boolean
                   field?: 'valor' | 'cashCollected'
                 }> = [
-                  { key: 'ag', title: 'Projeção — Reuniões agendadas', icon: '📅', color: '#f84a08', tipos: ['reuniao_agendada'] },
-                  { key: 're', title: 'Projeção — Reuniões realizadas', icon: '✅', color: '#22c55e', tipos: ['reuniao_realizada'] },
-                  { key: 'cl', title: 'Projeção — Reuniões closer', icon: '🤝', color: '#a855f7', tipos: ['reuniao_closer'] },
-                  { key: 'vn', title: 'Projeção — Vendas', icon: '💼', color: '#fbbf24', tipos: ['venda'] },
-                  { key: 'ft', title: 'Projeção — Faturamento', icon: '💰', color: '#22c55e', tipos: ['venda'], money: true, field: 'valor' },
-                  { key: 'ca', title: 'Projeção — Cash Collected', icon: '💵', color: '#06b6d4', tipos: ['venda'], money: true, field: 'cashCollected' }
+                  {
+                    key: 'ag',
+                    title: 'Projeção — Reuniões agendadas',
+                    TitleIcon: CalendarClock,
+                    color: 'var(--accent)',
+                    tipos: ['reuniao_agendada']
+                  },
+                  {
+                    key: 're',
+                    title: 'Projeção — Reuniões realizadas',
+                    TitleIcon: CheckCircle2,
+                    color: '#22c55e',
+                    tipos: ['reuniao_realizada']
+                  },
+                  {
+                    key: 'cl',
+                    title: 'Projeção — Reuniões closer',
+                    TitleIcon: Handshake,
+                    color: '#a855f7',
+                    tipos: ['reuniao_closer']
+                  },
+                  {
+                    key: 'vn',
+                    title: 'Projeção — Vendas',
+                    TitleIcon: BriefcaseBusiness,
+                    color: '#fbbf24',
+                    tipos: ['venda']
+                  },
+                  {
+                    key: 'ft',
+                    title: 'Projeção — Faturamento',
+                    TitleIcon: Wallet,
+                    color: '#22c55e',
+                    tipos: ['venda'],
+                    money: true,
+                    field: 'valor'
+                  },
+                  {
+                    key: 'ca',
+                    title: 'Projeção — Cash Collected',
+                    TitleIcon: Banknote,
+                    color: '#06b6d4',
+                    tipos: ['venda'],
+                    money: true,
+                    field: 'cashCollected'
+                  }
                 ]
 
                 const allDates: string[] = []
@@ -333,7 +548,7 @@ export function DashboardPage() {
                       key={pi.key}
                       chartKey={pi.key}
                       title={pi.title}
-                      icon={pi.icon}
+                      TitleIcon={pi.TitleIcon}
                       color={pi.color}
                       realPoints={realPoints}
                       projectedCumulative={projectedCumulative}
@@ -348,20 +563,24 @@ export function DashboardPage() {
                 })
               })()}
             </div>
+            </>
           )}
 
           {/* Quadro de progresso de todas as metas */}
-          <div className="card mb">
-            <div className="card-header">
-              <span className="card-title">🎯 Progresso de metas</span>
+          <div className="db-card mb">
+            <div className="db-card-header">
+              <span className="db-card-title">
+                <Target size={14} strokeWidth={1.65} className="db-card-title-ic" />
+                Progresso de metas
+              </span>
             </div>
-            <div style={{ paddingTop: 8 }}>
+            <div className="db-card-body">
               {metaKeys.length === 0 ? (
-                <div className="empty">
+                <div className="db-empty">
                   <p>Sem metas configuradas</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="db-meta-list">
                   {metaKeys.map((k) => {
                     const alvo = metas[k] as number | undefined
                     if (alvo == null || alvo <= 0) return null
@@ -392,15 +611,16 @@ export function DashboardPage() {
                                 : 'Cash collected'
                     const isMoney = k === 'meta_faturamento' || k === 'meta_cash'
                     return (
-                      <div key={k} style={{ fontSize: 13 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span>{label}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'right' }}>
-                            {isMoney ? fmt(atual) : atual} / {isMoney ? fmt(alvo) : alvo}{' '}
-                            <span title={mp.superacaoPct != null ? mp.labelLong : undefined}>({mp.labelShort})</span>
+                      <div key={k} className="db-meta-item">
+                        <div className="db-meta-head">
+                          <span className="db-meta-label">{label}</span>
+                          <span className="db-meta-vals">
+                            {isMoney ? fmt(atual) : atual} / {isMoney ? fmt(alvo) : alvo}
+                            <br />
+                            <span title={mp.superacaoPct != null ? mp.labelLong : undefined}>{mp.labelShort}</span>
                           </span>
                         </div>
-                        <div className="prog-bar">
+                        <div className="db-prog-track">
                           <div
                             className={`prog-fill ${mp.rawPct >= 100 ? 'green' : mp.rawPct >= 70 ? 'orange' : mp.rawPct >= 40 ? 'amber' : 'red'}`}
                             style={{ width: `${mp.barPct}%` }}
@@ -415,16 +635,19 @@ export function DashboardPage() {
           </div>
 
           {/* Produtos mais vendidos no período */}
-          <div className="card mb">
-            <div className="card-header">
-              <span className="card-title">📦 Produtos mais vendidos</span>
+          <div className="db-card mb">
+            <div className="db-card-header">
+              <span className="db-card-title">
+                <Package size={14} strokeWidth={1.65} className="db-card-title-ic" />
+                Produtos mais vendidos
+              </span>
             </div>
-            <div style={{ paddingTop: 8 }}>
+            <div className="db-card-body">
               {(() => {
                 const vendas = recs.filter((r) => r.tipo === 'venda')
                 if (!vendas.length) {
                   return (
-                    <div className="empty">
+                    <div className="db-empty">
                       <p>Sem vendas no período</p>
                     </div>
                   )
@@ -460,7 +683,7 @@ export function DashboardPage() {
                 }
                 if (!map.size) {
                   return (
-                    <div className="empty">
+                    <div className="db-empty">
                       <p>Sem produtos vinculados às vendas</p>
                     </div>
                   )
@@ -496,19 +719,12 @@ export function DashboardPage() {
                   }
                 })
                 return (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                      gap: 16,
-                      justifyContent: 'center'
-                    }}
-                  >
+                  <div className="db-prod-bento">
+                    <div className="db-donut-wrap">
                     <svg
                       viewBox="0 0 180 180"
-                      width={180}
-                      height={180}
+                      width={176}
+                      height={176}
                       style={{ flexShrink: 0 }}
                       aria-label="Distribuição por quantidade vendida"
                     >
@@ -537,32 +753,32 @@ export function DashboardPage() {
                         ))
                       )}
                     </svg>
-                    <div style={{ flex: '1 1 160px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {slices.map((s) => (
-                        <div
-                          key={s.id}
-                          style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12 }}
-                        >
-                          <span
-                            style={{
-                              width: 10,
-                              height: 10,
-                              borderRadius: 2,
-                              background: s.color,
-                              marginTop: 3,
-                              flexShrink: 0
-                            }}
-                          />
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, lineHeight: 1.3 }}>{s.nome}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.45 }}>
-                              {s.qtd} unid. · {s.pct}%
-                              <br />
-                              {s.vendas} {s.vendas === 1 ? 'venda' : 'vendas'} · faturamento {fmt(s.total)}
+                    </div>
+                    <div className="db-prod-list">
+                      {slices.map((s, i) => {
+                        const tagCl = ['db-tag--orange', 'db-tag--green', 'db-tag--purple', 'db-tag--amber'][i % 4]
+                        return (
+                          <div key={s.id} className="db-list-row" style={{ marginBottom: 0 }}>
+                            <span className={`db-tag ${tagCl}`}>{s.pct}%</span>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 700, lineHeight: 1.3, fontSize: 13 }}>{s.nome}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.45, marginTop: 4 }}>
+                                {s.qtd} unid. · {s.vendas} {s.vendas === 1 ? 'venda' : 'vendas'} · {fmt(s.total)}
+                              </div>
                             </div>
+                            <span
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: 99,
+                                background: s.color,
+                                flexShrink: 0,
+                                boxShadow: `0 0 10px ${s.color}`
+                              }}
+                            />
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )
@@ -571,25 +787,29 @@ export function DashboardPage() {
           </div>
 
           {/* Atividade diária por data, separando agendadas, realizadas e vendas */}
-          <div className="card mb">
-            <div className="card-header">
-              <span className="card-title">⚡ Atividade diária</span>
-              <span style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, background: 'rgba(248,74,8,.7)' }} />{' '}
-                  <span style={{ fontSize: 10 }}>Agendadas</span>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, background: 'rgba(34,197,94,.8)' }} />{' '}
-                  <span style={{ fontSize: 10 }}>Realizadas</span>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, background: 'rgba(251,191,36,.9)' }} />{' '}
-                  <span style={{ fontSize: 10 }}>Vendas</span>
-                </span>
+          <div className="db-card mb">
+            <div className="db-card-header">
+              <span className="db-card-title">
+                <Activity size={14} strokeWidth={1.65} className="db-card-title-ic" />
+                Atividade diária
               </span>
+              <div className="db-legend">
+                <span className="db-legend-item">
+                  <span className="db-legend-dot db-legend-dot--ag" /> Agendadas
+                </span>
+                <span className="db-legend-item">
+                  <span className="db-legend-dot db-legend-dot--re" /> Realizadas
+                </span>
+                <span className="db-legend-item">
+                  <span className="db-legend-dot db-legend-dot--vn" /> Vendas
+                </span>
+              </div>
             </div>
-            <div style={{ paddingTop: 8 }}>
+            <div className="db-card-body">
               {(() => {
                 if (!recs.length) {
                   return (
-                    <div className="empty">
+                    <div className="db-empty">
                       <p>Sem atividade no período</p>
                     </div>
                   )
@@ -615,47 +835,37 @@ export function DashboardPage() {
                     )
                   : 1
                 return (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '0 4px 4px' }}>
-                    {rows.map(([d, v]) => {
-                      const label = d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : ''
-                      return (
-                        <div key={d} style={{ flex: 1, minWidth: 16, textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', justifyContent: 'center', marginBottom: 4 }}>
-                            <div
-                              style={{
-                                width: 6,
-                                height: (v.ag / maxVal) * 120,
-                                borderRadius: 4,
-                                background: 'rgba(248,74,8,.7)',
-                                transition: 'height .2s'
-                              }}
-                              title={`${v.ag} agendadas`}
-                            />
-                            <div
-                              style={{
-                                width: 6,
-                                height: (v.re / maxVal) * 120,
-                                borderRadius: 4,
-                                background: 'rgba(34,197,94,.8)',
-                                transition: 'height .2s'
-                              }}
-                              title={`${v.re} realizadas`}
-                            />
-                            <div
-                              style={{
-                                width: 6,
-                                height: (v.vn / maxVal) * 120,
-                                borderRadius: 4,
-                                background: 'rgba(251,191,36,.9)',
-                                transition: 'height .2s'
-                              }}
-                              title={`${v.vn} vendas`}
-                            />
+                  <div className="db-activity-wrap">
+                    <div className="db-activity-chart">
+                      {rows.map(([d, v]) => {
+                        const label = d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : ''
+                        const hAg = (v.ag / maxVal) * 100
+                        const hRe = (v.re / maxVal) * 100
+                        const hVn = (v.vn / maxVal) * 100
+                        return (
+                          <div key={d} className="db-activity-col">
+                            <div className="db-activity-bars">
+                              <div
+                                className="db-activity-bar db-activity-bar--ag"
+                                style={{ height: `${hAg}%` }}
+                                title={`${v.ag} agendadas`}
+                              />
+                              <div
+                                className="db-activity-bar db-activity-bar--re"
+                                style={{ height: `${hRe}%` }}
+                                title={`${v.re} realizadas`}
+                              />
+                              <div
+                                className="db-activity-bar db-activity-bar--vn"
+                                style={{ height: `${hVn}%` }}
+                                title={`${v.vn} vendas`}
+                              />
+                            </div>
+                            <span className="db-activity-label">{label}</span>
                           </div>
-                          <div style={{ fontSize: 9, color: 'var(--text3)' }}>{label}</div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
                 )
               })()}
@@ -663,10 +873,13 @@ export function DashboardPage() {
           </div>
 
           {/* Top SDRs e Closers no período */}
-          <div className="g2 mb">
-            <div className="card">
-              <div className="card-header">
-                <span className="card-title">🏆 Top SDRs — Realizadas</span>
+          <div className="db-split mb">
+            <div className="db-card">
+              <div className="db-card-header">
+                <span className="db-card-title">
+                  <Trophy size={14} strokeWidth={1.65} className="db-card-title-ic" />
+                  Top SDRs — Realizadas
+                </span>
               </div>
               {(() => {
                 const byUser = new Map<
@@ -697,31 +910,24 @@ export function DashboardPage() {
                   .slice(0, 5)
                 if (!rows.length) {
                   return (
-                    <div className="empty">
+                    <div className="db-empty">
                       <p>Sem dados de SDR no período</p>
                     </div>
                   )
                 }
                 return (
-                  <div style={{ paddingTop: 4 }}>
+                  <div className="db-rank-list">
                     {rows.map((u, idx) => (
-                      <div key={u.id} className="ri">
-                        <div className={`rn ${idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : ''}`}>
-                          #{idx + 1}
-                        </div>
-                        <div className="ri-info">
-                          <div className="ri-name">{u.nome}</div>
+                      <div key={u.id} className={`db-rank-row${idx === 0 ? ' db-rank-row--lead' : ''}`}>
+                        <span className={`db-rank-badge ${dbRankBadgeMod(idx)}`}>{idx + 1}</span>
+                        <div className="db-rank-main">
+                          <div className="db-rank-name">{u.nome}</div>
                           {(() => {
                             const noShowPct = u.ag > 0 ? Math.round(((u.ag - u.re) / u.ag) * 100) : null
                             return (
-                              <div className="ri-sub">
+                              <div className="db-rank-meta">
                                 {u.re} realizadas · {u.ag} agendadas
-                                {noShowPct != null && (
-                                  <>
-                                    {' '}
-                                    · {noShowPct}% no-show
-                                  </>
-                                )}
+                                {noShowPct != null && <> · {noShowPct}% no-show</>}
                               </div>
                             )
                           })()}
@@ -733,9 +939,12 @@ export function DashboardPage() {
               })()}
             </div>
 
-            <div className="card">
-              <div className="card-header">
-                <span className="card-title">💰 Top Closers</span>
+            <div className="db-card">
+              <div className="db-card-header">
+                <span className="db-card-title">
+                  <Award size={14} strokeWidth={1.65} className="db-card-title-ic" />
+                  Top Closers
+                </span>
               </div>
               {(() => {
                 const byUser = new Map<
@@ -770,34 +979,26 @@ export function DashboardPage() {
                   .slice(0, 5)
                 if (!rows.length) {
                   return (
-                    <div className="empty">
+                    <div className="db-empty">
                       <p>Sem dados de Closers no período</p>
                     </div>
                   )
                 }
                 return (
-                  <div style={{ paddingTop: 4 }}>
+                  <div className="db-rank-list">
                     {rows.map((u, idx) => (
-                      <div key={u.id} className="ri">
-                        <div className={`rn ${idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : ''}`}>
-                          #{idx + 1}
-                        </div>
-                        <div className="ri-info">
-                          <div className="ri-name">{u.nome}</div>
+                      <div key={u.id} className={`db-rank-row${idx === 0 ? ' db-rank-row--lead' : ''}`}>
+                        <span className={`db-rank-badge ${dbRankBadgeMod(idx)}`}>{idx + 1}</span>
+                        <div className="db-rank-main">
+                          <div className="db-rank-name">{u.nome}</div>
                           {(() => {
                             const convPct =
                               u.cl > 0 ? Math.round((u.vn / u.cl) * 100) : null
                             const ticket = u.vn > 0 ? u.ft / u.vn : 0
                             return (
-                              <div className="ri-sub">
-                                {u.vn} vendas · {u.cl} reuniões ·{' '}
-                                {convPct != null ? `${convPct}% conv.` : '—'}
-                                {u.vn > 0 && (
-                                  <>
-                                    {' '}
-                                    · TM: {fmt(ticket)}
-                                  </>
-                                )}
+                              <div className="db-rank-meta">
+                                {u.vn} vendas · {u.cl} reuniões · {convPct != null ? `${convPct}% conv.` : '—'}
+                                {u.vn > 0 && <> · TM: {fmt(ticket)}</>}
                               </div>
                             )
                           })()}
@@ -810,47 +1011,65 @@ export function DashboardPage() {
             </div>
           </div>
 
-          <div className="card mb" style={{ marginTop: 8 }}>
-            <div className="card-header">
-              <span className="card-title">📋 Registros recentes</span>
+          <div className="db-card mb" style={{ marginTop: 8 }}>
+            <div className="db-card-header">
+              <span className="db-card-title">
+                <ClipboardList size={14} strokeWidth={1.65} className="db-card-title-ic" />
+                Registros recentes
+              </span>
             </div>
-            <div style={{ padding: 16 }}>
+            <div className="db-card-body" style={{ padding: '8px 4px 16px' }}>
               {recs.length === 0 ? (
-                <div className="empty">
+                <div className="db-empty">
                   <p>Sem registros no período</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {recs.slice(0, 8).map((r) => (
-                    <div
-                      key={r.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '8px 0',
-                        borderBottom: '1px solid var(--border)'
-                      }}
-                    >
-                      <span>
-                        {r.tipo === 'reuniao_agendada' ? '📅' : r.tipo === 'reuniao_realizada' ? '✅' : r.tipo === 'reuniao_closer' ? '🤝' : '💰'}
-                      </span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>{r.userName}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                          {r.tipo === 'reuniao_agendada' ? 'Agendada' : r.tipo === 'reuniao_realizada' ? 'Realizada' : r.tipo === 'reuniao_closer' ? 'Closer' : 'Venda'}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  {recs.slice(0, 8).map((r) => {
+                    const tipoLabel =
+                      r.tipo === 'reuniao_agendada'
+                        ? 'Agendada'
+                        : r.tipo === 'reuniao_realizada'
+                          ? 'Realizada'
+                          : r.tipo === 'reuniao_closer'
+                            ? 'Closer'
+                            : 'Venda'
+                    const tagCl =
+                      r.tipo === 'reuniao_agendada'
+                        ? 'db-tag--orange'
+                        : r.tipo === 'reuniao_realizada'
+                          ? 'db-tag--green'
+                          : r.tipo === 'reuniao_closer'
+                            ? 'db-tag--purple'
+                            : 'db-tag--amber'
+                    const RegIcon: LucideIcon =
+                      r.tipo === 'reuniao_agendada'
+                        ? CalendarPlus
+                        : r.tipo === 'reuniao_realizada'
+                          ? CalendarCheck
+                          : r.tipo === 'reuniao_closer'
+                            ? Handshake
+                            : CircleDollarSign
+                    return (
+                      <div key={r.id} className="db-list-row">
+                        <div className="db-reg-icon" aria-hidden>
+                          <RegIcon size={18} strokeWidth={1.65} />
                         </div>
-                      </div>
-                      {r.tipo === 'venda' && (
-                        <span style={{ color: 'var(--green)', fontWeight: 700 }}>
-                          {fmt(r.valor)}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 14, fontWeight: 700 }}>{r.userName}</span>
+                            <span className={`db-tag ${tagCl}`} style={{ fontSize: 9, padding: '3px 8px' }}>
+                              {tipoLabel}
+                            </span>
+                          </div>
+                        </div>
+                        {r.tipo === 'venda' && <span className="db-reg-val">{fmt(r.valor)}</span>}
+                        <span className="db-reg-date">
+                          {r.data ? `${r.data.slice(8, 10)}/${r.data.slice(5, 7)}/${r.data.slice(0, 4)}` : '—'}
                         </span>
-                      )}
-                      <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>
-                        {r.data ? `${r.data.slice(8, 10)}/${r.data.slice(5, 7)}/${r.data.slice(0, 4)}` : '—'}
-                      </span>
-                    </div>
-                  ))}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

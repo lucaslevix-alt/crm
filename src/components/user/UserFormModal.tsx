@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Pencil, User } from 'lucide-react'
 import { getAuth, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
 import { initFirebaseApp } from '../../firebase/config'
 import { addUser, updateUser } from '../../firebase/firestore'
@@ -99,13 +100,13 @@ export function UserFormModal() {
           cargo,
           hasPassword: nextHasPassword
         })
-        showToast(`${n} atualizado ✓`)
+        showToast(`${n} atualizado`)
         if (canEditPassword && newPassword && isAdmin && !isEditingSelf) {
           showToast('Usuário marcado com senha. Para aplicar no login use o Console do Firebase (Authentication) ou uma Cloud Function.')
         }
       } else {
         await addUser({ nome: n, email: email.trim().toLowerCase(), cargo, hasPassword: true })
-        showToast(`${n} cadastrado ✓`)
+        showToast(`${n} cadastrado`)
       }
       setEditingUser(null)
       closeModal()
@@ -125,7 +126,10 @@ export function UserFormModal() {
   return (
     <div style={{ padding: 24 }}>
       <div className="mh" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div className="mt" style={{ fontSize: 18, fontWeight: 700 }}>{isEdit ? '✏️ Editar Usuário' : '👤 Novo Usuário'}</div>
+        <div className="mt modal-title-ic" style={{ fontSize: 18, fontWeight: 700 }}>
+          {isEdit ? <Pencil size={22} strokeWidth={1.65} aria-hidden /> : <User size={22} strokeWidth={1.65} aria-hidden />}
+          {isEdit ? 'Editar Usuário' : 'Novo Usuário'}
+        </div>
         <button type="button" className="mc" onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text2)' }}>
           ✕
         </button>

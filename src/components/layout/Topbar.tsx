@@ -1,5 +1,7 @@
 import { useLocation } from 'react-router-dom'
+import { Eye, EyeOff, Plus } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
+import { icSm } from '../../lib/icon-sizes'
 
 const ROUTE_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -43,28 +45,21 @@ export function Topbar() {
         <div style={{ width: 1, height: 20, background: 'var(--border2)' }} />
         <button
           type="button"
+          className="topbar-ghost-btn"
           onClick={() => setQuickBarHidden(!quickBarHidden)}
           title={quickBarHidden ? 'Mostrar barra de ações rápidas' : 'Ocultar barra de ações rápidas'}
-          style={{
-            background: 'none',
-            border: '1px solid var(--border2)',
-            borderRadius: 8,
-            cursor: 'pointer',
-            color: 'var(--text3)',
-            fontSize: 13,
-            padding: '4px 10px',
-            whiteSpace: 'nowrap'
-          }}
         >
-          ⚡ {quickBarHidden ? 'Mostrar' : 'Ocultar'}
+          {quickBarHidden ? <Eye {...icSm} /> : <EyeOff {...icSm} />}
+          <span>{quickBarHidden ? 'Mostrar' : 'Ocultar'}</span>
         </button>
         <button
           type="button"
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary btn-sm topbar-new-btn"
           style={{ width: 'auto', marginLeft: 8 }}
           onClick={() => openModal('modal-registro')}
         >
-          ✚ Novo Registro
+          <Plus size={15} strokeWidth={2.2} />
+          Novo registro
         </button>
       </div>
     </header>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ClipboardList, Pencil, Trash2 } from 'lucide-react'
 import {
   getRegistrosByRange,
   listUsers,
@@ -264,7 +265,9 @@ export function RegistrosPage() {
           <div className="tw">
             {filtered.length === 0 ? (
               <div className="empty">
-                <div className="empty-icon">📋</div>
+                <div className="empty-icon" aria-hidden>
+                  <ClipboardList size={40} strokeWidth={1.4} />
+                </div>
                 <p>{busca || fTipo || fUser ? 'Nenhum registro encontrado para os filtros.' : 'Nenhum registro encontrado.'}</p>
               </div>
             ) : (
@@ -334,15 +337,19 @@ export function RegistrosPage() {
                             type="button"
                             className="btn btn-ghost btn-sm"
                             onClick={() => handleEdit(r)}
+                            title="Editar"
+                            aria-label="Editar"
                           >
-                            ✏️
+                            <Pencil size={16} strokeWidth={1.65} />
                           </button>{' '}
                           <button
                             type="button"
                             className="btn btn-danger btn-sm"
                             onClick={() => handleDelete(r)}
+                            title="Excluir"
+                            aria-label="Excluir"
                           >
-                            🗑
+                            <Trash2 size={16} strokeWidth={1.65} />
                           </button>
                         </td>
                       </tr>

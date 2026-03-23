@@ -1,16 +1,36 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ClipboardList, Pencil, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { getAuditoriaLogs, listUsers, type AuditLogRow } from '../firebase/firestore'
 import type { CrmUser } from '../store/useAppStore'
 
 const ACAO_LABEL: Record<string, string> = {
-  criar: '✅ Criou',
-  editar: '✏️ Editou',
-  deletar: '🗑 Deletou'
+  criar: 'Criou',
+  editar: 'Editou',
+  deletar: 'Deletou'
 }
 const ACAO_CLS: Record<string, string> = {
   criar: 'b-green',
   editar: 'b-sdr',
   deletar: 'b-danger'
+}
+
+function AcaoBadge({ acao }: { acao: string }) {
+  const cls = ACAO_CLS[acao] ?? 'b-sdr'
+  const label = ACAO_LABEL[acao] ?? acao
+  const ic =
+    acao === 'criar' ? (
+      <ClipboardList size={12} strokeWidth={2} aria-hidden />
+    ) : acao === 'editar' ? (
+      <Pencil size={12} strokeWidth={2} aria-hidden />
+    ) : acao === 'deletar' ? (
+      <Trash2 size={12} strokeWidth={2} aria-hidden />
+    ) : null
+  return (
+    <span className={`badge ${cls}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      {ic}
+      {label}
+    </span>
+  )
 }
 const TIPO_LABEL: Record<string, string> = {
   reuniao_agendada: 'Agendada',
@@ -92,15 +112,18 @@ export function AuditoriaPage() {
     <div className="content">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>🔍 Log de Auditoria</h2>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            <ClipboardList size={24} strokeWidth={1.65} aria-hidden />
+            Log de Auditoria
+          </h2>
           <p style={{ color: 'var(--text2)' }}>Histórico completo de criações, edições e exclusões</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={filterAcao} onChange={(e) => setFilterAcao(e.target.value)} className="di" style={{ width: 150 }}>
             <option value="">Todas as ações</option>
-            <option value="criar">✅ Criar</option>
-            <option value="editar">✏️ Editar</option>
-            <option value="deletar">🗑 Deletar</option>
+            <option value="criar">Criar</option>
+            <option value="editar">Editar</option>
+            <option value="deletar">Deletar</option>
           </select>
           <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)} className="di" style={{ width: 170 }}>
             <option value="">Todos os usuários</option>
@@ -108,8 +131,14 @@ export function AuditoriaPage() {
               <option key={u.id} value={u.id}>{u.nome}</option>
             ))}
           </select>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => load()}>
-            ↺ Atualizar
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={() => load()}
+          >
+            <RefreshCw size={16} strokeWidth={1.65} aria-hidden />
+            Atualizar
           </button>
         </div>
       </div>
@@ -126,7 +155,9 @@ export function AuditoriaPage() {
         )}
         {!loading && !error && !logs.length && (
           <div className="empty">
-            <div className="empty-icon">🔍</div>
+            <div className="empty-icon" aria-hidden>
+              <Search size={40} strokeWidth={1.4} />
+            </div>
             <p>Nenhum evento encontrado</p>
           </div>
         )}
@@ -157,7 +188,7 @@ export function AuditoriaPage() {
                           <span style={{ fontSize: 10, color: 'var(--text3)' }}>{(l.userCargo || '').toUpperCase()}</span>
                         </td>
                         <td>
-                          <span className={`badge ${ACAO_CLS[l.acao] ?? 'b-sdr'}`}>{ACAO_LABEL[l.acao] ?? l.acao}</span>
+                          <AcaoBadge acao={l.acao} />
                         </td>
                         <td style={{ fontSize: 12, color: 'var(--text2)', ...(l.acao === 'deletar' ? { textDecoration: 'line-through', opacity: 0.6 } : {}) }}>
                           {recLabel}

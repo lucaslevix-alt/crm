@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { getRegistrosByRange, listUsers } from '../firebase/firestore'
 import { today, mRange, wRange } from '../lib/dates'
 import type { CrmUser } from '../store/useAppStore'
+import { Briefcase, Trophy } from 'lucide-react'
 import { RankingPodiumThree } from '../components/ranking/RankingPodium'
+import { RankMarker } from '../components/ui/RankMarker'
 
 type RpPeriod = 'mes' | 'semana' | 'hoje'
 
@@ -26,8 +28,6 @@ interface CloserStat {
   photoUrl?: string
 }
 
-const MEDALS = ['🥇', '🥈', '🥉'] as const
-
 function RankingItem({
   index,
   name,
@@ -39,10 +39,11 @@ function RankingItem({
   sub: React.ReactNode
   val: string
 }) {
-  const medalClass = index < 3 ? (['gold', 'silver', 'bronze'] as const)[index] : ''
   return (
     <div className="ri">
-      <div className={`rn ${medalClass}`}>{MEDALS[index] ?? index + 1}</div>
+      <div className="rn">
+        <RankMarker index={index} />
+      </div>
       <div className="ri-info">
         <div className="ri-name">{name}</div>
         <div className="ri-sub">{sub}</div>
@@ -109,7 +110,10 @@ export function RankingCloserPage() {
   return (
     <div className="content">
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>🥇 Ranking Closer</h2>
+        <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+          <Trophy size={24} strokeWidth={1.65} aria-hidden />
+          Ranking Closer
+        </h2>
         <p style={{ color: 'var(--text2)' }}>Vendas, conversão e ticket médio</p>
       </div>
       <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
@@ -173,7 +177,10 @@ export function RankingCloserPage() {
         <div style={{ marginTop: 16 }}>
           <div className="card mb">
             <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <span className="card-title">💼 Ranking Individual</span>
+              <span className="card-title card-title--ic">
+                <Briefcase size={16} strokeWidth={1.65} aria-hidden />
+                Ranking Individual
+              </span>
               <span style={{ fontSize: 12, color: 'var(--text3)' }}>
                 Ticket médio geral: {fmt(ticketMedio)}
               </span>
@@ -230,7 +237,10 @@ export function RankingCloserPage() {
         <div style={{ marginTop: 16 }}>
           <div className="card mb">
             <div className="card-header">
-              <span className="card-title">🏆 Pódio Closer — Faturamento</span>
+              <span className="card-title card-title--ic">
+                <Trophy size={16} strokeWidth={1.65} aria-hidden />
+                Pódio Closer — Faturamento
+              </span>
             </div>
             <div style={{ padding: 16 }}>
               {list.length === 0 ? (
@@ -279,7 +289,9 @@ export function RankingCloserPage() {
                           className={`rpodium-table-row ${idx === 0 ? 'rpodium-table-row--first' : ''}`}
                           style={{ gridTemplateColumns: '32px 1.15fr repeat(4, minmax(0, 0.68fr))' }}
                         >
-                          <span className="rpodium-medal-col">{MEDALS[idx] ?? idx + 1}</span>
+                          <span className="rpodium-medal-col">
+                            <RankMarker index={idx} />
+                          </span>
                           <span style={{ fontWeight: 600 }}>{s.nome}</span>
                           <span style={{ textAlign: 'right' }}>{s.cl}</span>
                           <span style={{ textAlign: 'right', color: convColor }}>

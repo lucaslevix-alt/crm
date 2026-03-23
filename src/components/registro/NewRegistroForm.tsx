@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ClipboardList } from 'lucide-react'
 import {
   addRegistro,
   listUsers,
@@ -142,7 +143,10 @@ export function NewRegistroForm() {
   return (
     <div style={{ padding: 24 }}>
       <div className="mh">
-        <div className="mt">📋 Novo Registro</div>
+        <div className="mt modal-title-ic">
+          <ClipboardList size={20} strokeWidth={1.65} aria-hidden />
+          Novo Registro
+        </div>
         <button type="button" className="mc" onClick={closeModal}>
           ✕
         </button>

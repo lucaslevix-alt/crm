@@ -1,3 +1,5 @@
+import { Trophy } from 'lucide-react'
+
 export type PodiumPerson = {
   id: string
   nome: string
@@ -20,7 +22,11 @@ function PodiumSlot({
   const isFirst = rank === 1
   return (
     <div className={`rpodium-slot rpodium-slot--r${rank}`}>
-      {isFirst && <div className="rpodium-trophy">🏆</div>}
+      {isFirst && (
+        <div className="rpodium-trophy" aria-hidden>
+          <Trophy size={26} strokeWidth={1.65} />
+        </div>
+      )}
       <div className={`rpodium-card ${isFirst ? 'rpodium-card--r1' : ''}`}>
         <div
           className={`rpodium-avatar ${isFirst ? 'rpodium-avatar--r1' : ''}`}

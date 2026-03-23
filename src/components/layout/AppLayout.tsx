@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { AnimatedOutlet } from './AnimatedOutlet'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { QuickRegBar } from './QuickRegBar'
@@ -25,11 +25,11 @@ export function AppLayout() {
   }, [activeModalId, closeModal, openModal])
 
   return (
-    <div id="app" style={{ flexDirection: 'row', minHeight: '100vh' }}>
+    <div id="app" className="app-shell" style={{ flexDirection: 'row', minHeight: '100vh' }}>
       <Sidebar />
       <main className={`main ${!sidebarOpen ? 'sidebar-collapsed' : ''}`}>
         <Topbar />
-        <Outlet />
+        <AnimatedOutlet />
       </main>
       <QuickRegBar />
     </div>

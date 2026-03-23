@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Pencil, Trash2, Users } from 'lucide-react'
 import { listUsers, deleteUser, updateUser } from '../firebase/firestore'
 import type { CrmUser } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
@@ -160,7 +161,10 @@ export function UsuariosPage() {
     <div className="content">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Usuários</h2>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            <Users size={24} strokeWidth={1.65} aria-hidden />
+            Usuários
+          </h2>
           <p style={{ color: 'var(--text2)' }}>Equipe comercial</p>
           {canRunMigration && (
             <p style={{ marginTop: 8, fontSize: 12, color: 'var(--text3)' }}>
@@ -203,7 +207,9 @@ export function UsuariosPage() {
         )}
         {!loading && !error && !users.length && (
           <div className="empty">
-            <div className="empty-icon">👥</div>
+            <div className="empty-icon" aria-hidden>
+              <Users size={40} strokeWidth={1.4} />
+            </div>
             <p>Nenhum usuário</p>
           </div>
         )}
@@ -232,11 +238,23 @@ export function UsuariosPage() {
                       <span className={`badge ${CARGO_BADGE[u.cargo] ?? 'b-sdr'}`}>{(u.cargo || '').toUpperCase()}</span>
                     </td>
                     <td style={{ display: 'flex', gap: 6 }}>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleEdit(u)}>
-                        ✏️ Editar
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        onClick={() => handleEdit(u)}
+                      >
+                        <Pencil size={14} strokeWidth={1.65} aria-hidden />
+                        Editar
                       </button>
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(u)}>
-                        🗑
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        title="Excluir"
+                        aria-label="Excluir"
+                        onClick={() => handleDelete(u)}
+                      >
+                        <Trash2 size={14} strokeWidth={1.65} />
                       </button>
                     </td>
                   </tr>

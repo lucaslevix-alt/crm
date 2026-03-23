@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Banknote, CalendarClock, Handshake } from 'lucide-react'
 import { addRegistro } from '../../firebase/firestore'
 import { useAppStore } from '../../store/useAppStore'
 
@@ -16,10 +17,11 @@ function loadSkipPreference(): boolean {
   }
 }
 
-function getPromptIcon(tipo: string): string {
-  if (tipo === 'venda') return '💰'
-  if (tipo === 'reuniao_closer') return '🤝'
-  return '📅'
+function PromptIcon({ tipo }: { tipo: string }) {
+  const p = { size: 28, strokeWidth: 1.65 } as const
+  if (tipo === 'venda') return <Banknote {...p} aria-hidden />
+  if (tipo === 'reuniao_closer') return <Handshake {...p} aria-hidden />
+  return <CalendarClock {...p} aria-hidden />
 }
 
 export function QuickRegistroCampaignModal() {
@@ -88,10 +90,10 @@ export function QuickRegistroCampaignModal() {
       incrementRegistrosVersion()
       showToast(
         quickRegistroPrompt.tipo === 'reuniao_agendada'
-          ? '✅ Reunião agendada!'
+          ? 'Reunião agendada.'
           : quickRegistroPrompt.tipo === 'reuniao_realizada'
-            ? '✅ Reunião realizada!'
-            : 'Registro salvo!'
+            ? 'Reunião realizada.'
+            : 'Registro salvo.'
       )
       setQuickRegistroPrompt(null)
       closeModal()
@@ -105,7 +107,9 @@ export function QuickRegistroCampaignModal() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16 }}>
-        <div style={{ fontSize: 28, lineHeight: 1 }}>{getPromptIcon(quickRegistroPrompt.tipo)}</div>
+        <div style={{ display: 'flex', color: 'var(--accent)', flexShrink: 0 }} aria-hidden>
+          <PromptIcon tipo={quickRegistroPrompt.tipo} />
+        </div>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>{quickRegistroPrompt.title}</div>
           <div style={{ color: 'var(--text2)', marginTop: 4 }}>

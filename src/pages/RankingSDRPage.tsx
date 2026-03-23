@@ -3,7 +3,9 @@ import { getRegistrosByRange, getLeadsSdrByRange, listUsers } from '../firebase/
 import { today, mRange, wRange } from '../lib/dates'
 import { useAppStore } from '../store/useAppStore'
 import type { CrmUser } from '../store/useAppStore'
+import { BarChart3, CalendarCheck, CalendarClock, Target, Trophy } from 'lucide-react'
 import { RankingPodiumThree } from '../components/ranking/RankingPodium'
+import { RankMarker } from '../components/ui/RankMarker'
 
 type RpPeriod = 'mes' | 'semana' | 'hoje'
 
@@ -22,8 +24,6 @@ interface SdrStat {
   photoUrl?: string
 }
 
-const MEDALS = ['🥇', '🥈', '🥉'] as const
-
 function RankingItem({
   index,
   name,
@@ -35,10 +35,11 @@ function RankingItem({
   sub: React.ReactNode
   val: string | number
 }) {
-  const medalClass = index < 3 ? (['gold', 'silver', 'bronze'] as const)[index] : ''
   return (
     <div className="ri">
-      <div className={`rn ${medalClass}`}>{MEDALS[index] ?? index + 1}</div>
+      <div className="rn">
+        <RankMarker index={index} />
+      </div>
       <div className="ri-info">
         <div className="ri-name">{name}</div>
         <div className="ri-sub">{sub}</div>
@@ -154,16 +155,20 @@ export function RankingSDRPage() {
     <div className="content">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>🏆 Ranking SDR</h2>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            <Trophy size={24} strokeWidth={1.65} aria-hidden />
+            Ranking SDR
+          </h2>
           <p style={{ color: 'var(--text2)' }}>Performance individual da equipe de SDR</p>
         </div>
         <button
           type="button"
           className="btn btn-primary btn-sm"
-          style={{ width: 'auto', padding: '8px 16px' }}
+          style={{ width: 'auto', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 8 }}
           onClick={() => openModal('modal-leads')}
         >
-          🎯 Registrar Leads
+          <Target size={16} strokeWidth={1.65} aria-hidden />
+          Registrar Leads
         </button>
       </div>
       <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
@@ -226,7 +231,10 @@ export function RankingSDRPage() {
         <div className="g3" style={{ marginTop: 16 }}>
           <div className="card">
             <div className="card-header">
-              <span className="card-title">📅 Reuniões Agendadas</span>
+              <span className="card-title card-title--ic">
+                <CalendarClock size={16} strokeWidth={1.65} aria-hidden />
+                Reuniões Agendadas
+              </span>
             </div>
             <div>
               {byAg.length ? (
@@ -253,7 +261,10 @@ export function RankingSDRPage() {
           </div>
           <div className="card">
             <div className="card-header">
-              <span className="card-title">✅ Realizadas + No-show</span>
+              <span className="card-title card-title--ic">
+                <CalendarCheck size={16} strokeWidth={1.65} aria-hidden />
+                Realizadas + No-show
+              </span>
             </div>
             <div>
               {byRe.length ? (
@@ -280,7 +291,10 @@ export function RankingSDRPage() {
           </div>
           <div className="card">
             <div className="card-header">
-              <span className="card-title">🎯 Aproveitamento de Leads</span>
+              <span className="card-title card-title--ic">
+                <BarChart3 size={16} strokeWidth={1.65} aria-hidden />
+                Aproveitamento de Leads
+              </span>
             </div>
             <div>
               {!byLeads.length ? (
@@ -333,7 +347,10 @@ export function RankingSDRPage() {
         <div style={{ marginTop: 16 }}>
           <div className="card mb">
             <div className="card-header">
-              <span className="card-title">🏆 Pódio SDR — Reuniões realizadas</span>
+              <span className="card-title card-title--ic">
+                <Trophy size={16} strokeWidth={1.65} aria-hidden />
+                Pódio SDR — Reuniões realizadas
+              </span>
             </div>
             <div style={{ padding: 16 }}>
               {byRe.length === 0 ? (
@@ -399,7 +416,9 @@ export function RankingSDRPage() {
                           className={`rpodium-table-row ${idx === 0 ? 'rpodium-table-row--first' : ''}`}
                           style={{ gridTemplateColumns: '32px 1.2fr repeat(5, minmax(0, 0.62fr))' }}
                         >
-                          <span className="rpodium-medal-col">{MEDALS[idx] ?? idx + 1}</span>
+                          <span className="rpodium-medal-col">
+                            <RankMarker index={idx} />
+                          </span>
                           <span style={{ fontWeight: 600 }}>{s.nome}</span>
                           <span style={{ textAlign: 'right', fontWeight: idx === 0 ? 700 : undefined }}>{s.re}</span>
                           <span style={{ textAlign: 'right', color: cmpColor }}>

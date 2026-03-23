@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Package, Pencil, Trash2 } from 'lucide-react'
 import { getProdutos, deleteProduto, type ProdutoRow } from '../firebase/firestore'
 import { useAppStore } from '../store/useAppStore'
 
@@ -71,7 +72,10 @@ export function ProdutosPage() {
     <div className="content">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>📦 Produtos</h2>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            <Package size={24} strokeWidth={1.65} aria-hidden />
+            Produtos
+          </h2>
           <p style={{ color: 'var(--text2)' }}>Gerencie os produtos vendidos pela equipe</p>
         </div>
         <button type="button" className="btn btn-primary" style={{ width: 'auto', padding: '10px 20px' }} onClick={handleNew}>
@@ -91,7 +95,9 @@ export function ProdutosPage() {
         )}
         {!loading && !error && !produtos.length && (
           <div className="empty">
-            <div className="empty-icon">📦</div>
+            <div className="empty-icon" aria-hidden>
+              <Package size={40} strokeWidth={1.4} />
+            </div>
             <p>Nenhum produto cadastrado.<br />Clique em <strong>+ Novo Produto</strong> para começar.</p>
           </div>
         )}
@@ -128,8 +134,24 @@ export function ProdutosPage() {
                       <td>{fmt(p.aVista)}</td>
                       <td style={{ color: 'var(--text2)', fontSize: 12 }}>{p.desc || '—'}</td>
                       <td style={{ display: 'flex', gap: 6 }}>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleEdit(p)}>✏️ Editar</button>
-                        <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(p)}>🗑</button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                          onClick={() => handleEdit(p)}
+                        >
+                          <Pencil size={14} strokeWidth={1.65} aria-hidden />
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          title="Excluir"
+                          aria-label="Excluir"
+                          onClick={() => handleDelete(p)}
+                        >
+                          <Trash2 size={14} strokeWidth={1.65} />
+                        </button>
                       </td>
                     </tr>
                   )

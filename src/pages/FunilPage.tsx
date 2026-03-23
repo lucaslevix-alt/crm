@@ -1,4 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
+import {
+  AlertTriangle,
+  Banknote,
+  Briefcase,
+  CalendarClock,
+  CheckCircle2,
+  ChevronDown,
+  CircleCheck,
+  Layers,
+  Target,
+  Wallet
+} from 'lucide-react'
 import { getRegistrosByRange } from '../firebase/firestore'
 import { today, mRange, formatPeriodLabel } from '../lib/dates'
 import { metaFetch, metaLoadSaved, getConversionKeys, extractActionFromInsights } from '../lib/meta-ads'
@@ -49,7 +61,7 @@ function funilBadgeClass(val: number, thresholds: { good: number; warn: number }
 
 interface FunilStepProps {
   color: string
-  icon: string
+  icon: React.ReactNode
   label: string
   num: string
   sub?: string | null
@@ -62,7 +74,7 @@ function FunilStep({ color, icon, label, num, sub, badge, barPct }: FunilStepPro
   return (
     <div className="fn-step" style={{ ['--fn-color' as string]: color }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: 20 }}>{icon}</span>
+        <span className="fn-step-ic">{icon}</span>
         <span className="fn-label">{label}</span>
       </div>
       <div className="fn-num">{num}</div>
@@ -137,7 +149,9 @@ export function FunilPage() {
       const collectedPct = ft > 0 ? Math.round((ca / ft) * 100) : null
 
       const arrow = (
-        <div className="fn-arrow">▼</div>
+        <div className="fn-arrow" aria-hidden>
+          <ChevronDown size={20} strokeWidth={1.65} />
+        </div>
       )
 
       const steps: React.ReactNode[] = []
@@ -146,10 +160,10 @@ export function FunilPage() {
         <FunilStep
           key="leads"
           color="#7c3aed"
-          icon="🎯"
+          icon={<Target size={20} strokeWidth={1.65} />}
           label="Leads (Meta Ads)"
           num={leads > 0 ? String(Math.round(leads)) : hasMetaToken ? '0' : '—'}
-          sub={hasMetaToken ? (spend > 0 ? `Gasto: ${fmtCurrency(spend)}` : 'Meta Ads conectado') : '⚠ Conecte Meta Ads para ver leads'}
+          sub={hasMetaToken ? (spend > 0 ? `Gasto: ${fmtCurrency(spend)}` : 'Meta Ads conectado') : 'Conecte Meta Ads para ver leads'}
           badge={
             hasMetaToken && cpl > 0 ? (
               <span className="fn-badge warn" style={{ marginTop: 4 }}>CPL: {fmtCurrency(cpl)}</span>
@@ -163,8 +177,8 @@ export function FunilPage() {
       steps.push(
         <FunilStep
           key="ag"
-          color="#f84a08"
-          icon="📅"
+          color="var(--accent)"
+          icon={<CalendarClock size={20} strokeWidth={1.65} />}
           label="Reuniões Agendadas"
           num={String(ag)}
           sub={leads > 0 ? `De ${Math.round(leads)} leads` : null}
@@ -186,7 +200,7 @@ export function FunilPage() {
         <FunilStep
           key="rr"
           color="#22c55e"
-          icon="✅"
+          icon={<CheckCircle2 size={20} strokeWidth={1.65} />}
           label="Reuniões Realizadas"
           num={String(rr)}
           sub={ag > 0 ? `De ${ag} agendadas — ${pct(noShow ?? null)} no-show` : null}
@@ -206,7 +220,7 @@ export function FunilPage() {
         <FunilStep
           key="vn"
           color="#f59e0b"
-          icon="💼"
+          icon={<Briefcase size={20} strokeWidth={1.65} />}
           label="Vendas Fechadas"
           num={String(vn)}
           sub={rr > 0 ? `De ${rr} reuniões realizadas` : null}
@@ -226,7 +240,7 @@ export function FunilPage() {
         <FunilStep
           key="ft"
           color="#16a34a"
-          icon="💰"
+          icon={<Banknote size={20} strokeWidth={1.65} />}
           label="Valor Vendido"
           num={fmtCurrency(ft)}
           sub={vn > 0 ? `${vn} vendas · Ticket médio: ${fmtCurrency(tm)}` : vn === 0 ? 'Sem vendas no período' : null}
@@ -239,7 +253,7 @@ export function FunilPage() {
         <FunilStep
           key="ca"
           color="#22d3ee"
-          icon="💵"
+          icon={<Wallet size={20} strokeWidth={1.65} />}
           label="Cash Collected"
           num={fmtCurrency(ca)}
           sub={ft > 0 ? `De ${fmtCurrency(ft)} faturados` : null}
@@ -283,7 +297,9 @@ export function FunilPage() {
               }}
             >
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 20 }}>⚠️</span>
+                <span style={{ display: 'flex', flexShrink: 0, color: 'var(--accent2)' }} aria-hidden>
+                  <AlertTriangle size={22} strokeWidth={1.65} />
+                </span>
                 <div>
                   <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--accent2)' }}>Gargalo Identificado</div>
                   <div style={{ fontSize: 13, color: 'var(--text2)' }}>{gargalo}</div>
@@ -304,7 +320,9 @@ export function FunilPage() {
               }}
             >
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 20 }}>🎯</span>
+                <span style={{ display: 'flex', flexShrink: 0, color: 'var(--green)' }} aria-hidden>
+                  <CircleCheck size={22} strokeWidth={1.65} />
+                </span>
                 <div>
                   <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--green)' }}>Funil Saudável</div>
                   <div style={{ fontSize: 13, color: 'var(--text2)' }}>As taxas de conversão estão dentro do esperado para o período.</div>
@@ -348,7 +366,10 @@ export function FunilPage() {
     <div className="content">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>🔽 Funil de Conversão</h2>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+            <Layers size={24} strokeWidth={1.65} aria-hidden />
+            Funil de Conversão
+          </h2>
           <p style={{ color: 'var(--text2)' }}>Identifique gargalos no processo comercial</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

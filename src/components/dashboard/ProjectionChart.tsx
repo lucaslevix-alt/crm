@@ -1,10 +1,13 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, type CSSProperties, type MouseEvent } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import { Target } from 'lucide-react'
+import { icSm } from '../../lib/icon-sizes'
 import { projMetaBadge } from '../../utils/metaProgress'
 
 interface ProjectionChartProps {
   chartKey: string
   title: string
-  icon: string
+  TitleIcon: LucideIcon
   color: string
   realPoints: number[]
   projectedCumulative: number[]
@@ -22,10 +25,15 @@ const pad = { t: 6, r: 6, b: 20, l: 40 }
 const gW = W - pad.l - pad.r
 const gH = H - pad.t - pad.b
 
+function mutedColorStyle(color: string): CSSProperties {
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) return { color: `${color}99` }
+  return { color, opacity: 0.62 }
+}
+
 export function ProjectionChart({
   chartKey,
   title,
-  icon,
+  TitleIcon,
   color,
   realPoints,
   projectedCumulative,
@@ -74,7 +82,7 @@ export function ProjectionChart({
     xLabels.push({ i, label: allDates[i].slice(8, 10) })
   }
 
-  function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+  function handleMouseMove(e: MouseEvent<SVGSVGElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
     const svgX = ((e.clientX - rect.left) / rect.width) * W
     const idx = Math.round(((svgX - pad.l) / gW) * (allDates.length - 1))
@@ -98,20 +106,24 @@ export function ProjectionChart({
   const projBadge = projMetaBadge(projected, metaVal)
 
   return (
-    <div className="proj-card">
+    <div className="proj-card proj-card--dashboard">
       <div className="proj-card-header">
         <span className="proj-card-title">
-          <span className="proj-card-icon">📈</span>
-          {icon} {title}
+          <span className="proj-card-icon" aria-hidden>
+            <TitleIcon {...icSm} />
+          </span>
+          {title}
         </span>
         <span className="proj-card-badge">
-          <span className="proj-badge-icon">🎯</span>
+          <span className="proj-badge-icon" aria-hidden>
+            <Target size={12} strokeWidth={1.65} />
+          </span>
           <span className="proj-badge-text">
             Proj:{' '}
             <span className="proj-badge-pct" style={{ color }} title={metaVal != null && metaVal > 0 ? `Meta: ${fmtVal(metaVal)}` : undefined}>
               {projBadge}
             </span>
-            <span className="proj-badge-val" style={{ color: `${color}99` }}>
+            <span className="proj-badge-val" style={mutedColorStyle(color)}>
               {' '}({fmtVal(projected)})
             </span>
           </span>

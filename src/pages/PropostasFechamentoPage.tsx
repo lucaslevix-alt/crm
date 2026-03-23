@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link2, Package } from 'lucide-react'
 import {
   getProdutos,
   getLinhasNegociacaoAll,
@@ -184,7 +185,10 @@ export function PropostasFechamentoPage() {
   return (
     <div className="content">
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>🔗 Propostas de fechamento</h2>
+        <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+          <Link2 size={24} strokeWidth={1.65} aria-hidden />
+          Propostas de fechamento
+        </h2>
         <p style={{ color: 'var(--text2)', maxWidth: 720 }}>
           {podeEditar ? (
             <>
@@ -214,7 +218,9 @@ export function PropostasFechamentoPage() {
 
       {!loading && !error && !produtos.length && (
         <div className="card empty">
-          <div className="empty-icon">📦</div>
+          <div className="empty-icon" aria-hidden>
+            <Package size={40} strokeWidth={1.4} />
+          </div>
           <p>
             Nenhum produto cadastrado. Cadastre produtos em <strong>Produtos</strong> para criar propostas.
           </p>
@@ -282,7 +288,10 @@ function ProdutoPropostasBlock({
   return (
     <div className="card mb" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>📦 {produto.nome}</h3>
+        <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Package size={20} strokeWidth={1.65} aria-hidden style={{ color: 'var(--accent)', flexShrink: 0 }} />
+          {produto.nome}
+        </h3>
         <span style={{ fontSize: 12, color: 'var(--text3)' }}>
           {linhas.length} {linhas.length === 1 ? 'proposta' : 'propostas'}
         </span>
