@@ -129,7 +129,9 @@ export function RegistrosPage() {
       obs: rec.obs,
       formaPagamento: rec.formaPagamento ?? null,
       produtosIds: rec.produtosIds ?? [],
-      produtosDetalhes: rec.produtosDetalhes ?? []
+      produtosDetalhes: rec.produtosDetalhes ?? [],
+      valorReferenciaVenda: rec.valorReferenciaVenda,
+      descontoCloser: rec.descontoCloser
     })
     openModal('modal-edit-reg')
   }

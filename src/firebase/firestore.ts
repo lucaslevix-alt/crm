@@ -18,6 +18,9 @@ import {
 import { initFirebaseApp } from './config'
 import type { CrmUser } from '../store/useAppStore'
 
+/** Uma linha “ideal” por produto; as demais são “com desconto” em relação a ela */
+export type LinhaPrecoRole = 'ideal' | 'desconto'
+
 const app = initFirebaseApp()
 export const db = getFirestore(app)
 
@@ -59,12 +62,18 @@ export interface RegistroRow {
   formaPagamento?: string | null
   produtosIds?: string[]
   produtosDetalhes?: RegistroProdutoItem[]
+  /** Soma (referência ideal × qtd) — à vista ou parcelado conforme forma de pagamento da venda */
+  valorReferenciaVenda?: number
+  /** Soma (linha ideal − linha fechada) × qtd por item na venda */
+  descontoCloser?: number
   criadoEm?: { seconds: number }
 }
 
 export interface RegistroProdutoItem {
   produtoId: string
   quantidade: number
+  /** Linha de proposta usada para calcular o valor de referência */
+  linhaNegociacaoId?: string | null
 }
 
 function docToRegistro(d: { id: string; data: () => Record<string, unknown> }): RegistroRow {
@@ -87,11 +96,22 @@ function docToRegistro(d: { id: string; data: () => Record<string, unknown> }): 
         : null,
     produtosIds: Array.isArray(x.produtosIds) ? x.produtosIds.map((v) => String(v)) : [],
     produtosDetalhes: Array.isArray(x.produtosDetalhes)
-      ? x.produtosDetalhes.map((v) => ({
-          produtoId: String((v as { produtoId?: unknown }).produtoId ?? ''),
-          quantidade: Number((v as { quantidade?: unknown }).quantidade ?? 0)
-        }))
+      ? x.produtosDetalhes.map((v) => {
+          const row = v as { produtoId?: unknown; quantidade?: unknown; linhaNegociacaoId?: unknown }
+          const lid = row.linhaNegociacaoId != null && String(row.linhaNegociacaoId).trim() !== ''
+            ? String(row.linhaNegociacaoId).trim()
+            : null
+          return {
+            produtoId: String(row.produtoId ?? ''),
+            quantidade: Number(row.quantidade ?? 0),
+            linhaNegociacaoId: lid
+          }
+        })
       : [],
+    valorReferenciaVenda:
+      x.valorReferenciaVenda != null && String(x.tipo) === 'venda' ? Number(x.valorReferenciaVenda) : undefined,
+    descontoCloser:
+      x.descontoCloser != null && String(x.tipo) === 'venda' ? Number(x.descontoCloser) : undefined,
     criadoEm: ts ? { seconds: ts.seconds } : undefined
   }
 }
@@ -226,6 +246,8 @@ export async function addRegistro(params: {
   formaPagamento?: string | null
   produtosIds?: string[]
   produtosDetalhes?: RegistroProdutoItem[]
+  valorReferenciaVenda?: number
+  descontoCloser?: number
 }): Promise<string> {
   const ref = await addDoc(collection(db, 'registros'), {
     data: params.data,
@@ -240,6 +262,15 @@ export async function addRegistro(params: {
     formaPagamento: params.tipo === 'venda' ? (params.formaPagamento ?? null) : null,
     produtosIds: params.produtosIds ?? [],
     produtosDetalhes: params.produtosDetalhes ?? [],
+    ...(params.tipo === 'venda'
+      ? {
+          valorReferenciaVenda: params.valorReferenciaVenda ?? 0,
+          descontoCloser: params.descontoCloser ?? 0
+        }
+      : {
+          valorReferenciaVenda: null,
+          descontoCloser: null
+        }),
     criadoEm: serverTimestamp()
   })
   return ref.id
@@ -260,6 +291,8 @@ export async function updateRegistro(
     formaPagamento?: string | null
     produtosIds?: string[]
     produtosDetalhes?: RegistroProdutoItem[]
+    valorReferenciaVenda?: number
+    descontoCloser?: number
   }
 ): Promise<void> {
   const ref = doc(db, 'registros', id)
@@ -275,7 +308,16 @@ export async function updateRegistro(
     obs: params.obs ?? null,
     formaPagamento: params.tipo === 'venda' ? (params.formaPagamento ?? null) : null,
     produtosIds: params.produtosIds ?? [],
-    produtosDetalhes: params.produtosDetalhes ?? []
+    produtosDetalhes: params.produtosDetalhes ?? [],
+    ...(params.tipo === 'venda'
+      ? {
+          valorReferenciaVenda: params.valorReferenciaVenda ?? 0,
+          descontoCloser: params.descontoCloser ?? 0
+        }
+      : {
+          valorReferenciaVenda: null,
+          descontoCloser: null
+        })
   })
 }
 
@@ -430,23 +472,36 @@ export async function deleteProduto(id: string): Promise<void> {
 export interface LinhaNegociacaoRow {
   id: string
   produtoId: string
+  /** Total do pacote parcelado (cartão / boleto parcelado na venda) */
   valorTotal: number
   parcelas: number
+  /** Preço à vista na mesma linha (venda com forma “À vista”) */
+  valorAVista: number | null
   linkCartao: string | null
   rotulo: string | null
   ordem: number
+  linhaPrecoRole: LinhaPrecoRole
+}
+
+function parseLinhaPrecoRole(raw: unknown): LinhaPrecoRole {
+  return raw === 'ideal' ? 'ideal' : 'desconto'
 }
 
 function docToLinhaNegociacao(d: { id: string; data: () => Record<string, unknown> }): LinhaNegociacaoRow {
   const x = d.data()
+  const av = x.valorAVista
+  const valorAVistaParsed =
+    av != null && av !== '' && Number.isFinite(Number(av)) && Number(av) > 0 ? Number(av) : null
   return {
     id: d.id,
     produtoId: String(x.produtoId ?? ''),
     valorTotal: Number(x.valorTotal ?? 0),
     parcelas: Math.max(1, Math.floor(Number(x.parcelas ?? 1))),
+    valorAVista: valorAVistaParsed,
     linkCartao: x.linkCartao != null && String(x.linkCartao).trim() !== '' ? String(x.linkCartao).trim() : null,
     rotulo: x.rotulo != null && String(x.rotulo).trim() !== '' ? String(x.rotulo).trim() : null,
-    ordem: Number(x.ordem ?? 0)
+    ordem: Number(x.ordem ?? 0),
+    linhaPrecoRole: parseLinhaPrecoRole(x.linhaPrecoRole)
   }
 }
 
@@ -464,17 +519,22 @@ export async function addLinhaNegociacao(params: {
   produtoId: string
   valorTotal: number
   parcelas: number
+  valorAVista?: number | null
   linkCartao?: string | null
   rotulo?: string | null
   ordem?: number
+  linhaPrecoRole?: LinhaPrecoRole
 }): Promise<string> {
   const ref = await addDoc(collection(db, 'linhas_negociacao'), {
     produtoId: params.produtoId,
     valorTotal: params.valorTotal,
     parcelas: Math.max(1, Math.floor(params.parcelas)),
+    valorAVista:
+      params.valorAVista != null && params.valorAVista > 0 ? params.valorAVista : null,
     linkCartao: params.linkCartao?.trim() || null,
     rotulo: params.rotulo?.trim() || null,
     ordem: params.ordem ?? 0,
+    linhaPrecoRole: params.linhaPrecoRole ?? 'desconto',
     criadoEm: serverTimestamp()
   })
   return ref.id
@@ -485,16 +545,21 @@ export async function updateLinhaNegociacao(
   params: {
     valorTotal: number
     parcelas: number
+    valorAVista?: number | null
     linkCartao?: string | null
     rotulo?: string | null
     ordem?: number
+    linhaPrecoRole?: LinhaPrecoRole
   }
 ): Promise<void> {
   await updateDoc(doc(db, 'linhas_negociacao', id), {
     valorTotal: params.valorTotal,
     parcelas: Math.max(1, Math.floor(params.parcelas)),
+    valorAVista:
+      params.valorAVista != null && params.valorAVista > 0 ? params.valorAVista : null,
     linkCartao: params.linkCartao?.trim() || null,
     rotulo: params.rotulo?.trim() || null,
+    linhaPrecoRole: params.linhaPrecoRole ?? 'desconto',
     ...(params.ordem !== undefined ? { ordem: params.ordem } : {})
   })
 }
@@ -546,5 +611,83 @@ export async function getAuditoriaLogs(params: {
   if (params.acao) rows = rows.filter((r) => r.acao === params.acao)
   if (params.userId) rows = rows.filter((r) => r.userId === params.userId)
   return rows
+}
+
+/** Squad comercial: agrega vendas dos closers/SDRs membros */
+export interface SquadRow {
+  id: string
+  nome: string
+  fotoUrl: string
+  memberIds: string[]
+  ordem: number
+}
+
+function docToSquad(d: { id: string; data: () => Record<string, unknown> }): SquadRow {
+  const x = d.data()
+  return {
+    id: d.id,
+    nome: String(x.nome ?? ''),
+    fotoUrl: String(x.fotoUrl ?? ''),
+    memberIds: Array.isArray(x.memberIds) ? x.memberIds.map((v) => String(v)) : [],
+    ordem: Number(x.ordem ?? 0)
+  }
+}
+
+export async function listSquads(): Promise<SquadRow[]> {
+  const snapshot = await getDocs(collection(db, 'squads'))
+  const rows = snapshot.docs.map(docToSquad)
+  rows.sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome))
+  return rows
+}
+
+/** Garante que nenhum membro pertença a mais de um squad */
+async function validateSquadMembersUnique(memberIds: string[], excludeSquadId?: string): Promise<void> {
+  const uniq = [...new Set(memberIds.filter(Boolean))]
+  if (uniq.length !== memberIds.filter(Boolean).length) {
+    throw new Error('Membro duplicado no mesmo squad.')
+  }
+  const all = await listSquads()
+  const set = new Set(uniq)
+  for (const s of all) {
+    if (excludeSquadId && s.id === excludeSquadId) continue
+    for (const uid of s.memberIds) {
+      if (set.has(uid)) {
+        throw new Error(
+          `Um ou mais membros já estão no squad "${s.nome}". Cada pessoa pode pertencer a apenas um squad.`
+        )
+      }
+    }
+  }
+}
+
+export async function addSquad(params: { nome: string; fotoUrl?: string; memberIds: string[] }): Promise<string> {
+  await validateSquadMembersUnique(params.memberIds)
+  const existing = await listSquads()
+  const ordem = existing.length ? Math.max(...existing.map((s) => s.ordem)) + 1 : 0
+  const ref = await addDoc(collection(db, 'squads'), {
+    nome: params.nome.trim(),
+    fotoUrl: (params.fotoUrl ?? '').trim(),
+    memberIds: params.memberIds,
+    ordem,
+    criadoEm: serverTimestamp()
+  })
+  return ref.id
+}
+
+export async function updateSquad(
+  id: string,
+  params: { nome: string; fotoUrl?: string; memberIds: string[] }
+): Promise<void> {
+  await validateSquadMembersUnique(params.memberIds, id)
+  await updateDoc(doc(db, 'squads', id), {
+    nome: params.nome.trim(),
+    fotoUrl: (params.fotoUrl ?? '').trim(),
+    memberIds: params.memberIds,
+    atualizadoEm: serverTimestamp()
+  })
+}
+
+export async function deleteSquad(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'squads', id))
 }
 

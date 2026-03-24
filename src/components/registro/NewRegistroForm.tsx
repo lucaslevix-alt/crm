@@ -1,30 +1,46 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ClipboardList } from 'lucide-react'
 import {
   addRegistro,
   listUsers,
   getProdutos,
+  getLinhasNegociacaoAll,
   FORMAS_PAGAMENTO_VENDA,
   parseFormaPagamentoVenda
 } from '../../firebase/firestore'
-import type { ProdutoRow } from '../../firebase/firestore'
+import type { LinhaNegociacaoRow, ProdutoRow } from '../../firebase/firestore'
 import type { CrmUser } from '../../store/useAppStore'
 import { useAppStore } from '../../store/useAppStore'
+import { computeDescontoVenda, idealLinePorProduto } from '../../lib/vendaDesconto'
 
 interface ProdutoSelecionadoItem {
   uid: string
   produtoId: string
   quantidade: string
+  linhaNegociacaoId: string
 }
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
 }
 
+function fmtBrl(v: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+}
+
+function labelLinhaNegociacao(l: LinhaNegociacaoRow): string {
+  const nome = l.rotulo?.trim() || `Proposta ${l.ordem + 1}`
+  const av =
+    l.valorAVista != null && l.valorAVista > 0 ? fmtBrl(l.valorAVista) : 'av. —'
+  const parc = fmtBrl(l.valorTotal)
+  return `${nome} · ${av} · parc. ${parc}`
+}
+
 export function NewRegistroForm() {
   const { currentUser, closeModal, showToast, incrementRegistrosVersion } = useAppStore()
   const [users, setUsers] = useState<CrmUser[]>([])
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
+  const [linhas, setLinhas] = useState<LinhaNegociacaoRow[]>([])
   const [data, setData] = useState(today())
   const [tipo, setTipo] = useState('')
   const [userId, setUserId] = useState('')
@@ -38,7 +54,10 @@ export function NewRegistroForm() {
 
   useEffect(() => {
     listUsers().then(setUsers)
-    getProdutos().then(setProdutos)
+    Promise.all([getProdutos(), getLinhasNegociacaoAll()]).then(([p, l]) => {
+      setProdutos(p)
+      setLinhas(l)
+    })
   }, [])
 
   function resetFields() {
@@ -64,6 +83,27 @@ export function NewRegistroForm() {
 
   const isVenda = tipo === 'venda'
 
+  const linhasById = useMemo(() => new Map(linhas.map((l) => [l.id, l])), [linhas])
+  const idealPorProduto = useMemo(() => idealLinePorProduto(linhas), [linhas])
+
+  const descontoPreview = useMemo(() => {
+    if (!isVenda) return null
+    const produtosDetalhes = produtoItems
+      .map((item) => ({
+        produtoId: item.produtoId,
+        quantidade: Math.max(1, parseInt(item.quantidade || '1', 10) || 1),
+        linhaNegociacaoId: item.linhaNegociacaoId || null
+      }))
+      .filter((item) => item.produtoId)
+    const fp = parseFormaPagamentoVenda(formaPagamento)
+    return computeDescontoVenda({
+      produtosDetalhes,
+      linhasById,
+      idealPorProduto,
+      formaPagamento: fp
+    })
+  }, [isVenda, produtoItems, linhasById, idealPorProduto, formaPagamento])
+
   const filteredUsers =
     tipo === 'reuniao_agendada' || tipo === 'reuniao_realizada'
       ? users.filter((u) => u.cargo === 'sdr' || u.cargo === 'admin')
@@ -74,13 +114,28 @@ export function NewRegistroForm() {
   function addProdutoItem() {
     setProdutoItems((current) => [
       ...current,
-      { uid: `${Date.now()}-${Math.random()}`, produtoId: '', quantidade: '1' }
+      { uid: `${Date.now()}-${Math.random()}`, produtoId: '', quantidade: '1', linhaNegociacaoId: '' }
     ])
   }
 
-  function updateProdutoItem(uid: string, key: 'produtoId' | 'quantidade', value: string) {
+  function linhasDoProduto(produtoId: string) {
+    return linhas.filter((l) => l.produtoId === produtoId)
+  }
+
+  function updateProdutoItem(uid: string, key: 'produtoId' | 'quantidade' | 'linhaNegociacaoId', value: string) {
     setProdutoItems((current) =>
-      current.map((item) => (item.uid === uid ? { ...item, [key]: value } : item))
+      current.map((item) => {
+        if (item.uid !== uid) return item
+        if (key === 'produtoId') {
+          const opts = linhas.filter((l) => l.produtoId === value)
+          return {
+            ...item,
+            produtoId: value,
+            linhaNegociacaoId: opts[0]?.id ?? ''
+          }
+        }
+        return { ...item, [key]: value }
+      })
     )
   }
 
@@ -105,7 +160,8 @@ export function NewRegistroForm() {
     const produtosDetalhes = produtoItems
       .map((item) => ({
         produtoId: item.produtoId,
-        quantidade: Math.max(1, parseInt(item.quantidade || '1', 10) || 1)
+        quantidade: Math.max(1, parseInt(item.quantidade || '1', 10) || 1),
+        linhaNegociacaoId: item.linhaNegociacaoId?.trim() || null
       }))
       .filter((item) => item.produtoId)
     const u = users.find((x) => x.id === userId)
@@ -113,6 +169,17 @@ export function NewRegistroForm() {
       showToast('Profissional inválido', 'err')
       return
     }
+    const valorNum = tipo === 'venda' ? parseFloat(valor) || 0 : 0
+    const descCalc =
+      tipo === 'venda'
+        ? computeDescontoVenda({
+            produtosDetalhes,
+            linhasById,
+            idealPorProduto: idealLinePorProduto(linhas),
+            formaPagamento: parseFormaPagamentoVenda(formaPagamento)!
+          })
+        : { valorReferencia: 0, desconto: 0 }
+
     setSaving(true)
     try {
       await addRegistro({
@@ -122,12 +189,14 @@ export function NewRegistroForm() {
         userName: u.nome,
         userCargo: u.cargo,
         anuncio: anuncio.trim() || null,
-        valor: tipo === 'venda' ? parseFloat(valor) || 0 : 0,
+        valor: valorNum,
         cashCollected: tipo === 'venda' ? parseFloat(cashCollected) || 0 : 0,
         formaPagamento: tipo === 'venda' ? parseFormaPagamentoVenda(formaPagamento) : null,
         obs: obs.trim() || null,
         produtosIds: tipo === 'venda' ? produtosDetalhes.flatMap((item) => Array(item.quantidade).fill(item.produtoId)) : [],
-        produtosDetalhes: tipo === 'venda' ? produtosDetalhes : []
+        produtosDetalhes: tipo === 'venda' ? produtosDetalhes : [],
+        valorReferenciaVenda: tipo === 'venda' ? descCalc.valorReferencia : undefined,
+        descontoCloser: tipo === 'venda' ? descCalc.desconto : undefined
       })
       showToast('Registro salvo!')
       incrementRegistrosVersion()
@@ -231,42 +300,68 @@ export function NewRegistroForm() {
               <div className="fg s2">
                 <label>Produtos (opcional)</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {produtoItems.map((item, index) => (
-                    <div key={item.uid} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 44px', gap: 8 }}>
-                      <select
-                        className="di"
-                        value={item.produtoId}
-                        onChange={(e) => updateProdutoItem(item.uid, 'produtoId', e.target.value)}
+                  {produtoItems.map((item, index) => {
+                    const opts = item.produtoId ? linhasDoProduto(item.produtoId) : []
+                    return (
+                      <div
+                        key={item.uid}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(100px, 1fr) 72px minmax(120px, 1fr) 44px',
+                          gap: 8,
+                          alignItems: 'center'
+                        }}
                       >
-                        <option value="">Selecionar produto #{index + 1}</option>
-                        {produtos.map((p) => (
-                          <option key={`${item.uid}-${p.id}`} value={p.id}>
-                            {p.nome}
-                            {(p.valorCartao ?? p.valorBoleto ?? p.valor) != null
-                              ? ` (${(p.valorCartao ?? p.valorBoleto ?? p.valor)!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`
-                              : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        min="1"
-                        className="di"
-                        value={item.quantidade}
-                        onChange={(e) => updateProdutoItem(item.uid, 'quantidade', e.target.value)}
-                        placeholder="Qtd."
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ width: 'auto', padding: '10px 0' }}
-                        onClick={() => removeProdutoItem(item.uid)}
-                        title="Remover produto"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
+                        <select
+                          className="di"
+                          value={item.produtoId}
+                          onChange={(e) => updateProdutoItem(item.uid, 'produtoId', e.target.value)}
+                        >
+                          <option value="">Produto #{index + 1}</option>
+                          {produtos.map((p) => (
+                            <option key={`${item.uid}-${p.id}`} value={p.id}>
+                              {p.nome}
+                              {(p.valorCartao ?? p.valorBoleto ?? p.valor) != null
+                                ? ` (${(p.valorCartao ?? p.valorBoleto ?? p.valor)!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`
+                                : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          className="di"
+                          value={item.quantidade}
+                          onChange={(e) => updateProdutoItem(item.uid, 'quantidade', e.target.value)}
+                          placeholder="Qtd."
+                          title="Quantidade"
+                        />
+                        <select
+                          className="di"
+                          value={item.linhaNegociacaoId}
+                          onChange={(e) => updateProdutoItem(item.uid, 'linhaNegociacaoId', e.target.value)}
+                          disabled={!item.produtoId}
+                          title="Linha em que o cliente fechou (ideal ou com desconto). O desconto é a diferença para a linha marcada como ideal no produto."
+                        >
+                          <option value="">{item.produtoId ? 'Linha em que fechou' : '—'}</option>
+                          {opts.map((l) => (
+                            <option key={l.id} value={l.id}>
+                              {labelLinhaNegociacao(l)}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ width: 'auto', padding: '10px 0' }}
+                          onClick={() => removeProdutoItem(item.uid)}
+                          title="Remover produto"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )
+                  })}
                   <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
                     <button
                       type="button"
@@ -279,8 +374,27 @@ export function NewRegistroForm() {
                   </div>
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-                  Voce pode repetir o mesmo produto quantas vezes quiser e ajustar a quantidade em cada linha.
+                  Cada linha tem preço <strong>à vista</strong> e <strong>parcelado</strong>. A <strong>forma de
+                  pagamento</strong> desta venda define qual deles entra no desconto (À vista = compara à vista; cartão
+                  ou boleto = compara total parcelado). O valor do campo “Valor da venda” segue sendo o faturamento.
                 </p>
+                {descontoPreview && descontoPreview.valorReferencia > 0 && (
+                  <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 6 }}>
+                    Ref. ideal ({parseFormaPagamentoVenda(formaPagamento) === 'a_vista' ? 'à vista' : 'parcelado'}):{' '}
+                    <strong>
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                        descontoPreview.valorReferencia
+                      )}
+                    </strong>
+                    {' · '}
+                    Desconto (ideal − linha fechada):{' '}
+                    <strong style={{ color: descontoPreview.desconto > 0 ? 'var(--amber)' : 'var(--text)' }}>
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                        descontoPreview.desconto
+                      )}
+                    </strong>
+                  </p>
+                )}
               </div>
             </>
           )}

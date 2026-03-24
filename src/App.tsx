@@ -13,7 +13,9 @@ import {
   ProdutosPage,
   PropostasFechamentoPage,
   RankingCloserPage,
+  RankingSquadsPage,
   RankingSDRPage,
+  SquadsPage,
   RegistrosPage,
   UsuariosPage
 } from './routes/lazyPages'
@@ -63,7 +65,9 @@ export default function App() {
               <Route path="metas" element={<MetasPage />} />
               <Route path="ranking-sdr" element={<RankingSDRPage />} />
               <Route path="ranking-closer" element={<RankingCloserPage />} />
+              <Route path="ranking-squads" element={<RankingSquadsPage />} />
               <Route path="usuarios" element={<AdminOnlyRoute><UsuariosPage /></AdminOnlyRoute>} />
+              <Route path="squads" element={<AdminOnlyRoute><SquadsPage /></AdminOnlyRoute>} />
               <Route path="produtos" element={<ProdutosPage />} />
               <Route path="config" element={<ConfigPage />} />
               <Route path="auditoria" element={<AuditoriaPage />} />

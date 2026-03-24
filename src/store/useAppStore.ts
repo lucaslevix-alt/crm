@@ -40,7 +40,9 @@ export interface EditingRegistroRow {
   obs: string | null
   formaPagamento?: string | null
   produtosIds?: string[]
-  produtosDetalhes?: Array<{ produtoId: string; quantidade: number }>
+  produtosDetalhes?: Array<{ produtoId: string; quantidade: number; linhaNegociacaoId?: string | null }>
+  valorReferenciaVenda?: number
+  descontoCloser?: number
 }
 
 interface AppStoreState {

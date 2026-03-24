@@ -10,6 +10,8 @@ const ROUTE_TITLES: Record<string, string> = {
   metas: 'Metas',
   'ranking-sdr': 'Ranking SDR',
   'ranking-closer': 'Ranking Closer',
+  'ranking-squads': 'Ranking Squads',
+  squads: 'Squads',
   usuarios: 'Usuários',
   produtos: 'Produtos',
   config: 'Configurações',

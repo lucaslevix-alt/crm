@@ -15,7 +15,8 @@ import {
   Package,
   Target,
   Trophy,
-  Wallet
+  Wallet,
+  Percent
 } from 'lucide-react'
 import { getRegistrosByRange, getMetasConfig, getProdutos } from '../firebase/firestore'
 import type { RegistroRow, MetasConfig, ProdutoRow } from '../firebase/firestore'
@@ -65,13 +66,15 @@ function dpRange(dp: Dp, customStart?: string, customEnd?: string): { start: str
 }
 
 function totals(recs: RegistroRow[]) {
+  const vendas = recs.filter((r) => r.tipo === 'venda')
   return {
     ag: recs.filter((r) => r.tipo === 'reuniao_agendada').length,
     re: recs.filter((r) => r.tipo === 'reuniao_realizada').length,
     cl: recs.filter((r) => r.tipo === 'reuniao_closer').length,
-    vn: recs.filter((r) => r.tipo === 'venda').length,
-    ft: recs.filter((r) => r.tipo === 'venda').reduce((s, r) => s + (r.valor || 0), 0),
-    ca: recs.filter((r) => r.tipo === 'venda').reduce((s, r) => s + (r.cashCollected || 0), 0)
+    vn: vendas.length,
+    ft: vendas.reduce((s, r) => s + (r.valor || 0), 0),
+    ca: vendas.reduce((s, r) => s + (r.cashCollected || 0), 0),
+    dc: vendas.reduce((s, r) => s + (r.descontoCloser ?? 0), 0)
   }
 }
 
@@ -337,6 +340,12 @@ export function DashboardPage() {
                 </span>
                 <span className="db-hero-chip">
                   Reun. realiz. <strong>{t.re}</strong>
+                </span>
+                <span
+                  className="db-hero-chip"
+                  title="Soma do desconto: na venda à vista compara preços à vista das linhas; no parcelado compara totais parcelados"
+                >
+                  Desc. closer <strong>{fmt(t.dc)}</strong>
                 </span>
               </div>
               <div className="db-spark">
@@ -872,8 +881,8 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* Top SDRs e Closers no período */}
-          <div className="db-split mb">
+          {/* Top SDRs, Closers e desconto por closer */}
+          <div className="db-split db-split--3col mb">
             <div className="db-card">
               <div className="db-card-header">
                 <span className="db-card-title">
@@ -1002,6 +1011,64 @@ export function DashboardPage() {
                               </div>
                             )
                           })()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+
+            <div className="db-card">
+              <div className="db-card-header">
+                <span className="db-card-title">
+                  <Percent size={14} strokeWidth={1.65} className="db-card-title-ic" />
+                  Desconto por closer
+                </span>
+              </div>
+              {(() => {
+                const byUser = new Map<
+                  string,
+                  { id: string; nome: string; cargo: string; dc: number; vn: number }
+                >()
+                for (const r of recs) {
+                  if (r.tipo !== 'venda') continue
+                  const id = r.userId || r.userName
+                  if (!id) continue
+                  if (!byUser.has(id)) {
+                    byUser.set(id, {
+                      id,
+                      nome: r.userName || '—',
+                      cargo: r.userCargo || '',
+                      dc: 0,
+                      vn: 0
+                    })
+                  }
+                  const u = byUser.get(id)!
+                  u.vn += 1
+                  u.dc += r.descontoCloser ?? 0
+                }
+                const rows = Array.from(byUser.values())
+                  .filter((u) => (u.cargo || '').toLowerCase() === 'closer' && (u.dc > 0 || u.vn > 0))
+                  .sort((a, b) => (b.dc - a.dc) || (b.vn - a.vn))
+                  .slice(0, 5)
+                if (!rows.length) {
+                  return (
+                    <div className="db-empty">
+                      <p>Sem desconto registrado no período</p>
+                    </div>
+                  )
+                }
+                return (
+                  <div className="db-rank-list">
+                    {rows.map((u, idx) => (
+                      <div key={u.id} className={`db-rank-row${idx === 0 ? ' db-rank-row--lead' : ''}`}>
+                        <span className={`db-rank-badge ${dbRankBadgeMod(idx)}`}>{idx + 1}</span>
+                        <div className="db-rank-main">
+                          <div className="db-rank-name">{u.nome}</div>
+                          <div className="db-rank-meta">
+                            {fmt(u.dc)} em desconto · {u.vn} {u.vn === 1 ? 'venda' : 'vendas'}
+                          </div>
                         </div>
                       </div>
                     ))}

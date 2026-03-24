@@ -1,6 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   Award,
+  ClipboardList,
+  Crown,
   Filter,
   Handshake,
   LayoutDashboard,
@@ -14,8 +16,8 @@ import {
   Trophy,
   User,
   Users,
-  Zap,
-  ClipboardList
+  UsersRound,
+  Zap
 } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
 import { icNav } from '../../lib/icon-sizes'
@@ -47,78 +49,106 @@ export function Sidebar() {
           </div>
         </div>
 
-        <nav className="sidebar-nav">
-          <div className="nav-sec">Principal</div>
-          <NavLink to="/dashboard" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span className="nav-icon">
-              <LayoutDashboard {...icNav} />
-            </span>
-            <span className="nav-label">Dashboard</span>
-          </NavLink>
-          <NavLink to="/meta-ads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span className="nav-icon">
-              <Megaphone {...icNav} />
-            </span>
-            <span className="nav-label">Meta Ads</span>
-          </NavLink>
-          <NavLink to="/registros" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span className="nav-icon">
-              <ClipboardList {...icNav} />
-            </span>
-            <span className="nav-label">Registros</span>
-          </NavLink>
-          <NavLink to="/negociacoes" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span className="nav-icon">
-              <Handshake {...icNav} />
-            </span>
-            <span className="nav-label">Negociações</span>
-          </NavLink>
-          {(currentUser?.cargo === 'admin' || currentUser?.cargo === 'closer') && (
-            <NavLink
-              to="/propostas-fechamento"
-              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-            >
+        <nav className="sidebar-nav" aria-label="Seções">
+          <div className="nav-group">
+            <div className="nav-sec">Início</div>
+            <NavLink to="/dashboard" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} end>
               <span className="nav-icon">
-                <Link2 {...icNav} />
+                <LayoutDashboard {...icNav} />
               </span>
-              <span className="nav-label">Propostas de fechamento</span>
+              <span className="nav-label">Dashboard</span>
             </NavLink>
-          )}
-          <NavLink to="/funil" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span className="nav-icon">
-              <Filter {...icNav} />
-            </span>
-            <span className="nav-label">Funil</span>
-          </NavLink>
-          <NavLink to="/metas" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span className="nav-icon">
-              <Target {...icNav} />
-            </span>
-            <span className="nav-label">Metas</span>
-          </NavLink>
+          </div>
 
-          <div className="nav-sec">Rankings</div>
-          <NavLink to="/ranking-sdr" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span className="nav-icon">
-              <Trophy {...icNav} />
-            </span>
-            <span className="nav-label">Ranking SDR</span>
-          </NavLink>
-          <NavLink to="/ranking-closer" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span className="nav-icon">
-              <Award {...icNav} />
-            </span>
-            <span className="nav-label">Ranking Closer</span>
-          </NavLink>
+          <div className="nav-group">
+            <div className="nav-sec">Mídia e captação</div>
+            <NavLink to="/meta-ads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span className="nav-icon">
+                <Megaphone {...icNav} />
+              </span>
+              <span className="nav-label">Meta Ads</span>
+            </NavLink>
+          </div>
+
+          <div className="nav-group">
+            <div className="nav-sec">Operação comercial</div>
+            <NavLink to="/registros" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span className="nav-icon">
+                <ClipboardList {...icNav} />
+              </span>
+              <span className="nav-label">Registros</span>
+            </NavLink>
+            <NavLink to="/negociacoes" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span className="nav-icon">
+                <Handshake {...icNav} />
+              </span>
+              <span className="nav-label">Negociações</span>
+            </NavLink>
+            {(currentUser?.cargo === 'admin' || currentUser?.cargo === 'closer') && (
+              <NavLink
+                to="/propostas-fechamento"
+                className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              >
+                <span className="nav-icon">
+                  <Link2 {...icNav} />
+                </span>
+                <span className="nav-label">Propostas de fechamento</span>
+              </NavLink>
+            )}
+          </div>
+
+          <div className="nav-group">
+            <div className="nav-sec">Metas e funil</div>
+            <NavLink to="/funil" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span className="nav-icon">
+                <Filter {...icNav} />
+              </span>
+              <span className="nav-label">Funil de conversão</span>
+            </NavLink>
+            <NavLink to="/metas" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span className="nav-icon">
+                <Target {...icNav} />
+              </span>
+              <span className="nav-label">Metas</span>
+            </NavLink>
+          </div>
+
+          <div className="nav-group">
+            <div className="nav-sec">Rankings</div>
+            <NavLink to="/ranking-sdr" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span className="nav-icon">
+                <Trophy {...icNav} />
+              </span>
+              <span className="nav-label">SDR</span>
+            </NavLink>
+            <NavLink to="/ranking-closer" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span className="nav-icon">
+                <Award {...icNav} />
+              </span>
+              <span className="nav-label">Closer</span>
+            </NavLink>
+            <NavLink to="/ranking-squads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span className="nav-icon">
+                <Crown {...icNav} />
+              </span>
+              <span className="nav-label">Squads</span>
+            </NavLink>
+          </div>
 
           {currentUser?.cargo === 'admin' && (
-            <>
-              <div className="nav-sec">Admin</div>
+            <div className="nav-group nav-group--admin">
+              <div className="nav-sec">Administração</div>
               <NavLink to="/usuarios" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span className="nav-icon">
                   <Users {...icNav} />
                 </span>
                 <span className="nav-label">Usuários</span>
+              </NavLink>
+              <NavLink to="/squads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                <span className="nav-icon">
+                  <UsersRound {...icNav} />
+                </span>
+                <span className="nav-label">Squads</span>
               </NavLink>
               <NavLink to="/produtos" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span className="nav-icon">
@@ -138,7 +168,7 @@ export function Sidebar() {
                 </span>
                 <span className="nav-label">Auditoria</span>
               </NavLink>
-            </>
+            </div>
           )}
         </nav>
 
