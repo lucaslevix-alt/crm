@@ -42,6 +42,7 @@ export function EditRegistroForm() {
   const [tipo, setTipo] = useState('reuniao_agendada')
   const [userId, setUserId] = useState('')
   const [anuncio, setAnuncio] = useState('')
+  const [grupoWpp, setGrupoWpp] = useState('')
   const [valor, setValor] = useState('')
   const [cashCollected, setCashCollected] = useState('')
   const [formaPagamento, setFormaPagamento] = useState('')
@@ -56,6 +57,7 @@ export function EditRegistroForm() {
     setTipo(editingRegistro.tipo)
     setUserId(editingRegistro.userId)
     setAnuncio(editingRegistro.anuncio ?? '')
+    setGrupoWpp(editingRegistro.grupoWpp ?? '')
     setValor(String(editingRegistro.valor || ''))
     setCashCollected(String(editingRegistro.cashCollected || ''))
     setFormaPagamento(editingRegistro.formaPagamento ?? '')
@@ -118,6 +120,7 @@ export function EditRegistroForm() {
   }
 
   const isVenda = tipo === 'venda'
+  const isSdrReuniao = tipo === 'reuniao_agendada' || tipo === 'reuniao_realizada'
   const linhasById = useMemo(() => new Map(linhas.map((l) => [l.id, l])), [linhas])
   const idealPorProduto = useMemo(() => idealLinePorProduto(linhas), [linhas])
 
@@ -158,6 +161,10 @@ export function EditRegistroForm() {
       showToast('Selecione a forma de pagamento', 'err')
       return
     }
+    if (isSdrReuniao && !grupoWpp.trim()) {
+      showToast('Informe o grupo de WhatsApp', 'err')
+      return
+    }
     const u = users.find((x) => x.id === userId)
     const produtosDetalhes = produtoItems
       .map((item) => ({
@@ -186,6 +193,7 @@ export function EditRegistroForm() {
         userName: u?.nome ?? '—',
         userCargo: u?.cargo ?? '—',
         anuncio: anuncio.trim() || null,
+        grupoWpp: isSdrReuniao ? grupoWpp.trim() || null : null,
         valor: valorNum,
         cashCollected: tipo === 'venda' ? parseFloat(cashCollected) || 0 : 0,
         formaPagamento: tipo === 'venda' ? parseFormaPagamentoVenda(formaPagamento) : null,
@@ -250,6 +258,19 @@ export function EditRegistroForm() {
             <label>Campanha (Meta Ads)</label>
             <input type="text" className="di" value={anuncio} onChange={(e) => setAnuncio(e.target.value)} placeholder="Ex: Nome da Campanha" />
           </div>
+          {isSdrReuniao && (
+            <div className="fg">
+              <label>Grupo Wpp *</label>
+              <input
+                type="text"
+                className="di"
+                value={grupoWpp}
+                onChange={(e) => setGrupoWpp(e.target.value)}
+                placeholder="Identificação ou link do grupo"
+                required
+              />
+            </div>
+          )}
           {isVenda && (
             <>
               <div className="fg s2">

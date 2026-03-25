@@ -4921,6 +4921,126 @@ input.di:-webkit-autofill:focus {
     color: var(--border2)
 }
 
+.qrb-meet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, .55);
+    backdrop-filter: blur(4px)
+}
+
+.qrb-meet-panel {
+    width: 100%;
+    max-width: 400px;
+    border-radius: var(--radius-lg);
+    padding: 24px 22px 20px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, .45)
+}
+
+.qrb-meet-title {
+    margin: 0 0 20px;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    color: var(--text);
+    line-height: 1.3
+}
+
+.qrb-meet-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 22px
+}
+
+.qrb-meet-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text2);
+    margin-bottom: 6px;
+    letter-spacing: .02em
+}
+
+.qrb-meet-hint {
+    font-weight: 500;
+    color: var(--text3)
+}
+
+.qrb-meet-req {
+    color: var(--amber);
+    font-weight: 700
+}
+
+.qrb-meet-input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border2);
+    background: var(--bg4);
+    color: var(--text);
+    outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease
+}
+
+.qrb-meet-input::placeholder {
+    color: var(--text3)
+}
+
+.qrb-meet-input:focus {
+    border-color: rgba(245, 158, 11, .55);
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, .12)
+}
+
+.qrb-meet-actions {
+    display: flex;
+    gap: 10px
+}
+
+.qrb-meet-btn {
+    flex: 1;
+    padding: 11px 14px;
+    border-radius: var(--radius-lg);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border2);
+    transition: background .15s ease, border-color .15s ease, opacity .15s ease
+}
+
+.qrb-meet-btn:disabled {
+    cursor: not-allowed;
+    opacity: .45
+}
+
+.qrb-meet-btn--secondary {
+    background: var(--bg4);
+    color: var(--text)
+}
+
+.qrb-meet-btn--secondary:hover:not(:disabled) {
+    background: var(--border);
+    border-color: var(--border)
+}
+
+.qrb-meet-btn--primary {
+    background: linear-gradient(135deg, #f59e0b, #ea580c);
+    color: #fff;
+    border-color: rgba(245, 158, 11, .35)
+}
+
+.qrb-meet-btn--primary:hover:not(:disabled) {
+    filter: brightness(1.06)
+}
+
 .kbd {
     display: inline-flex;
     align-items: center;
@@ -5916,6 +6036,14 @@ input.di:-webkit-autofill:focus {
 
 [data-theme="light"] .qrb-cl:hover {
     background: rgba(109, 40, 217, 0.18)
+}
+
+[data-theme="light"] .qrb-meet-backdrop {
+    background: rgba(15, 23, 42, 0.4)
+}
+
+[data-theme="light"] .qrb-meet-panel {
+    box-shadow: 0 20px 48px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(224, 61, 0, 0.08)
 }
 
 [data-theme="light"] .proj-card-badge {

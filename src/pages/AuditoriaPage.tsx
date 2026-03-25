@@ -54,8 +54,17 @@ function diffView(antes: Record<string, unknown> | null, depois: Record<string, 
   if (!antes && !depois) return null
   if (!antes) return <span style={{ color: 'var(--green)', fontSize: 11 }}>Novo registro</span>
   if (!depois) return <span style={{ color: 'var(--red)', fontSize: 11 }}>Registro excluído</span>
-  const fields = ['data', 'tipo', 'valor', 'cashCollected', 'anuncio', 'obs', 'userName']
-  const lbs: Record<string, string> = { data: 'Data', tipo: 'Tipo', valor: 'Valor', cashCollected: 'Cash', anuncio: 'Campanha', obs: 'Obs', userName: 'Profissional' }
+  const fields = ['data', 'tipo', 'valor', 'cashCollected', 'anuncio', 'grupoWpp', 'obs', 'userName']
+  const lbs: Record<string, string> = {
+    data: 'Data',
+    tipo: 'Tipo',
+    valor: 'Valor',
+    cashCollected: 'Cash',
+    anuncio: 'Campanha',
+    grupoWpp: 'Grupo Wpp',
+    obs: 'Obs',
+    userName: 'Profissional'
+  }
   const diffs = fields.filter((f) => JSON.stringify(antes[f]) !== JSON.stringify(depois[f]))
   if (!diffs.length) return <span style={{ color: 'var(--text3)', fontSize: 11 }}>sem alterações</span>
   return (

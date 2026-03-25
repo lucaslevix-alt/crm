@@ -15,10 +15,15 @@ const tipoLabels: Record<string, string> = {
   reuniao_closer: 'Reunião closer'
 }
 
+function isSdrReuniaoTipo(tipo: string): boolean {
+  return tipo === 'reuniao_agendada' || tipo === 'reuniao_realizada'
+}
+
 export function QuickRegBar() {
   const { currentUser, quickBarHidden } = useAppStore()
   const [pendingTipo, setPendingTipo] = useState<string | null>(null)
   const [campanha, setCampanha] = useState('')
+  const [grupoWpp, setGrupoWpp] = useState('')
 
   const isSdr = currentUser && (currentUser.cargo === 'sdr' || currentUser.cargo === 'admin')
   const isCloser = currentUser && (currentUser.cargo === 'closer' || currentUser.cargo === 'admin')
@@ -26,7 +31,7 @@ export function QuickRegBar() {
   const showSdr = isSdr && !quickBarHidden
   const showCloser = isCloser && !quickBarHidden
 
-  async function quickReg(tipo: string, campanhaVal?: string) {
+  async function quickReg(tipo: string, campanhaVal?: string, grupoWppVal?: string | null) {
     if (!currentUser) return
     try {
       await addRegistro({
@@ -35,7 +40,8 @@ export function QuickRegBar() {
         userId: currentUser.id,
         userName: currentUser.nome,
         userCargo: currentUser.cargo,
-        anuncio: campanhaVal?.trim() || null
+        anuncio: campanhaVal?.trim() || null,
+        grupoWpp: isSdrReuniaoTipo(tipo) ? grupoWppVal?.trim() || null : null
       })
       const msg =
         tipo === 'reuniao_agendada'
@@ -54,18 +60,25 @@ export function QuickRegBar() {
   function handleQuickAction(tipo: string) {
     setPendingTipo(tipo)
     setCampanha('')
+    setGrupoWpp('')
   }
 
   function confirmCampanha() {
     if (!pendingTipo) return
-    quickReg(pendingTipo, campanha)
+    if (isSdrReuniaoTipo(pendingTipo) && !grupoWpp.trim()) {
+      useAppStore.getState().showToast('Informe o grupo de WhatsApp', 'err')
+      return
+    }
+    quickReg(pendingTipo, campanha, isSdrReuniaoTipo(pendingTipo) ? grupoWpp : null)
     setPendingTipo(null)
     setCampanha('')
+    setGrupoWpp('')
   }
 
   function cancelCampanha() {
     setPendingTipo(null)
     setCampanha('')
+    setGrupoWpp('')
   }
 
   function openModalRegistroVenda() {
@@ -133,98 +146,77 @@ export function QuickRegBar() {
         </span>
       </div>
 
-      {pendingTipo && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,.55)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) cancelCampanha()
-          }}
-        >
+      {pendingTipo &&
+        createPortal(
           <div
-            style={{
-              background: '#1c1c1e',
-              borderRadius: 14,
-              width: 340,
-              padding: '24px 20px 16px',
-              boxShadow: '0 8px 32px rgba(0,0,0,.5)',
-              border: '1px solid rgba(255,255,255,.08)'
+            className="qrb-meet-backdrop"
+            role="presentation"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) cancelCampanha()
             }}
           >
-            <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-              {tipoLabels[pendingTipo] ?? pendingTipo}
+            <div className="qrb-meet-panel" role="dialog" aria-modal="true" aria-labelledby="qrb-meet-title">
+              <h2 id="qrb-meet-title" className="qrb-meet-title">
+                {tipoLabels[pendingTipo] ?? pendingTipo}
+              </h2>
+              <div className="qrb-meet-fields">
+                <div className="qrb-meet-field">
+                  <label htmlFor="qrb-campanha">
+                    Campanha Meta Ads{' '}
+                    <span className="qrb-meet-hint">(opcional)</span>
+                  </label>
+                  <input
+                    id="qrb-campanha"
+                    type="text"
+                    className="qrb-meet-input"
+                    value={campanha}
+                    onChange={(e) => setCampanha(e.target.value)}
+                    autoFocus={!isSdrReuniaoTipo(pendingTipo)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') confirmCampanha()
+                    }}
+                    placeholder="Nome da campanha ou deixe vazio"
+                    autoComplete="off"
+                  />
+                </div>
+                {isSdrReuniaoTipo(pendingTipo) && (
+                  <div className="qrb-meet-field">
+                    <label htmlFor="qrb-grupo-wpp">
+                      Grupo Wpp <span className="qrb-meet-req">*</span>
+                    </label>
+                    <input
+                      id="qrb-grupo-wpp"
+                      type="text"
+                      className="qrb-meet-input"
+                      value={grupoWpp}
+                      onChange={(e) => setGrupoWpp(e.target.value)}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') confirmCampanha()
+                      }}
+                      placeholder="Identificação ou link do grupo"
+                      autoComplete="off"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="qrb-meet-actions">
+                <button type="button" className="qrb-meet-btn qrb-meet-btn--secondary" onClick={cancelCampanha}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="qrb-meet-btn qrb-meet-btn--primary"
+                  onClick={confirmCampanha}
+                  disabled={isSdrReuniaoTipo(pendingTipo) && !grupoWpp.trim()}
+                >
+                  OK
+                </button>
+              </div>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>
-              Campanha Meta Ads (opcional — deixe vazio para pular):
-            </div>
-            <input
-              type="text"
-              className="di"
-              value={campanha}
-              onChange={(e) => setCampanha(e.target.value)}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') confirmCampanha()
-              }}
-              style={{
-                width: '100%',
-                marginBottom: 20,
-                border: '2px solid var(--amber)',
-                borderRadius: 8,
-                background: '#111',
-                color: '#fff',
-                fontSize: 14,
-                padding: '10px 12px'
-              }}
-              placeholder=""
-            />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                type="button"
-                onClick={cancelCampanha}
-                style={{
-                  flex: 1,
-                  padding: '10px 0',
-                  borderRadius: 10,
-                  border: '1px solid rgba(255,255,255,.12)',
-                  background: 'rgba(255,255,255,.06)',
-                  color: '#fff',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={confirmCampanha}
-                style={{
-                  flex: 1,
-                  padding: '10px 0',
-                  borderRadius: 10,
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #f59e0b, #f97316)',
-                  color: '#fff',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body
+        )}
     </>
   )
 }

@@ -107,6 +107,7 @@ export function RegistrosPage() {
     if (q) {
       const match =
         (r.anuncio ?? '').toLowerCase().includes(q) ||
+        (r.grupoWpp ?? '').toLowerCase().includes(q) ||
         (r.userName ?? '').toLowerCase().includes(q) ||
         (r.obs ?? '').toLowerCase().includes(q) ||
         (r.nomeCliente ?? '').toLowerCase().includes(q) ||
@@ -125,6 +126,7 @@ export function RegistrosPage() {
       userName: rec.userName,
       userCargo: rec.userCargo,
       anuncio: rec.anuncio,
+      grupoWpp: rec.grupoWpp,
       valor: rec.valor,
       cashCollected: rec.cashCollected,
       obs: rec.obs,
@@ -228,7 +230,7 @@ export function RegistrosPage() {
                 type="text"
                 className="di"
                 style={{ width: '100%', paddingRight: 28 }}
-                placeholder="Campanha, profissional, obs..."
+                placeholder="Campanha, grupo Wpp, profissional..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
               />
@@ -287,7 +289,7 @@ export function RegistrosPage() {
                       <th>Data</th>
                       <th>Tipo</th>
                       <th>Profissional</th>
-                      <th>Anúncio</th>
+                      <th>Campanha / Grupo Wpp</th>
                       <th>Cliente</th>
                       <th>Valor</th>
                       <th>Pagamento</th>
@@ -314,10 +316,19 @@ export function RegistrosPage() {
                           </span>
                         </td>
                         <td>
-                          {r.anuncio ? (
-                            <span className="chip" title={r.anuncio}>
-                              {r.anuncio}
-                            </span>
+                          {r.anuncio || r.grupoWpp ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                              {r.anuncio ? (
+                                <span className="chip" title={r.anuncio}>
+                                  {r.anuncio}
+                                </span>
+                              ) : null}
+                              {r.grupoWpp ? (
+                                <span className="chip" title={r.grupoWpp} style={{ borderColor: 'rgba(34,197,94,.35)', color: 'var(--green)' }}>
+                                  Wpp: {r.grupoWpp}
+                                </span>
+                              ) : null}
+                            </div>
                           ) : (
                             <span style={{ color: 'var(--text3)' }}>—</span>
                           )}

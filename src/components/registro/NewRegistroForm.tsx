@@ -46,6 +46,7 @@ export function NewRegistroForm() {
   const [tipo, setTipo] = useState('')
   const [userId, setUserId] = useState('')
   const [anuncio, setAnuncio] = useState('')
+  const [grupoWpp, setGrupoWpp] = useState('')
   const [valor, setValor] = useState('')
   const [cashCollected, setCashCollected] = useState('')
   const [formaPagamento, setFormaPagamento] = useState('')
@@ -67,6 +68,7 @@ export function NewRegistroForm() {
     setTipo('')
     setUserId(currentUser?.id ?? '')
     setAnuncio('')
+    setGrupoWpp('')
     setValor('')
     setCashCollected('')
     setFormaPagamento('')
@@ -85,6 +87,7 @@ export function NewRegistroForm() {
   }, [])
 
   const isVenda = tipo === 'venda'
+  const isSdrReuniao = tipo === 'reuniao_agendada' || tipo === 'reuniao_realizada'
 
   const linhasById = useMemo(() => new Map(linhas.map((l) => [l.id, l])), [linhas])
   const idealPorProduto = useMemo(() => idealLinePorProduto(linhas), [linhas])
@@ -164,6 +167,10 @@ export function NewRegistroForm() {
       showToast('Selecione a forma de pagamento', 'err')
       return
     }
+    if (isSdrReuniao && !grupoWpp.trim()) {
+      showToast('Informe o grupo de WhatsApp', 'err')
+      return
+    }
     const produtosDetalhes = produtoItems
       .map((item) => ({
         produtoId: item.produtoId,
@@ -196,6 +203,7 @@ export function NewRegistroForm() {
         userName: u.nome,
         userCargo: u.cargo,
         anuncio: anuncio.trim() || null,
+        grupoWpp: isSdrReuniao ? grupoWpp.trim() || null : null,
         valor: valorNum,
         cashCollected: tipo === 'venda' ? parseFloat(cashCollected) || 0 : 0,
         formaPagamento: tipo === 'venda' ? parseFormaPagamentoVenda(formaPagamento) : null,
@@ -265,6 +273,19 @@ export function NewRegistroForm() {
               placeholder="Ex: Nome da Campanha"
             />
           </div>
+          {isSdrReuniao && (
+            <div className="fg">
+              <label>Grupo Wpp *</label>
+              <input
+                type="text"
+                className="di"
+                value={grupoWpp}
+                onChange={(e) => setGrupoWpp(e.target.value)}
+                placeholder="Identificação ou link do grupo"
+                required
+              />
+            </div>
+          )}
           {isVenda && (
             <>
               <div className="fg s2">

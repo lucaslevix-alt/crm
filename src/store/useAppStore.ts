@@ -37,6 +37,7 @@ export interface EditingRegistroRow {
   userName: string
   userCargo: string
   anuncio: string | null
+  grupoWpp?: string | null
   valor: number
   cashCollected: number
   obs: string | null

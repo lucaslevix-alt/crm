@@ -55,6 +55,8 @@ export interface RegistroRow {
   userName: string
   userCargo: string
   anuncio: string | null
+  /** Grupo de WhatsApp (reuniões SDR) */
+  grupoWpp: string | null
   valor: number
   cashCollected: number
   obs: string | null
@@ -89,6 +91,7 @@ function docToRegistro(d: { id: string; data: () => Record<string, unknown> }): 
     userName: String(x.userName ?? '—'),
     userCargo: String(x.userCargo ?? '—'),
     anuncio: x.anuncio != null ? String(x.anuncio) : null,
+    grupoWpp: x.grupoWpp != null && String(x.grupoWpp).trim() !== '' ? String(x.grupoWpp).trim() : null,
     valor: Number(x.valor ?? 0),
     cashCollected: Number(x.cashCollected ?? 0),
     obs: x.obs != null ? String(x.obs) : null,
@@ -246,6 +249,7 @@ export async function addRegistro(params: {
   userName: string
   userCargo: string
   anuncio?: string | null
+  grupoWpp?: string | null
   valor?: number
   cashCollected?: number
   obs?: string | null
@@ -263,6 +267,8 @@ export async function addRegistro(params: {
     userName: params.userName,
     userCargo: params.userCargo,
     anuncio: params.anuncio ?? null,
+    grupoWpp:
+      params.grupoWpp != null && String(params.grupoWpp).trim() !== '' ? String(params.grupoWpp).trim() : null,
     valor: params.valor ?? 0,
     cashCollected: params.cashCollected ?? 0,
     obs: params.obs ?? null,
@@ -296,6 +302,7 @@ export async function updateRegistro(
     userName: string
     userCargo: string
     anuncio?: string | null
+    grupoWpp?: string | null
     valor?: number
     cashCollected?: number
     obs?: string | null
@@ -315,6 +322,8 @@ export async function updateRegistro(
     userName: params.userName,
     userCargo: params.userCargo,
     anuncio: params.anuncio ?? null,
+    grupoWpp:
+      params.grupoWpp != null && String(params.grupoWpp).trim() !== '' ? String(params.grupoWpp).trim() : null,
     valor: params.valor ?? 0,
     cashCollected: params.cashCollected ?? 0,
     obs: params.obs ?? null,
