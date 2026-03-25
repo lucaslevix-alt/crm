@@ -1,8 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  Award,
   ClipboardList,
-  Crown,
   Filter,
   Handshake,
   LayoutDashboard,
@@ -20,7 +18,7 @@ import {
   Zap
 } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
-import { icNav } from '../../lib/icon-sizes'
+import { icNavStripe } from '../../lib/icon-sizes'
 
 export function Sidebar() {
   const navigate = useNavigate()
@@ -34,13 +32,13 @@ export function Sidebar() {
   return (
     <div
       className="sidebar-wrap"
-      title="Passe o rato na margem esquerda para abrir o menu"
+      title="Menu — em ecrãs pequenos, passe o rato na margem esquerda para expandir"
     >
       <aside className="sidebar" aria-label="Menu principal de navegação">
         <div className="sidebar-logo">
           <div className="logo-row">
             <div className="logo-icon" aria-hidden>
-              <Zap size={22} strokeWidth={2.2} />
+              <Zap size={20} strokeWidth={1.75} />
             </div>
             <div>
               <div className="logo-text">Comercial</div>
@@ -54,7 +52,7 @@ export function Sidebar() {
             <div className="nav-sec">Início</div>
             <NavLink to="/dashboard" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} end>
               <span className="nav-icon">
-                <LayoutDashboard {...icNav} />
+                <LayoutDashboard {...icNavStripe} />
               </span>
               <span className="nav-label">Dashboard</span>
             </NavLink>
@@ -64,7 +62,7 @@ export function Sidebar() {
             <div className="nav-sec">Mídia e captação</div>
             <NavLink to="/meta-ads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
               <span className="nav-icon">
-                <Megaphone {...icNav} />
+                <Megaphone {...icNavStripe} />
               </span>
               <span className="nav-label">Meta Ads</span>
             </NavLink>
@@ -74,23 +72,33 @@ export function Sidebar() {
             <div className="nav-sec">Operação comercial</div>
             <NavLink to="/registros" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
               <span className="nav-icon">
-                <ClipboardList {...icNav} />
+                <ClipboardList {...icNavStripe} />
               </span>
               <span className="nav-label">Registros</span>
             </NavLink>
             <NavLink to="/negociacoes" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
               <span className="nav-icon">
-                <Handshake {...icNav} />
+                <Handshake {...icNavStripe} />
               </span>
               <span className="nav-label">Negociações</span>
             </NavLink>
+            {(currentUser?.cargo === 'admin' ||
+              currentUser?.cargo === 'sdr' ||
+              currentUser?.cargo === 'closer') && (
+              <NavLink to="/produtos" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                <span className="nav-icon">
+                  <Package {...icNavStripe} />
+                </span>
+                <span className="nav-label">Produtos</span>
+              </NavLink>
+            )}
             {(currentUser?.cargo === 'admin' || currentUser?.cargo === 'closer') && (
               <NavLink
                 to="/propostas-fechamento"
                 className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               >
                 <span className="nav-icon">
-                  <Link2 {...icNav} />
+                  <Link2 {...icNavStripe} />
                 </span>
                 <span className="nav-label">Propostas de fechamento</span>
               </NavLink>
@@ -101,13 +109,13 @@ export function Sidebar() {
             <div className="nav-sec">Metas e funil</div>
             <NavLink to="/funil" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
               <span className="nav-icon">
-                <Filter {...icNav} />
+                <Filter {...icNavStripe} />
               </span>
               <span className="nav-label">Funil de conversão</span>
             </NavLink>
             <NavLink to="/metas" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
               <span className="nav-icon">
-                <Target {...icNav} />
+                <Target {...icNavStripe} />
               </span>
               <span className="nav-label">Metas</span>
             </NavLink>
@@ -115,23 +123,11 @@ export function Sidebar() {
 
           <div className="nav-group">
             <div className="nav-sec">Rankings</div>
-            <NavLink to="/ranking-sdr" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+            <NavLink to="/rankings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
               <span className="nav-icon">
-                <Trophy {...icNav} />
+                <Trophy {...icNavStripe} />
               </span>
-              <span className="nav-label">SDR</span>
-            </NavLink>
-            <NavLink to="/ranking-closer" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-              <span className="nav-icon">
-                <Award {...icNav} />
-              </span>
-              <span className="nav-label">Closer</span>
-            </NavLink>
-            <NavLink to="/ranking-squads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-              <span className="nav-icon">
-                <Crown {...icNav} />
-              </span>
-              <span className="nav-label">Squads</span>
+              <span className="nav-label">Classificação</span>
             </NavLink>
           </div>
 
@@ -140,31 +136,25 @@ export function Sidebar() {
               <div className="nav-sec">Administração</div>
               <NavLink to="/usuarios" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span className="nav-icon">
-                  <Users {...icNav} />
+                  <Users {...icNavStripe} />
                 </span>
                 <span className="nav-label">Usuários</span>
               </NavLink>
               <NavLink to="/squads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span className="nav-icon">
-                  <UsersRound {...icNav} />
+                  <UsersRound {...icNavStripe} />
                 </span>
                 <span className="nav-label">Squads</span>
               </NavLink>
-              <NavLink to="/produtos" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-                <span className="nav-icon">
-                  <Package {...icNav} />
-                </span>
-                <span className="nav-label">Produtos</span>
-              </NavLink>
               <NavLink to="/config" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span className="nav-icon">
-                  <Settings {...icNav} />
+                  <Settings {...icNavStripe} />
                 </span>
                 <span className="nav-label">Configurações</span>
               </NavLink>
               <NavLink to="/auditoria" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span className="nav-icon">
-                  <Search {...icNav} />
+                  <Search {...icNavStripe} />
                 </span>
                 <span className="nav-label">Auditoria</span>
               </NavLink>

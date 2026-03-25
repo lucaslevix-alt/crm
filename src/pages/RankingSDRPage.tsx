@@ -152,15 +152,8 @@ export function RankingSDRPage() {
   }
 
   return (
-    <div className="content">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
-            <Trophy size={24} strokeWidth={1.65} aria-hidden />
-            Ranking SDR
-          </h2>
-          <p style={{ color: 'var(--text2)' }}>Performance individual da equipe de SDR</p>
-        </div>
+    <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <button
           type="button"
           className="btn btn-primary btn-sm"
@@ -439,6 +432,6 @@ export function RankingSDRPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

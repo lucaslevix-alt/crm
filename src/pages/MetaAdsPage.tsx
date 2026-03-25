@@ -406,7 +406,7 @@ export function MetaAdsPage() {
 
   if (!token && !loading) {
     return (
-      <div className="content">
+      <div className="content meta-ads-page">
         <div style={{ marginBottom: 16 }}>
           <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
             <Megaphone size={24} strokeWidth={1.65} aria-hidden />
@@ -433,7 +433,7 @@ export function MetaAdsPage() {
   }
 
   return (
-    <div className="content">
+    <div className="content meta-ads-page">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
@@ -445,21 +445,8 @@ export function MetaAdsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'rgba(34,197,94,.1)',
-              border: '1px solid rgba(34,197,94,.25)',
-              borderRadius: 20,
-              padding: '4px 12px',
-              fontSize: 12,
-              fontWeight: 700,
-              color: 'var(--green)'
-            }}
-          >
-            <span>●</span>
+          <div className="meta-account-pill" title="Conta ativa">
+            <span className="meta-account-pill-dot" aria-hidden />
             <span>{selectedAccountName || '—'}</span>
           </div>
           <button
@@ -489,10 +476,8 @@ export function MetaAdsPage() {
       <div className="card mb" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
-              Período
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div className="meta-field-lbl">Período</div>
+            <div className="meta-period-row">
               {(['this_month', 'last_7d', 'last_14d', 'last_30d', 'last_60d'] as const).map((p) => (
                 <button
                   key={p}
@@ -535,24 +520,9 @@ export function MetaAdsPage() {
             )}
           </div>
           <div style={{ flex: 1, minWidth: 200, maxWidth: 320 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
-              Conta de Anúncios
-            </div>
+            <div className="meta-field-lbl">Conta de anúncios</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <select
-                value={accId}
-                onChange={onAccountChange}
-                style={{
-                  flex: 1,
-                  background: 'var(--bg3)',
-                  border: '1px solid var(--border2)',
-                  borderRadius: 10,
-                  color: 'var(--text)',
-                  padding: '8px 12px',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 13
-                }}
-              >
+              <select value={accId} onChange={onAccountChange} className="meta-select">
                 {accounts.length === 0 ? (
                   <option value="">Carregando contas...</option>
                 ) : (
@@ -601,14 +571,7 @@ export function MetaAdsPage() {
         </div>
       )}
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: 14,
-          marginBottom: 24
-        }}
-      >
+      <div className="meta-kpi-grid">
         {(
           [
             { id: 'spend', Icon: CircleDollarSign, label: 'Gasto Meta', value: kpis ? fmtCurrency(kpis.spend) : '…', col: 'orange' },
@@ -632,7 +595,7 @@ export function MetaAdsPage() {
         ))}
       </div>
 
-      <div className="g2" style={{ marginBottom: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+      <div className="meta-split-grid">
         <div className="card">
           <div className="card-header">
             <span className="card-title card-title--ic">
@@ -665,27 +628,22 @@ export function MetaAdsPage() {
             </span>
             <span style={{ fontSize: 11, color: 'var(--text3)' }}>{dateLabel}</span>
           </div>
-          <div style={{ position: 'relative', height: 180, display: 'flex', alignItems: 'flex-end', gap: 2, padding: '12px 8px' }}>
+          <div className="meta-daily-chart">
             {dailySpend.length === 0 ? (
               <div style={{ textAlign: 'center', width: '100%', color: 'var(--text3)', padding: 24 }}>Nenhum dado no período</div>
             ) : (
               dailySpend.map((d) => (
                 <div
                   key={d.date}
+                  className="meta-daily-bar"
                   title={`${d.date}: ${fmtCurrency(d.spend)}`}
-                  style={{
-                    flex: 1,
-                    minWidth: 4,
-                    background: 'rgba(248,74,8,.7)',
-                    borderRadius: 4,
-                    height: `${Math.max(4, (d.spend / maxDaily) * 100)}%`
-                  }}
+                  style={{ height: `${Math.max(4, (d.spend / maxDaily) * 100)}%` }}
                 />
               ))
             )}
           </div>
           {dailySpend.length > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text3)', padding: '4px 8px' }}>
+            <div className="meta-daily-foot">
               <span>{dailySpend[0]?.date?.slice(5)}</span>
               <span>{dailySpend[dailySpend.length - 1]?.date?.slice(5)}</span>
             </div>

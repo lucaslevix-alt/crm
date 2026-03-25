@@ -60,6 +60,8 @@ export interface RegistroRow {
   obs: string | null
   /** Preenchido quando `tipo === 'venda'` */
   formaPagamento?: string | null
+  /** Nome do cliente (vendas) */
+  nomeCliente?: string | null
   produtosIds?: string[]
   produtosDetalhes?: RegistroProdutoItem[]
   /** Soma (referência ideal × qtd) — à vista ou parcelado conforme forma de pagamento da venda */
@@ -93,6 +95,10 @@ function docToRegistro(d: { id: string; data: () => Record<string, unknown> }): 
     formaPagamento:
       x.formaPagamento != null && String(x.formaPagamento).trim() !== ''
         ? String(x.formaPagamento).trim()
+        : null,
+    nomeCliente:
+      String(x.tipo) === 'venda' && x.nomeCliente != null && String(x.nomeCliente).trim() !== ''
+        ? String(x.nomeCliente).trim()
         : null,
     produtosIds: Array.isArray(x.produtosIds) ? x.produtosIds.map((v) => String(v)) : [],
     produtosDetalhes: Array.isArray(x.produtosDetalhes)
@@ -248,6 +254,7 @@ export async function addRegistro(params: {
   produtosDetalhes?: RegistroProdutoItem[]
   valorReferenciaVenda?: number
   descontoCloser?: number
+  nomeCliente?: string | null
 }): Promise<string> {
   const ref = await addDoc(collection(db, 'registros'), {
     data: params.data,
@@ -260,6 +267,10 @@ export async function addRegistro(params: {
     cashCollected: params.cashCollected ?? 0,
     obs: params.obs ?? null,
     formaPagamento: params.tipo === 'venda' ? (params.formaPagamento ?? null) : null,
+    nomeCliente:
+      params.tipo === 'venda' && params.nomeCliente?.trim()
+        ? params.nomeCliente.trim()
+        : null,
     produtosIds: params.produtosIds ?? [],
     produtosDetalhes: params.produtosDetalhes ?? [],
     ...(params.tipo === 'venda'
@@ -291,8 +302,9 @@ export async function updateRegistro(
     formaPagamento?: string | null
     produtosIds?: string[]
     produtosDetalhes?: RegistroProdutoItem[]
-    valorReferenciaVenda?: number
-    descontoCloser?: number
+  valorReferenciaVenda?: number
+  descontoCloser?: number
+  nomeCliente?: string | null
   }
 ): Promise<void> {
   const ref = doc(db, 'registros', id)
@@ -307,6 +319,10 @@ export async function updateRegistro(
     cashCollected: params.cashCollected ?? 0,
     obs: params.obs ?? null,
     formaPagamento: params.tipo === 'venda' ? (params.formaPagamento ?? null) : null,
+    nomeCliente:
+      params.tipo === 'venda' && params.nomeCliente?.trim()
+        ? params.nomeCliente.trim()
+        : null,
     produtosIds: params.produtosIds ?? [],
     produtosDetalhes: params.produtosDetalhes ?? [],
     ...(params.tipo === 'venda'
@@ -385,9 +401,52 @@ export async function deleteUser(id: string): Promise<void> {
   await deleteDoc(doc(db, 'usuarios', id))
 }
 
+/** Preço de tabela: valor total + à vista + parcelado no cartão + link rápido */
+export interface ProdutoBlocoPrecoTabela {
+  valorTotal: number | null
+  valorAVista: number | null
+  valorParceladoCartao: number | null
+  parcelasCartao: number | null
+  linkPagamento: string | null
+}
+
+/** Oferta / última condição / carta na manga: à vista + parcelado cartão + bônus + link */
+export interface ProdutoBlocoCondicaoComercial {
+  valorAVista: number | null
+  valorParceladoCartao: number | null
+  parcelasCartao: number | null
+  bonus: string | null
+  linkPagamento: string | null
+}
+
+export function emptyBlocoPrecoTabela(): ProdutoBlocoPrecoTabela {
+  return {
+    valorTotal: null,
+    valorAVista: null,
+    valorParceladoCartao: null,
+    parcelasCartao: null,
+    linkPagamento: null
+  }
+}
+
+export function emptyBlocoCondicaoComercial(): ProdutoBlocoCondicaoComercial {
+  return {
+    valorAVista: null,
+    valorParceladoCartao: null,
+    parcelasCartao: null,
+    bonus: null,
+    linkPagamento: null
+  }
+}
+
 export interface ProdutoRow {
   id: string
   nome: string
+  blocoPrecoTabela: ProdutoBlocoPrecoTabela
+  blocoOferta: ProdutoBlocoCondicaoComercial
+  blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
+  blocoCartaNaManga: ProdutoBlocoCondicaoComercial
+  /** Legado / detalhamento por forma de pagamento (documentos antigos) */
   valor: number | null
   valorCartao: number | null
   parcelasCartao: number | null
@@ -397,43 +456,184 @@ export interface ProdutoRow {
   desc: string | null
 }
 
+function parseBlocoPrecoTabela(x: Record<string, unknown>): ProdutoBlocoPrecoTabela {
+  const raw = x.blocoPrecoTabela
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>
+    return {
+      valorTotal: numOrNull(o.valorTotal),
+      valorAVista: numOrNull(o.valorAVista),
+      valorParceladoCartao: numOrNull(o.valorParceladoCartao),
+      parcelasCartao: numOrNull(o.parcelasCartao),
+      linkPagamento: strOrNull(o.linkPagamento)
+    }
+  }
+  const oldPreco = numOrNull(x.precoTabela) ?? numOrNull(x.valor)
+  return {
+    valorTotal: oldPreco,
+    valorAVista: numOrNull(x.aVista) ?? oldPreco,
+    valorParceladoCartao: numOrNull(x.valorCartao) ?? oldPreco,
+    parcelasCartao: numOrNull(x.parcelasCartao),
+    linkPagamento: null
+  }
+}
+
+function parseBlocoCondicao(
+  x: Record<string, unknown>,
+  blocoKey: string,
+  legacyTextKey: string
+): ProdutoBlocoCondicaoComercial {
+  const raw = x[blocoKey]
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>
+    return {
+      valorAVista: numOrNull(o.valorAVista),
+      valorParceladoCartao: numOrNull(o.valorParceladoCartao),
+      parcelasCartao: numOrNull(o.parcelasCartao),
+      bonus: strOrNull(o.bonus),
+      linkPagamento: strOrNull(o.linkPagamento)
+    }
+  }
+  const leg = strOrNull(x[legacyTextKey])
+  return {
+    valorAVista: null,
+    valorParceladoCartao: null,
+    parcelasCartao: null,
+    bonus: leg,
+    linkPagamento: null
+  }
+}
+
+/** Referência única quando não há detalhe na coluna específica (ex.: só preço de tabela). */
+export function produtoPrecoReferencia(p: ProdutoRow): number | null {
+  const bt = p.blocoPrecoTabela
+  if (bt.valorTotal != null && bt.valorTotal > 0) return bt.valorTotal
+  if (bt.valorParceladoCartao != null && bt.valorParceladoCartao > 0) return bt.valorParceladoCartao
+  if (bt.valorAVista != null && bt.valorAVista > 0) return bt.valorAVista
+  if (p.valorCartao != null && p.valorCartao > 0) return p.valorCartao
+  if (p.valorBoleto != null && p.valorBoleto > 0) return p.valorBoleto
+  if (p.aVista != null && p.aVista > 0) return p.aVista
+  if (p.valor != null && p.valor > 0) return p.valor
+  return null
+}
+
+export function produtoValorCartaoEfetivo(p: ProdutoRow): number | null {
+  const bt = p.blocoPrecoTabela
+  if (bt.valorParceladoCartao != null && bt.valorParceladoCartao > 0) return bt.valorParceladoCartao
+  if (p.valorCartao != null && p.valorCartao > 0) return p.valorCartao
+  return produtoPrecoReferencia(p)
+}
+
+export function produtoParcelasCartaoEfetivo(p: ProdutoRow): number | null {
+  const bt = p.blocoPrecoTabela
+  const v = produtoValorCartaoEfetivo(p)
+  if (v == null || v <= 0) return null
+  if (bt.valorParceladoCartao != null && bt.valorParceladoCartao > 0) {
+    const n = bt.parcelasCartao
+    return n != null && n > 0 ? n : 1
+  }
+  if (p.valorCartao != null && p.valorCartao > 0) {
+    return p.parcelasCartao != null && p.parcelasCartao > 0 ? p.parcelasCartao : 1
+  }
+  return 1
+}
+
+export function produtoValorBoletoEfetivo(p: ProdutoRow): number | null {
+  if (p.valorBoleto != null && p.valorBoleto > 0) return p.valorBoleto
+  return produtoPrecoReferencia(p)
+}
+
+export function produtoParcelasBoletoEfetivo(p: ProdutoRow): number | null {
+  const v = produtoValorBoletoEfetivo(p)
+  if (v == null || v <= 0) return null
+  if (p.valorBoleto != null && p.valorBoleto > 0) {
+    return p.parcelasBoleto != null && p.parcelasBoleto > 0 ? p.parcelasBoleto : 1
+  }
+  return 1
+}
+
+export function produtoValorAVistaEfetivo(p: ProdutoRow): number | null {
+  const bt = p.blocoPrecoTabela
+  if (bt.valorAVista != null && bt.valorAVista > 0) return bt.valorAVista
+  if (p.aVista != null && p.aVista > 0) return p.aVista
+  return produtoPrecoReferencia(p)
+}
+
+function numOrNull(x: unknown): number | null {
+  if (x == null || x === '') return null
+  const n = Number(x)
+  return Number.isFinite(n) ? n : null
+}
+
+function strOrNull(x: unknown): string | null {
+  if (x == null) return null
+  const s = String(x).trim()
+  return s === '' ? null : s
+}
+
 export async function getProdutos(): Promise<ProdutoRow[]> {
   const snapshot = await getDocs(query(collection(db, 'produtos'), orderBy('nome')))
   return snapshot.docs.map((d) => {
-    const x = d.data()
+    const x = d.data() as Record<string, unknown>
+    const valorLegado = numOrNull(x.valor)
     return {
       id: d.id,
       nome: String(x.nome ?? ''),
-      valor: x.valor != null ? Number(x.valor) : null,
-      valorCartao: x.valorCartao != null ? Number(x.valorCartao) : null,
-      parcelasCartao: x.parcelasCartao != null ? Number(x.parcelasCartao) : null,
-      valorBoleto: x.valorBoleto != null ? Number(x.valorBoleto) : null,
-      parcelasBoleto: x.parcelasBoleto != null ? Number(x.parcelasBoleto) : null,
-      aVista: x.aVista != null ? Number(x.aVista) : null,
+      blocoPrecoTabela: parseBlocoPrecoTabela(x),
+      blocoOferta: parseBlocoCondicao(x, 'blocoOferta', 'ofertaPromocional'),
+      blocoUltimaCondicao: parseBlocoCondicao(x, 'blocoUltimaCondicao', 'ultimaCondicao'),
+      blocoCartaNaManga: parseBlocoCondicao(x, 'blocoCartaNaManga', 'cartaNaManga'),
+      valor: valorLegado,
+      valorCartao: numOrNull(x.valorCartao),
+      parcelasCartao: numOrNull(x.parcelasCartao),
+      valorBoleto: numOrNull(x.valorBoleto),
+      parcelasBoleto: numOrNull(x.parcelasBoleto),
+      aVista: numOrNull(x.aVista),
       desc: x.desc != null ? String(x.desc) : null
     }
   })
 }
 
+function serializeBlocoTabela(b: ProdutoBlocoPrecoTabela): Record<string, unknown> {
+  return {
+    valorTotal: b.valorTotal,
+    valorAVista: b.valorAVista,
+    valorParceladoCartao: b.valorParceladoCartao,
+    parcelasCartao: b.parcelasCartao,
+    linkPagamento: b.linkPagamento
+  }
+}
+
+function serializeBlocoCondicao(b: ProdutoBlocoCondicaoComercial): Record<string, unknown> {
+  return {
+    valorAVista: b.valorAVista,
+    valorParceladoCartao: b.valorParceladoCartao,
+    parcelasCartao: b.parcelasCartao,
+    bonus: b.bonus,
+    linkPagamento: b.linkPagamento
+  }
+}
+
 export async function addProduto(params: {
   nome: string
-  valor?: number | null
-  valorCartao?: number | null
-  parcelasCartao?: number | null
-  valorBoleto?: number | null
-  parcelasBoleto?: number | null
-  aVista?: number | null
-  desc?: string | null
+  blocoPrecoTabela: ProdutoBlocoPrecoTabela
+  blocoOferta: ProdutoBlocoCondicaoComercial
+  blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
+  blocoCartaNaManga: ProdutoBlocoCondicaoComercial
 }): Promise<string> {
   const ref = await addDoc(collection(db, 'produtos'), {
     nome: params.nome,
-    valor: params.valor ?? null,
-    valorCartao: params.valorCartao ?? null,
-    parcelasCartao: params.parcelasCartao ?? null,
-    valorBoleto: params.valorBoleto ?? null,
-    parcelasBoleto: params.parcelasBoleto ?? null,
-    aVista: params.aVista ?? null,
-    desc: params.desc ?? null,
+    blocoPrecoTabela: serializeBlocoTabela(params.blocoPrecoTabela),
+    blocoOferta: serializeBlocoCondicao(params.blocoOferta),
+    blocoUltimaCondicao: serializeBlocoCondicao(params.blocoUltimaCondicao),
+    blocoCartaNaManga: serializeBlocoCondicao(params.blocoCartaNaManga),
+    valor: null,
+    valorCartao: null,
+    parcelasCartao: null,
+    valorBoleto: null,
+    parcelasBoleto: null,
+    aVista: null,
+    desc: null,
     criadoEm: serverTimestamp()
   })
   return ref.id
@@ -443,28 +643,27 @@ export async function updateProduto(
   id: string,
   params: {
     nome: string
-    valor?: number | null
-    valorCartao?: number | null
-    parcelasCartao?: number | null
-    valorBoleto?: number | null
-    parcelasBoleto?: number | null
-    aVista?: number | null
-    desc?: string | null
+    blocoPrecoTabela: ProdutoBlocoPrecoTabela
+    blocoOferta: ProdutoBlocoCondicaoComercial
+    blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
+    blocoCartaNaManga: ProdutoBlocoCondicaoComercial
   }
 ): Promise<void> {
   await updateDoc(doc(db, 'produtos', id), {
     nome: params.nome,
-    valor: params.valor ?? null,
-    valorCartao: params.valorCartao ?? null,
-    parcelasCartao: params.parcelasCartao ?? null,
-    valorBoleto: params.valorBoleto ?? null,
-    parcelasBoleto: params.parcelasBoleto ?? null,
-    aVista: params.aVista ?? null,
-    desc: params.desc ?? null
+    blocoPrecoTabela: serializeBlocoTabela(params.blocoPrecoTabela),
+    blocoOferta: serializeBlocoCondicao(params.blocoOferta),
+    blocoUltimaCondicao: serializeBlocoCondicao(params.blocoUltimaCondicao),
+    blocoCartaNaManga: serializeBlocoCondicao(params.blocoCartaNaManga)
   })
 }
 
 export async function deleteProduto(id: string): Promise<void> {
+  const qLinhas = query(collection(db, 'linhas_negociacao'), where('produtoId', '==', id))
+  const snapLinhas = await getDocs(qLinhas)
+  for (const d of snapLinhas.docs) {
+    await deleteDoc(doc(db, 'linhas_negociacao', d.id))
+  }
   await deleteDoc(doc(db, 'produtos', id))
 }
 
@@ -478,6 +677,8 @@ export interface LinhaNegociacaoRow {
   /** Preço à vista na mesma linha (venda com forma “À vista”) */
   valorAVista: number | null
   linkCartao: string | null
+  /** Texto livre: se há bônus e em que condições */
+  possibilidadeBonus: string | null
   rotulo: string | null
   ordem: number
   linhaPrecoRole: LinhaPrecoRole
@@ -499,6 +700,7 @@ function docToLinhaNegociacao(d: { id: string; data: () => Record<string, unknow
     parcelas: Math.max(1, Math.floor(Number(x.parcelas ?? 1))),
     valorAVista: valorAVistaParsed,
     linkCartao: x.linkCartao != null && String(x.linkCartao).trim() !== '' ? String(x.linkCartao).trim() : null,
+    possibilidadeBonus: strOrNull(x.possibilidadeBonus),
     rotulo: x.rotulo != null && String(x.rotulo).trim() !== '' ? String(x.rotulo).trim() : null,
     ordem: Number(x.ordem ?? 0),
     linhaPrecoRole: parseLinhaPrecoRole(x.linhaPrecoRole)
@@ -521,6 +723,7 @@ export async function addLinhaNegociacao(params: {
   parcelas: number
   valorAVista?: number | null
   linkCartao?: string | null
+  possibilidadeBonus?: string | null
   rotulo?: string | null
   ordem?: number
   linhaPrecoRole?: LinhaPrecoRole
@@ -532,6 +735,7 @@ export async function addLinhaNegociacao(params: {
     valorAVista:
       params.valorAVista != null && params.valorAVista > 0 ? params.valorAVista : null,
     linkCartao: params.linkCartao?.trim() || null,
+    possibilidadeBonus: params.possibilidadeBonus?.trim() || null,
     rotulo: params.rotulo?.trim() || null,
     ordem: params.ordem ?? 0,
     linhaPrecoRole: params.linhaPrecoRole ?? 'desconto',
@@ -547,6 +751,7 @@ export async function updateLinhaNegociacao(
     parcelas: number
     valorAVista?: number | null
     linkCartao?: string | null
+    possibilidadeBonus?: string | null
     rotulo?: string | null
     ordem?: number
     linhaPrecoRole?: LinhaPrecoRole
@@ -558,6 +763,7 @@ export async function updateLinhaNegociacao(
     valorAVista:
       params.valorAVista != null && params.valorAVista > 0 ? params.valorAVista : null,
     linkCartao: params.linkCartao?.trim() || null,
+    possibilidadeBonus: params.possibilidadeBonus?.trim() || null,
     rotulo: params.rotulo?.trim() || null,
     linhaPrecoRole: params.linhaPrecoRole ?? 'desconto',
     ...(params.ordem !== undefined ? { ordem: params.ordem } : {})

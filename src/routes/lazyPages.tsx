@@ -8,6 +8,9 @@ export const RegistrosPage = lazy(() =>
 )
 export const MetasPage = lazy(() => import('../pages/MetasPage').then((m) => ({ default: m.MetasPage })))
 export const FunilPage = lazy(() => import('../pages/FunilPage').then((m) => ({ default: m.FunilPage })))
+export const RankingsPage = lazy(() =>
+  import('../pages/RankingsPage').then((m) => ({ default: m.RankingsPage }))
+)
 export const RankingSDRPage = lazy(() =>
   import('../pages/RankingSDRPage').then((m) => ({ default: m.RankingSDRPage }))
 )

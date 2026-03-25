@@ -6,7 +6,8 @@ import {
   getProdutos,
   getLinhasNegociacaoAll,
   FORMAS_PAGAMENTO_VENDA,
-  parseFormaPagamentoVenda
+  parseFormaPagamentoVenda,
+  produtoPrecoReferencia
 } from '../../firebase/firestore'
 import type { LinhaNegociacaoRow, ProdutoRow } from '../../firebase/firestore'
 import type { CrmUser } from '../../store/useAppStore'
@@ -48,6 +49,7 @@ export function NewRegistroForm() {
   const [valor, setValor] = useState('')
   const [cashCollected, setCashCollected] = useState('')
   const [formaPagamento, setFormaPagamento] = useState('')
+  const [nomeCliente, setNomeCliente] = useState('')
   const [obs, setObs] = useState('')
   const [saving, setSaving] = useState(false)
   const [produtoItems, setProdutoItems] = useState<ProdutoSelecionadoItem[]>([])
@@ -68,6 +70,7 @@ export function NewRegistroForm() {
     setValor('')
     setCashCollected('')
     setFormaPagamento('')
+    setNomeCliente('')
     setObs('')
     setProdutoItems([])
   }
@@ -149,6 +152,10 @@ export function NewRegistroForm() {
       showToast('Preencha data, tipo e profissional', 'err')
       return
     }
+    if (tipo === 'venda' && !nomeCliente.trim()) {
+      showToast('Informe o nome do cliente', 'err')
+      return
+    }
     if (tipo === 'venda' && !parseFloat(valor)) {
       showToast('Informe o valor da venda', 'err')
       return
@@ -192,6 +199,7 @@ export function NewRegistroForm() {
         valor: valorNum,
         cashCollected: tipo === 'venda' ? parseFloat(cashCollected) || 0 : 0,
         formaPagamento: tipo === 'venda' ? parseFormaPagamentoVenda(formaPagamento) : null,
+        nomeCliente: tipo === 'venda' ? nomeCliente.trim() || null : null,
         obs: obs.trim() || null,
         produtosIds: tipo === 'venda' ? produtosDetalhes.flatMap((item) => Array(item.quantidade).fill(item.produtoId)) : [],
         produtosDetalhes: tipo === 'venda' ? produtosDetalhes : [],
@@ -259,6 +267,18 @@ export function NewRegistroForm() {
           </div>
           {isVenda && (
             <>
+              <div className="fg s2">
+                <label>Nome do cliente *</label>
+                <input
+                  type="text"
+                  className="di"
+                  value={nomeCliente}
+                  onChange={(e) => setNomeCliente(e.target.value)}
+                  placeholder="Nome completo do cliente"
+                  autoComplete="name"
+                  required={isVenda}
+                />
+              </div>
               <div className="fg">
                 <label>Valor da Venda (R$) *</label>
                 <input
@@ -318,14 +338,17 @@ export function NewRegistroForm() {
                           onChange={(e) => updateProdutoItem(item.uid, 'produtoId', e.target.value)}
                         >
                           <option value="">Produto #{index + 1}</option>
-                          {produtos.map((p) => (
-                            <option key={`${item.uid}-${p.id}`} value={p.id}>
-                              {p.nome}
-                              {(p.valorCartao ?? p.valorBoleto ?? p.valor) != null
-                                ? ` (${(p.valorCartao ?? p.valorBoleto ?? p.valor)!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`
-                                : ''}
-                            </option>
-                          ))}
+                          {produtos.map((p) => {
+                            const ref = produtoPrecoReferencia(p)
+                            return (
+                              <option key={`${item.uid}-${p.id}`} value={p.id}>
+                                {p.nome}
+                                {ref != null
+                                  ? ` (${ref.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`
+                                  : ''}
+                              </option>
+                            )
+                          })}
                         </select>
                         <input
                           type="number"

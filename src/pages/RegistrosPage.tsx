@@ -109,6 +109,7 @@ export function RegistrosPage() {
         (r.anuncio ?? '').toLowerCase().includes(q) ||
         (r.userName ?? '').toLowerCase().includes(q) ||
         (r.obs ?? '').toLowerCase().includes(q) ||
+        (r.nomeCliente ?? '').toLowerCase().includes(q) ||
         labelFormaPagamento(r.formaPagamento).toLowerCase().includes(q)
       if (!match) return false
     }
@@ -131,7 +132,8 @@ export function RegistrosPage() {
       produtosIds: rec.produtosIds ?? [],
       produtosDetalhes: rec.produtosDetalhes ?? [],
       valorReferenciaVenda: rec.valorReferenciaVenda,
-      descontoCloser: rec.descontoCloser
+      descontoCloser: rec.descontoCloser,
+      nomeCliente: rec.nomeCliente ?? null
     })
     openModal('modal-edit-reg')
   }
@@ -286,6 +288,7 @@ export function RegistrosPage() {
                       <th>Tipo</th>
                       <th>Profissional</th>
                       <th>Anúncio</th>
+                      <th>Cliente</th>
                       <th>Valor</th>
                       <th>Pagamento</th>
                       <th>Obs</th>
@@ -315,6 +318,13 @@ export function RegistrosPage() {
                             <span className="chip" title={r.anuncio}>
                               {r.anuncio}
                             </span>
+                          ) : (
+                            <span style={{ color: 'var(--text3)' }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: 13, maxWidth: 140 }}>
+                          {r.tipo === 'venda' && r.nomeCliente ? (
+                            <span title={r.nomeCliente}>{r.nomeCliente}</span>
                           ) : (
                             <span style={{ color: 'var(--text3)' }}>—</span>
                           )}

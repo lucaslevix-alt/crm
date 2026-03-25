@@ -1,1 +1,0 @@
-import{t as e}from"./vendor-react-CIQ0kHvD.js";var t=e();function n({index:e}){let n=e+1;return(0,t.jsx)(`span`,{className:`rank-marker ${e<3?[`gold`,`silver`,`bronze`][e]:``}`,children:n})}export{n as t};

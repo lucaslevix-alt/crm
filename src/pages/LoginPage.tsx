@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
@@ -13,7 +14,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   const navigate = useNavigate()
-  const { setCurrentUser, showToast } = useAppStore()
+  const { setCurrentUser, showToast, themeMode, setThemeMode } = useAppStore()
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -57,6 +58,15 @@ export function LoginPage() {
 
   return (
     <div id="login-screen">
+      <button
+        type="button"
+        className="login-theme-btn"
+        onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
+        title={themeMode === 'dark' ? 'Modo claro' : 'Modo escuro'}
+        aria-label={themeMode === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+      >
+        {themeMode === 'dark' ? <Sun size={20} strokeWidth={1.75} /> : <Moon size={20} strokeWidth={1.75} />}
+      </button>
       <div className="login-box">
         <div className="login-logo">
           <span>PRO</span>

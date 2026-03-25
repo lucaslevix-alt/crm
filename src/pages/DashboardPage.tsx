@@ -23,6 +23,7 @@ import type { RegistroRow, MetasConfig, ProdutoRow } from '../firebase/firestore
 import { ProjectionChart } from '../components/dashboard/ProjectionChart'
 import { metaPctParts } from '../utils/metaProgress'
 import { icLg } from '../lib/icon-sizes'
+import { smoothAreaUnderPath, smoothPathThrough } from '../lib/smooth-chart-path'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
@@ -122,39 +123,39 @@ function RevenueSparkline({ points }: { points: number[] }) {
     const y = padY + innerH * (1 - v / max)
     return [x, y] as const
   })
-  let areaD = `M ${coords[0][0]} ${h} L ${coords[0][0]} ${coords[0][1]}`
-  for (let i = 1; i < coords.length; i++) areaD += ` L ${coords[i][0]} ${coords[i][1]}`
-  areaD += ` L ${coords[coords.length - 1][0]} ${h} Z`
-  const linePts = coords.map(([x, y]) => `${x},${y}`).join(' ')
+  const pts: [number, number][] = coords.map(([x, y]) => [x, y])
+  const areaD = smoothAreaUnderPath(pts, h)
+  const lineD = smoothPathThrough(pts)
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" aria-hidden>
+    <svg
+      className="db-spark-svg"
+      viewBox={`0 0 ${w} ${h}`}
+      width="100%"
+      height={h}
+      preserveAspectRatio="none"
+      aria-hidden
+    >
       <defs>
         <linearGradient id="db-spark-area" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0%" stopColor="#f84a08" stopOpacity="0" />
-          <stop offset="100%" stopColor="#f84a08" stopOpacity="0.28" />
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.02" />
+          <stop offset="55%" stopColor="var(--accent)" stopOpacity="0.12" />
+          <stop offset="100%" stopColor="var(--accent2)" stopOpacity="0.26" />
         </linearGradient>
         <linearGradient id="db-spark-line" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#ff8c60" />
-          <stop offset="100%" stopColor="#f84a08" />
+          <stop offset="0%" stopColor="var(--accent2)" />
+          <stop offset="100%" stopColor="var(--accent)" />
         </linearGradient>
-        <filter id="db-spark-glow" x="-15%" y="-15%" width="130%" height="130%">
-          <feGaussianBlur stdDeviation="1.6" result="b" />
-          <feMerge>
-            <feMergeNode in="b" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
       </defs>
-      <path d={areaD} fill="url(#db-spark-area)" />
-      <polyline
+      <path d={areaD} fill="url(#db-spark-area)" className="db-spark-area-path" />
+      <path
+        d={lineD}
         fill="none"
         stroke="url(#db-spark-line)"
-        strokeWidth="2.5"
+        strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        points={linePts}
-        filter="url(#db-spark-glow)"
+        className="db-spark-line-path"
       />
     </svg>
   )
@@ -1129,6 +1130,9 @@ export function DashboardPage() {
                               {tipoLabel}
                             </span>
                           </div>
+                          {r.tipo === 'venda' && r.nomeCliente ? (
+                            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>{r.nomeCliente}</div>
+                          ) : null}
                         </div>
                         {r.tipo === 'venda' && <span className="db-reg-val">{fmt(r.valor)}</span>}
                         <span className="db-reg-date">

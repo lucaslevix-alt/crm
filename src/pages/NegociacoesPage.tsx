@@ -11,7 +11,15 @@ import {
   ShoppingCart,
   X
 } from 'lucide-react'
-import { getProdutos, type ProdutoRow } from '../firebase/firestore'
+import {
+  getProdutos,
+  produtoParcelasBoletoEfetivo,
+  produtoParcelasCartaoEfetivo,
+  produtoValorAVistaEfetivo,
+  produtoValorBoletoEfetivo,
+  produtoValorCartaoEfetivo,
+  type ProdutoRow
+} from '../firebase/firestore'
 
 interface LinhaNegociacao {
   uid: string
@@ -33,11 +41,19 @@ function textoParcelasNegocio(
   linhas: Array<{ produto: ProdutoRow }>,
   modo: 'cartao' | 'boleto'
 ): string | null {
-  const pk = modo === 'cartao' ? 'parcelasCartao' : 'parcelasBoleto'
-  const vk = modo === 'cartao' ? 'valorCartao' : 'valorBoleto'
   const vals = linhas
-    .filter((l) => (l.produto[pk] ?? 0) > 0 && (l.produto[vk] ?? 0) > 0)
-    .map((l) => l.produto[pk] as number)
+    .map((l) => {
+      const p = l.produto
+      if (modo === 'cartao') {
+        const v = produtoValorCartaoEfetivo(p)
+        const n = produtoParcelasCartaoEfetivo(p)
+        return v != null && v > 0 && n != null && n > 0 ? n : null
+      }
+      const v = produtoValorBoletoEfetivo(p)
+      const n = produtoParcelasBoletoEfetivo(p)
+      return v != null && v > 0 && n != null && n > 0 ? n : null
+    })
+    .filter((x): x is number => x != null)
   if (!vals.length) return null
   const sorted = [...new Set(vals)].sort((a, b) => a - b)
   const suffix = modo === 'cartao' ? ' sem juros' : ''
@@ -46,31 +62,33 @@ function textoParcelasNegocio(
 }
 
 function CatalogCartaoCell({ p, parcCartao }: { p: ProdutoRow; parcCartao: number | null }) {
-  const n = p.parcelasCartao ?? 0
-  if (n > 0 && parcCartao != null) {
+  const vTot = produtoValorCartaoEfetivo(p)
+  const n = produtoParcelasCartaoEfetivo(p) ?? 0
+  if (n > 0 && parcCartao != null && vTot != null) {
     return (
       <div className="neg-td-stack">
         <span className="neg-num">{fmt(parcCartao)}</span>
         <span className="neg-cell-meta">{n}x sem juros</span>
-        <span className="neg-cell-meta neg-cell-meta--muted">Total {fmt(p.valorCartao)}</span>
+        <span className="neg-cell-meta neg-cell-meta--muted">Total {fmt(vTot)}</span>
       </div>
     )
   }
-  return <span className="neg-num">{fmt(p.valorCartao)}</span>
+  return <span className="neg-num">{fmt(vTot)}</span>
 }
 
 function CatalogBoletoCell({ p, parcBoleto }: { p: ProdutoRow; parcBoleto: number | null }) {
-  const n = p.parcelasBoleto ?? 0
-  if (n > 0 && parcBoleto != null) {
+  const vTot = produtoValorBoletoEfetivo(p)
+  const n = produtoParcelasBoletoEfetivo(p) ?? 0
+  if (n > 0 && parcBoleto != null && vTot != null) {
     return (
       <div className="neg-td-stack">
         <span className="neg-num">{fmt(parcBoleto)}</span>
         <span className="neg-cell-meta">{n}x</span>
-        <span className="neg-cell-meta neg-cell-meta--muted">Total {fmt(p.valorBoleto)}</span>
+        <span className="neg-cell-meta neg-cell-meta--muted">Total {fmt(vTot)}</span>
       </div>
     )
   }
-  return <span className="neg-num">{fmt(p.valorBoleto)}</span>
+  return <span className="neg-num">{fmt(vTot)}</span>
 }
 
 type PainelNegView = 'catalogo' | 'carrinho'
@@ -137,17 +155,26 @@ export function NegociacoesPage() {
     })
     .filter((x): x is NonNullable<typeof x> => x != null)
 
-  const totalValorCartao = linhasComDetalhes.reduce((s, l) => s + (l.produto.valorCartao ?? 0) * l.quantidade, 0)
-  const totalValorBoleto = linhasComDetalhes.reduce((s, l) => s + (l.produto.valorBoleto ?? 0) * l.quantidade, 0)
+  const totalValorCartao = linhasComDetalhes.reduce(
+    (s, l) => s + (produtoValorCartaoEfetivo(l.produto) ?? 0) * l.quantidade,
+    0
+  )
+  const totalValorBoleto = linhasComDetalhes.reduce(
+    (s, l) => s + (produtoValorBoletoEfetivo(l.produto) ?? 0) * l.quantidade,
+    0
+  )
   const totalParcelaCartao = linhasComDetalhes.reduce((s, l) => {
-    const vp = valorParcela(l.produto.valorCartao, l.produto.parcelasCartao)
+    const vp = valorParcela(produtoValorCartaoEfetivo(l.produto), produtoParcelasCartaoEfetivo(l.produto))
     return s + (vp ?? 0) * l.quantidade
   }, 0)
   const totalParcelaBoleto = linhasComDetalhes.reduce((s, l) => {
-    const vp = valorParcela(l.produto.valorBoleto, l.produto.parcelasBoleto)
+    const vp = valorParcela(produtoValorBoletoEfetivo(l.produto), produtoParcelasBoletoEfetivo(l.produto))
     return s + (vp ?? 0) * l.quantidade
   }, 0)
-  const totalAVista = linhasComDetalhes.reduce((s, l) => s + (l.produto.aVista ?? 0) * l.quantidade, 0)
+  const totalAVista = linhasComDetalhes.reduce(
+    (s, l) => s + (produtoValorAVistaEfetivo(l.produto) ?? 0) * l.quantidade,
+    0
+  )
 
   const resumoParcelasCartaoTxt = textoParcelasNegocio(linhasComDetalhes, 'cartao')
   const resumoParcelasBoletoTxt = textoParcelasNegocio(linhasComDetalhes, 'boleto')
@@ -254,15 +281,15 @@ export function NegociacoesPage() {
                   </thead>
                   <tbody>
                     {produtos.map((p) => {
-                      const parcCartao = valorParcela(p.valorCartao, p.parcelasCartao)
-                      const parcBoleto = valorParcela(p.valorBoleto, p.parcelasBoleto)
+                      const parcCartao = valorParcela(produtoValorCartaoEfetivo(p), produtoParcelasCartaoEfetivo(p))
+                      const parcBoleto = valorParcela(produtoValorBoletoEfetivo(p), produtoParcelasBoletoEfetivo(p))
                       return (
                         <tr key={p.id}>
                           <td data-label="Produto" className="neg-td-prod">
                             {p.nome}
                           </td>
                           <td data-label="À vista">
-                            <span className="neg-num">{fmt(p.aVista)}</span>
+                            <span className="neg-num">{fmt(produtoValorAVistaEfetivo(p))}</span>
                           </td>
                           <td data-label="Cartão">
                             <CatalogCartaoCell p={p} parcCartao={parcCartao} />
@@ -327,13 +354,13 @@ export function NegociacoesPage() {
                           </div>
                         )
                       }
-                      const vCartao = (p.valorCartao ?? 0) * l.quantidade
-                      const parcCartao = valorParcela(p.valorCartao, p.parcelasCartao)
+                      const vCartao = (produtoValorCartaoEfetivo(p) ?? 0) * l.quantidade
+                      const parcCartao = valorParcela(produtoValorCartaoEfetivo(p), produtoParcelasCartaoEfetivo(p))
                       const linhaParcCartao = (parcCartao ?? 0) * l.quantidade
-                      const vBoleto = (p.valorBoleto ?? 0) * l.quantidade
-                      const parcBoleto = valorParcela(p.valorBoleto, p.parcelasBoleto)
+                      const vBoleto = (produtoValorBoletoEfetivo(p) ?? 0) * l.quantidade
+                      const parcBoleto = valorParcela(produtoValorBoletoEfetivo(p), produtoParcelasBoletoEfetivo(p))
                       const linhaParcBoleto = (parcBoleto ?? 0) * l.quantidade
-                      const av = (p.aVista ?? 0) * l.quantidade
+                      const av = (produtoValorAVistaEfetivo(p) ?? 0) * l.quantidade
                       return (
                         <div key={l.uid} className="neg-item">
                           <div className="neg-item-toolbar">

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Target } from 'lucide-react'
+import { Moon, Sun, Target } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getMetasConfig, setMetasConfig, type MetasConfig } from '../firebase/firestore'
 import { useAppStore } from '../store/useAppStore'
 
 export function ConfigPage() {
-  const { showToast } = useAppStore()
+  const { showToast, themeMode, setThemeMode } = useAppStore()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [metas, setMetas] = useState<MetasConfig>({})
@@ -113,6 +113,37 @@ export function ConfigPage() {
                 {saving ? 'Salvando...' : 'Salvar Metas'}
               </button>
             </form>
+          </div>
+          <div className="card mb">
+            <div className="card-header">
+              <span className="card-title card-title--ic">
+                {themeMode === 'dark' ? <Sun size={16} strokeWidth={1.65} aria-hidden /> : <Moon size={16} strokeWidth={1.65} aria-hidden />}
+                Aparência
+              </span>
+            </div>
+            <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 14, lineHeight: 1.5 }}>
+              Modo claro com contraste de texto ajustado para leitura em ambientes iluminados. A preferência fica salva neste navegador.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${themeMode === 'dark' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ width: 'auto' }}
+                onClick={() => setThemeMode('dark')}
+              >
+                <Moon size={15} strokeWidth={1.8} aria-hidden />
+                Escuro
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${themeMode === 'light' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ width: 'auto' }}
+                onClick={() => setThemeMode('light')}
+              >
+                <Sun size={15} strokeWidth={1.8} aria-hidden />
+                Claro
+              </button>
+            </div>
           </div>
           <div className="card">
             <div className="card-header">Navegação</div>

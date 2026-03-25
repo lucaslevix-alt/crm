@@ -108,14 +108,7 @@ export function RankingCloserPage() {
   }, [loadRanking])
 
   return (
-    <div className="content">
-      <div style={{ marginBottom: 20 }}>
-        <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
-          <Trophy size={24} strokeWidth={1.65} aria-hidden />
-          Ranking Closer
-        </h2>
-        <p style={{ color: 'var(--text2)' }}>Vendas, conversão e ticket médio</p>
-      </div>
+    <>
       <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <span className="ctrl-label">Período:</span>
         {(['mes', 'semana', 'hoje'] as const).map((p) => (
@@ -317,6 +310,6 @@ export function RankingCloserPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

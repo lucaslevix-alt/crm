@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom'
-import { Eye, EyeOff, Plus } from 'lucide-react'
+import { Eye, EyeOff, Moon, Plus, Sun } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
 import { icSm } from '../../lib/icon-sizes'
 
@@ -8,9 +8,7 @@ const ROUTE_TITLES: Record<string, string> = {
   registros: 'Registros',
   funil: 'Funil de Conversão',
   metas: 'Metas',
-  'ranking-sdr': 'Ranking SDR',
-  'ranking-closer': 'Ranking Closer',
-  'ranking-squads': 'Ranking Squads',
+  rankings: 'Rankings',
   squads: 'Squads',
   usuarios: 'Usuários',
   produtos: 'Produtos',
@@ -27,7 +25,7 @@ function getPageTitle(pathname: string): string {
 
 export function Topbar() {
   const location = useLocation()
-  const { quickBarHidden, setQuickBarHidden, openModal } = useAppStore()
+  const { quickBarHidden, setQuickBarHidden, openModal, themeMode, setThemeMode } = useAppStore()
 
   const title = getPageTitle(location.pathname)
   const dateLabel = new Date().toLocaleDateString('pt-BR', {
@@ -45,6 +43,16 @@ export function Topbar() {
       <div className="topbar-right">
         <div className="date-badge">{dateLabel}</div>
         <div style={{ width: 1, height: 20, background: 'var(--border2)' }} />
+        <button
+          type="button"
+          className="topbar-ghost-btn"
+          onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
+          title={themeMode === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+          aria-label={themeMode === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+        >
+          {themeMode === 'dark' ? <Sun {...icSm} /> : <Moon {...icSm} />}
+          <span>{themeMode === 'dark' ? 'Claro' : 'Escuro'}</span>
+        </button>
         <button
           type="button"
           className="topbar-ghost-btn"

@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import type { ProdutoBlocoCondicaoComercial, ProdutoBlocoPrecoTabela } from '../firebase/firestore'
+import { applyTheme, getStoredTheme, persistTheme, type ThemeMode } from '../lib/theme'
 
 export type UserRole = 'admin' | 'sdr' | 'closer' | string
 
@@ -43,11 +45,13 @@ export interface EditingRegistroRow {
   produtosDetalhes?: Array<{ produtoId: string; quantidade: number; linhaNegociacaoId?: string | null }>
   valorReferenciaVenda?: number
   descontoCloser?: number
+  nomeCliente?: string | null
 }
 
 interface AppStoreState {
   currentUser: CrmUser | null
   fbConfig: FirebaseConfig | null
+  themeMode: ThemeMode
   quickBarHidden: boolean
   activeModalId: string | null
   toast: ToastState
@@ -58,13 +62,10 @@ interface AppStoreState {
   editingProduto: {
     id: string
     nome: string
-    valor?: number | null
-    valorCartao: number | null
-    parcelasCartao: number | null
-    valorBoleto: number | null
-    parcelasBoleto: number | null
-    aVista: number | null
-    desc: string | null
+    blocoPrecoTabela: ProdutoBlocoPrecoTabela
+    blocoOferta: ProdutoBlocoCondicaoComercial
+    blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
+    blocoCartaNaManga: ProdutoBlocoCondicaoComercial
   } | null
   produtosVersion: number
   metaConnectedAt: number
@@ -81,16 +82,14 @@ interface AppStoreState {
   setEditingProduto: (p: {
     id: string
     nome: string
-    valor?: number | null
-    valorCartao: number | null
-    parcelasCartao: number | null
-    valorBoleto: number | null
-    parcelasBoleto: number | null
-    aVista: number | null
-    desc: string | null
+    blocoPrecoTabela: ProdutoBlocoPrecoTabela
+    blocoOferta: ProdutoBlocoCondicaoComercial
+    blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
+    blocoCartaNaManga: ProdutoBlocoCondicaoComercial
   } | null) => void
   incrementProdutosVersion: () => void
   setFbConfig: (config: FirebaseConfig | null) => void
+  setThemeMode: (mode: ThemeMode) => void
   setQuickBarHidden: (hidden: boolean) => void
   openModal: (id: string) => void
   closeModal: () => void
@@ -136,6 +135,7 @@ function loadQuickBarHidden(): boolean {
 export const useAppStore = create<AppStoreState>((set) => ({
   currentUser: typeof window !== 'undefined' ? loadUserFromStorage() : null,
   fbConfig: typeof window !== 'undefined' ? loadFbConfigFromStorage() : null,
+  themeMode: typeof window !== 'undefined' ? getStoredTheme() : 'dark',
   quickBarHidden: typeof window !== 'undefined' ? loadQuickBarHidden() : false,
   activeModalId: null,
   toast: { message: null, variant: 'ok' },
@@ -167,6 +167,12 @@ export const useAppStore = create<AppStoreState>((set) => ({
       else window.localStorage.removeItem(FB_CFG_KEY)
     }
     set({ fbConfig: config })
+  },
+
+  setThemeMode: (mode) => {
+    persistTheme(mode)
+    applyTheme(mode)
+    set({ themeMode: mode })
   },
 
   setQuickBarHidden: (hidden) => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getRegistrosByRange, listSquads, type SquadRow } from '../firebase/firestore'
 import { today, mRange, wRange } from '../lib/dates'
-import { Crown, Trophy } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import { RankingPodiumThree } from '../components/ranking/RankingPodium'
 import { RankMarker } from '../components/ui/RankMarker'
 
@@ -119,14 +119,7 @@ export function RankingSquadsPage() {
   const listDisplay = [...list].sort((a, b) => b.ft - a.ft)
 
   return (
-    <div className="content">
-      <div style={{ marginBottom: 20 }}>
-        <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
-          <Crown size={24} strokeWidth={1.65} aria-hidden />
-          Ranking Squads
-        </h2>
-        <p style={{ color: 'var(--text2)' }}>Faturamento agregado das vendas dos closers (e demais membros) por squad</p>
-      </div>
+    <>
       <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <span className="ctrl-label">Período:</span>
         {(['mes', 'semana', 'hoje'] as const).map((p) => (
@@ -336,6 +329,6 @@ export function RankingSquadsPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

@@ -25,7 +25,7 @@ export function AppLayout() {
   }, [activeModalId, closeModal, openModal])
 
   return (
-    <div id="app" className="app-shell" style={{ flexDirection: 'row', minHeight: '100vh' }}>
+    <div id="app" className="app-shell">
       <Sidebar />
       <main className="main">
         <Topbar />

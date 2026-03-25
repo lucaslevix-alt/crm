@@ -15,6 +15,7 @@ import {
   RankingCloserPage,
   RankingSquadsPage,
   RankingSDRPage,
+  RankingsPage,
   SquadsPage,
   RegistrosPage,
   UsuariosPage
@@ -50,6 +51,16 @@ function AdminOrCloserRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function ComercialProdutosRoute({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useAppStore()
+  const ok =
+    currentUser?.cargo === 'admin' ||
+    currentUser?.cargo === 'sdr' ||
+    currentUser?.cargo === 'closer'
+  if (!ok) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <div className="text-sm text-[var(--text)] bg-[var(--bg)] min-h-screen app-root">
@@ -63,12 +74,25 @@ export default function App() {
               <Route path="registros" element={<RegistrosPage />} />
               <Route path="funil" element={<FunilPage />} />
               <Route path="metas" element={<MetasPage />} />
-              <Route path="ranking-sdr" element={<RankingSDRPage />} />
-              <Route path="ranking-closer" element={<RankingCloserPage />} />
-              <Route path="ranking-squads" element={<RankingSquadsPage />} />
+              <Route path="rankings" element={<RankingsPage />}>
+                <Route index element={<Navigate to="sdr" replace />} />
+                <Route path="sdr" element={<RankingSDRPage />} />
+                <Route path="closer" element={<RankingCloserPage />} />
+                <Route path="squads" element={<RankingSquadsPage />} />
+              </Route>
+              <Route path="ranking-sdr" element={<Navigate to="/rankings/sdr" replace />} />
+              <Route path="ranking-closer" element={<Navigate to="/rankings/closer" replace />} />
+              <Route path="ranking-squads" element={<Navigate to="/rankings/squads" replace />} />
               <Route path="usuarios" element={<AdminOnlyRoute><UsuariosPage /></AdminOnlyRoute>} />
               <Route path="squads" element={<AdminOnlyRoute><SquadsPage /></AdminOnlyRoute>} />
-              <Route path="produtos" element={<ProdutosPage />} />
+              <Route
+                path="produtos"
+                element={
+                  <ComercialProdutosRoute>
+                    <ProdutosPage />
+                  </ComercialProdutosRoute>
+                }
+              />
               <Route path="config" element={<ConfigPage />} />
               <Route path="auditoria" element={<AuditoriaPage />} />
               <Route path="negociacoes" element={<NegociacoesPage />} />
