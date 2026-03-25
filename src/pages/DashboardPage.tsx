@@ -18,7 +18,7 @@ import {
   Wallet,
   Percent
 } from 'lucide-react'
-import { getRegistrosByRange, getMetasConfig, getProdutos } from '../firebase/firestore'
+import { getRegistrosByRange, getMetasConfig, getProdutos, getLeadsSdrByRange } from '../firebase/firestore'
 import type { RegistroRow, MetasConfig, ProdutoRow } from '../firebase/firestore'
 import { ProjectionChart } from '../components/dashboard/ProjectionChart'
 import { metaPctParts } from '../utils/metaProgress'
@@ -81,6 +81,20 @@ function totals(recs: RegistroRow[]) {
 
 function fmt(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
+}
+
+function fmtPct(p: number | null): string {
+  if (p == null || Number.isNaN(p)) return '—'
+  return `${p.toFixed(1)}%`
+}
+
+function derivedRates(recs: RegistroRow[], leadsTotal: number) {
+  const t = totals(recs)
+  const ticketMedio = t.vn > 0 ? t.ft / t.vn : null
+  const leadParaReuniao = leadsTotal > 0 ? (t.ag / leadsTotal) * 100 : null
+  const taxaShow = t.ag > 0 ? (t.re / t.ag) * 100 : null
+  const convVendas = t.re > 0 ? (t.vn / t.re) * 100 : null
+  return { ticketMedio, leadParaReuniao, taxaShow, convVendas }
 }
 
 function dailyFaturamentoSpark(recs: RegistroRow[], start: string, end: string): number[] {
@@ -215,6 +229,7 @@ export function DashboardPage() {
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
+  const [leadsTotal, setLeadsTotal] = useState(0)
 
   const load = async () => {
     setLoading(true)
@@ -223,14 +238,16 @@ export function DashboardPage() {
       const { start, end } = dpRange(dp, customStart, customEnd)
       setPeriodStart(start)
       setPeriodEnd(end)
-      const [rows, mt, prods] = await Promise.all([
+      const [rows, mt, prods, leadsRows] = await Promise.all([
         getRegistrosByRange(start, end),
         getMetasConfig(),
-        getProdutos()
+        getProdutos(),
+        getLeadsSdrByRange(start, end)
       ])
       setRecs(rows)
       setMetas(mt ?? {})
       setProdutos(prods)
+      setLeadsTotal(leadsRows.reduce((s, r) => s + r.quantidade, 0))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar')
     } finally {
@@ -256,6 +273,8 @@ export function DashboardPage() {
     () => dailyFaturamentoSpark(recs, periodStart, periodEnd),
     [recs, periodStart, periodEnd]
   )
+
+  const rates = useMemo(() => derivedRates(recs, leadsTotal), [recs, leadsTotal])
 
   return (
     <div className="content db-page">
@@ -379,6 +398,53 @@ export function DashboardPage() {
                     {t.vn}
                   </div>
                   <div className="db-kpi-mini-lbl">Vendas</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="db-bento" style={{ gridTemplateColumns: '1fr', marginBottom: 20 }}>
+            <div className="db-card">
+              <div className="db-kpi-strip-title">Taxas e ticket médio</div>
+              <div
+                className="db-kpi-grid"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}
+              >
+                <div
+                  className="db-kpi-mini"
+                  title="Faturamento total ÷ número de vendas no período"
+                >
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--orange)' }}>
+                    {rates.ticketMedio != null ? fmt(rates.ticketMedio) : '—'}
+                  </div>
+                  <div className="db-kpi-mini-lbl">Ticket médio</div>
+                </div>
+                <div
+                  className="db-kpi-mini"
+                  title="Reuniões agendadas ÷ leads (SDR) no período"
+                >
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--accent2)' }}>
+                    {fmtPct(rates.leadParaReuniao)}
+                  </div>
+                  <div className="db-kpi-mini-lbl">Lead → reunião agendada</div>
+                </div>
+                <div
+                  className="db-kpi-mini"
+                  title="Reuniões realizadas ÷ reuniões agendadas"
+                >
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--green)' }}>
+                    {fmtPct(rates.taxaShow)}
+                  </div>
+                  <div className="db-kpi-mini-lbl">Taxa de show</div>
+                </div>
+                <div
+                  className="db-kpi-mini"
+                  title="Vendas ÷ reuniões realizadas"
+                >
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--amber)' }}>
+                    {fmtPct(rates.convVendas)}
+                  </div>
+                  <div className="db-kpi-mini-lbl">Conv. vendas (p/ realiz.)</div>
                 </div>
               </div>
             </div>
