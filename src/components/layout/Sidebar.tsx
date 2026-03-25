@@ -1,5 +1,9 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Filter,
   Handshake,
@@ -20,9 +24,43 @@ import {
 import { useAppStore } from '../../store/useAppStore'
 import { icNavStripe } from '../../lib/icon-sizes'
 
+const CONFIG_NAV_KEY = 'sidebar_config_nav_open'
+
+function loadConfigNavOpen(): boolean {
+  try {
+    const v = window.localStorage.getItem(CONFIG_NAV_KEY)
+    if (v === '0') return false
+    if (v === '1') return true
+  } catch {
+    /* ignore */
+  }
+  return true
+}
+
 export function Sidebar() {
   const navigate = useNavigate()
-  const { currentUser, openModal } = useAppStore()
+  const location = useLocation()
+  const { currentUser, openModal, sidebarCollapsed, setSidebarCollapsed } = useAppStore()
+  const [configNavOpen, setConfigNavOpen] = useState(loadConfigNavOpen)
+
+  const isConfigRoute = location.pathname === '/config' || location.pathname.startsWith('/config/')
+  const isAdmin = currentUser?.cargo === 'admin'
+
+  useEffect(() => {
+    if (isConfigRoute) setConfigNavOpen(true)
+  }, [isConfigRoute])
+
+  function toggleConfigNav() {
+    setConfigNavOpen((o) => {
+      const next = !o
+      try {
+        window.localStorage.setItem(CONFIG_NAV_KEY, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }
 
   function handleLogout() {
     useAppStore.getState().setCurrentUser(null)
@@ -31,7 +69,7 @@ export function Sidebar() {
 
   return (
     <div
-      className="sidebar-wrap"
+      className={`sidebar-wrap${sidebarCollapsed ? ' sidebar-wrap--collapsed' : ''}`}
       title="Menu — em ecrãs pequenos, passe o rato na margem esquerda para expandir"
     >
       <aside className="sidebar" aria-label="Menu principal de navegação">
@@ -40,62 +78,67 @@ export function Sidebar() {
             <div className="logo-icon" aria-hidden>
               <Zap size={20} strokeWidth={1.75} />
             </div>
-            <div>
+            <div className="logo-text-block">
               <div className="logo-text">Comercial</div>
               <div className="logo-sub">CRM Pro</div>
             </div>
+            <button
+              type="button"
+              className="sidebar-toggle"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-expanded={!sidebarCollapsed}
+              aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight size={18} strokeWidth={1.75} aria-hidden />
+              ) : (
+                <ChevronLeft size={18} strokeWidth={1.75} aria-hidden />
+              )}
+            </button>
           </div>
         </div>
 
-        <nav className="sidebar-nav" aria-label="Seções">
-          <div className="nav-group">
-            <div className="nav-sec">Início</div>
-            <NavLink to="/dashboard" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} end>
+        <nav className="sidebar-nav" aria-label="Menu principal">
+          <div className="nav-group nav-group--main">
+            <NavLink
+              to="/dashboard"
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title="Dashboard"
+              end
+            >
               <span className="nav-icon">
                 <LayoutDashboard {...icNavStripe} />
               </span>
               <span className="nav-label">Dashboard</span>
             </NavLink>
-          </div>
-
-          <div className="nav-group">
-            <div className="nav-sec">Mídia e captação</div>
-            <NavLink to="/meta-ads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+            <NavLink to="/meta-ads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Meta Ads">
               <span className="nav-icon">
                 <Megaphone {...icNavStripe} />
               </span>
               <span className="nav-label">Meta Ads</span>
             </NavLink>
-          </div>
-
-          <div className="nav-group">
-            <div className="nav-sec">Operação comercial</div>
-            <NavLink to="/registros" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+            <NavLink to="/registros" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Registros">
               <span className="nav-icon">
                 <ClipboardList {...icNavStripe} />
               </span>
               <span className="nav-label">Registros</span>
             </NavLink>
-            <NavLink to="/negociacoes" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+            <NavLink
+              to="/negociacoes"
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title="Negociações"
+            >
               <span className="nav-icon">
                 <Handshake {...icNavStripe} />
               </span>
               <span className="nav-label">Negociações</span>
             </NavLink>
-            {(currentUser?.cargo === 'admin' ||
-              currentUser?.cargo === 'sdr' ||
-              currentUser?.cargo === 'closer') && (
-              <NavLink to="/produtos" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-                <span className="nav-icon">
-                  <Package {...icNavStripe} />
-                </span>
-                <span className="nav-label">Produtos</span>
-              </NavLink>
-            )}
             {(currentUser?.cargo === 'admin' || currentUser?.cargo === 'closer') && (
               <NavLink
                 to="/propostas-fechamento"
                 className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                title="Propostas de fechamento"
               >
                 <span className="nav-icon">
                   <Link2 {...icNavStripe} />
@@ -103,27 +146,23 @@ export function Sidebar() {
                 <span className="nav-label">Propostas de fechamento</span>
               </NavLink>
             )}
-          </div>
-
-          <div className="nav-group">
-            <div className="nav-sec">Metas e funil</div>
-            <NavLink to="/funil" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+            <NavLink
+              to="/funil"
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title="Funil de conversão"
+            >
               <span className="nav-icon">
                 <Filter {...icNavStripe} />
               </span>
               <span className="nav-label">Funil de conversão</span>
             </NavLink>
-            <NavLink to="/metas" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+            <NavLink to="/metas" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Metas">
               <span className="nav-icon">
                 <Target {...icNavStripe} />
               </span>
               <span className="nav-label">Metas</span>
             </NavLink>
-          </div>
-
-          <div className="nav-group">
-            <div className="nav-sec">Rankings</div>
-            <NavLink to="/rankings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+            <NavLink to="/rankings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Classificação">
               <span className="nav-icon">
                 <Trophy {...icNavStripe} />
               </span>
@@ -131,28 +170,88 @@ export function Sidebar() {
             </NavLink>
           </div>
 
-          {currentUser?.cargo === 'admin' && (
+          {isAdmin && (
             <div className="nav-group nav-group--admin">
-              <div className="nav-sec">Administração</div>
-              <NavLink to="/usuarios" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-                <span className="nav-icon">
-                  <Users {...icNavStripe} />
-                </span>
-                <span className="nav-label">Usuários</span>
-              </NavLink>
-              <NavLink to="/squads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-                <span className="nav-icon">
-                  <UsersRound {...icNavStripe} />
-                </span>
-                <span className="nav-label">Squads</span>
-              </NavLink>
-              <NavLink to="/config" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-                <span className="nav-icon">
-                  <Settings {...icNavStripe} />
-                </span>
-                <span className="nav-label">Configurações</span>
-              </NavLink>
-              <NavLink to="/auditoria" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <div className={`nav-config-nest${configNavOpen ? ' nav-config-nest--open' : ''}`}>
+                <div
+                  className={`nav-config-nest-head${isConfigRoute ? ' nav-config-nest-head--active' : ''}`}
+                >
+                  <NavLink
+                    to="/config"
+                    className={() =>
+                      `nav-item nav-item--config-parent${isConfigRoute ? ' active' : ''}`
+                    }
+                    title="Configurações"
+                  >
+                    <span className="nav-icon">
+                      <Settings {...icNavStripe} />
+                    </span>
+                    <span className="nav-label">Configurações</span>
+                  </NavLink>
+                  <button
+                    type="button"
+                    className="nav-config-chevron"
+                    onClick={toggleConfigNav}
+                    aria-expanded={configNavOpen}
+                    aria-label={configNavOpen ? 'Recolher submenu de configurações' : 'Expandir submenu de configurações'}
+                  >
+                    <ChevronDown size={18} strokeWidth={1.75} aria-hidden />
+                  </button>
+                </div>
+                {configNavOpen && (
+                  <div className="nav-config-nest-children" role="group" aria-label="Itens de configuração">
+                    <NavLink
+                      to="/config/metas"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Configuração de metas"
+                    >
+                      <span className="nav-icon">
+                        <Target size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Metas</span>
+                    </NavLink>
+                    <NavLink
+                      to="/config/usuarios"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Usuários"
+                    >
+                      <span className="nav-icon">
+                        <Users size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Usuários</span>
+                    </NavLink>
+                    <NavLink
+                      to="/config/squads"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Squads"
+                    >
+                      <span className="nav-icon">
+                        <UsersRound size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Squads</span>
+                    </NavLink>
+                    <NavLink
+                      to="/config/produtos"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Produtos"
+                    >
+                      <span className="nav-icon">
+                        <Package size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Produtos</span>
+                    </NavLink>
+                  </div>
+                )}
+              </div>
+              <NavLink to="/auditoria" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Auditoria">
                 <span className="nav-icon">
                   <Search {...icNavStripe} />
                 </span>
@@ -167,7 +266,7 @@ export function Sidebar() {
             <div className={`user-avatar ${(currentUser?.cargo as string) || 'admin'}`}>
               {currentUser?.nome ? currentUser.nome.charAt(0).toUpperCase() : '?'}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="user-info-text">
               <div className="u-name">{currentUser?.nome ?? '—'}</div>
               <div className="u-role">{(currentUser?.cargo ?? '').toUpperCase()}</div>
             </div>

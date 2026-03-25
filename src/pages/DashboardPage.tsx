@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
-  Award,
   Banknote,
   BriefcaseBusiness,
   CalendarCheck,
@@ -11,18 +10,18 @@ import {
   CheckCircle2,
   CircleDollarSign,
   ClipboardList,
+  ChevronDown,
   Handshake,
   Package,
-  Target,
-  Trophy,
-  Wallet,
-  Percent
+  TrendingDown,
+  TrendingUp,
+  Wallet
 } from 'lucide-react'
-import { getRegistrosByRange, getMetasConfig, getProdutos, getLeadsSdrByRange } from '../firebase/firestore'
+import { getRegistrosByRange, getMetasConfig, getProdutos, getLeadsSdrRangeBundle } from '../firebase/firestore'
 import type { RegistroRow, MetasConfig, ProdutoRow } from '../firebase/firestore'
-import { ProjectionChart } from '../components/dashboard/ProjectionChart'
+import { UnifiedProjectionsChart, buildProjectionSeries } from '../components/dashboard/UnifiedProjectionsChart'
+import { DailyActivitySplineChart } from '../components/dashboard/DailyActivitySplineChart'
 import { metaPctParts } from '../utils/metaProgress'
-import { icLg } from '../lib/icon-sizes'
 import { smoothAreaUnderPath, smoothPathThrough } from '../lib/smooth-chart-path'
 
 function today(): string {
@@ -51,13 +50,6 @@ function wRange(): { start: string; end: string } {
 
 type Dp = 'hoje' | 'semana' | 'mes' | 'custom'
 
-function daysBetweenInclusive(start: string, end: string): number {
-  const s = new Date(start)
-  const e = new Date(end)
-  const diff = e.getTime() - s.getTime()
-  return diff >= 0 ? Math.floor(diff / (1000 * 60 * 60 * 24)) + 1 : 0
-}
-
 function dpRange(dp: Dp, customStart?: string, customEnd?: string): { start: string; end: string } {
   if (dp === 'hoje') return { start: today(), end: today() }
   if (dp === 'semana') return wRange()
@@ -83,9 +75,116 @@ function fmt(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
 }
 
+/** Símbolo da moeda menor + valor em destaque (layout tipo KPI SaaS). */
+function fmtCurrencyParts(v: number): { sym: string; num: string } {
+  const parts = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).formatToParts(Number(v) || 0)
+  let sym = 'R$'
+  let num = ''
+  for (const p of parts) {
+    if (p.type === 'currency') sym = p.value
+    else num += p.value
+  }
+  return { sym, num: num.trim() }
+}
+
+function fmtCountFormatted(n: number): string {
+  return new Intl.NumberFormat('pt-BR').format(Math.round(n))
+}
+
 function fmtPct(p: number | null): string {
   if (p == null || Number.isNaN(p)) return '—'
   return `${p.toFixed(1)}%`
+}
+
+type RecentSortKey = 'titulo' | 'userName' | 'tipo' | 'valor' | 'data'
+
+function tipoLabelRecent(r: RegistroRow): string {
+  switch (r.tipo) {
+    case 'reuniao_agendada':
+      return 'Agendada'
+    case 'reuniao_realizada':
+      return 'Realizada'
+    case 'reuniao_closer':
+      return 'Closer'
+    case 'venda':
+      return 'Venda'
+    default:
+      return r.tipo
+  }
+}
+
+function primaryTitleRecent(r: RegistroRow): string {
+  if (r.tipo === 'venda' && r.nomeCliente?.trim()) return r.nomeCliente.trim()
+  return tipoLabelRecent(r)
+}
+
+function subtitleRecent(r: RegistroRow): string {
+  if (r.tipo === 'venda' && r.nomeCliente?.trim()) return r.userName
+  const cargo = (r.userCargo || '').trim()
+  return cargo && cargo !== '—' ? `${r.userName} · ${cargo}` : r.userName
+}
+
+function userInitials(name: string): string {
+  const p = name.trim().split(/\s+/).filter(Boolean)
+  if (p.length === 0) return '?'
+  if (p.length === 1) return p[0].slice(0, 2).toUpperCase()
+  return `${p[0][0] ?? ''}${p[p.length - 1][0] ?? ''}`.toUpperCase() || '?'
+}
+
+function hueFromString(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360
+  return h
+}
+
+function formatRecentDate(iso: string): string {
+  if (!iso) return '—'
+  try {
+    return new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+  } catch {
+    return iso
+  }
+}
+
+function RecentSortTh({
+  label,
+  sortKey,
+  current,
+  onToggle
+}: {
+  label: string
+  sortKey: RecentSortKey
+  current: { key: RecentSortKey; dir: 'asc' | 'desc' }
+  onToggle: (k: RecentSortKey) => void
+}) {
+  const active = current.key === sortKey
+  return (
+    <th scope="col" className="db-recent-th">
+      <button
+        type="button"
+        className={`db-recent-sort-btn${active ? ' db-recent-sort-btn--active' : ''}`}
+        onClick={() => onToggle(sortKey)}
+        aria-sort={
+          active ? (current.dir === 'asc' ? 'ascending' : 'descending') : 'none'
+        }
+      >
+        <span>{label}</span>
+        <ChevronDown
+          size={14}
+          strokeWidth={2}
+          className="db-recent-sort-btn-ic"
+          aria-hidden
+          style={{
+            transform: active && current.dir === 'asc' ? 'rotate(180deg)' : undefined
+          }}
+        />
+      </button>
+    </th>
+  )
 }
 
 function derivedRates(recs: RegistroRow[], leadsTotal: number) {
@@ -183,13 +282,6 @@ const PIE_COLORS = [
   'rgba(234,179,8,.95)'
 ]
 
-function dbRankBadgeMod(idx: number): string {
-  if (idx === 0) return 'db-rank-badge--gold'
-  if (idx === 1) return 'db-rank-badge--silver'
-  if (idx === 2) return 'db-rank-badge--bronze'
-  return ''
-}
-
 function pieSlicePath(cx: number, cy: number, r: number, startFrac: number, endFrac: number): string {
   const tau = 2 * Math.PI
   const startRad = startFrac * tau - Math.PI / 2
@@ -230,6 +322,19 @@ export function DashboardPage() {
   const [periodEnd, setPeriodEnd] = useState('')
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
   const [leadsTotal, setLeadsTotal] = useState(0)
+  const [leadsByDay, setLeadsByDay] = useState<Record<string, number>>({})
+  const [recentSort, setRecentSort] = useState<{ key: RecentSortKey; dir: 'asc' | 'desc' }>({
+    key: 'data',
+    dir: 'desc'
+  })
+
+  const toggleRecentSort = useCallback((key: RecentSortKey) => {
+    setRecentSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: key === 'data' || key === 'valor' ? 'desc' : 'asc' }
+    )
+  }, [])
 
   const load = async () => {
     setLoading(true)
@@ -238,16 +343,17 @@ export function DashboardPage() {
       const { start, end } = dpRange(dp, customStart, customEnd)
       setPeriodStart(start)
       setPeriodEnd(end)
-      const [rows, mt, prods, leadsRows] = await Promise.all([
+      const [rows, mt, prods, leadsBundle] = await Promise.all([
         getRegistrosByRange(start, end),
         getMetasConfig(),
         getProdutos(),
-        getLeadsSdrByRange(start, end)
+        getLeadsSdrRangeBundle(start, end)
       ])
       setRecs(rows)
       setMetas(mt ?? {})
       setProdutos(prods)
-      setLeadsTotal(leadsRows.reduce((s, r) => s + r.quantidade, 0))
+      setLeadsTotal(leadsBundle.byUser.reduce((s, r) => s + r.quantidade, 0))
+      setLeadsByDay(leadsBundle.byDay)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar')
     } finally {
@@ -274,7 +380,64 @@ export function DashboardPage() {
     [recs, periodStart, periodEnd]
   )
 
+  const recentSorted = useMemo(() => {
+    const copy = [...recs]
+    const { key, dir } = recentSort
+    const m = dir === 'asc' ? 1 : -1
+    copy.sort((a, b) => {
+      switch (key) {
+        case 'data':
+          return m * a.data.localeCompare(b.data)
+        case 'valor':
+          return m * ((a.valor || 0) - (b.valor || 0))
+        case 'userName':
+          return m * a.userName.localeCompare(b.userName, 'pt-BR')
+        case 'tipo':
+          return m * a.tipo.localeCompare(b.tipo)
+        case 'titulo':
+          return m * primaryTitleRecent(a).localeCompare(primaryTitleRecent(b), 'pt-BR')
+        default:
+          return 0
+      }
+    })
+    return copy.slice(0, 14)
+  }, [recs, recentSort])
+
   const rates = useMemo(() => derivedRates(recs, leadsTotal), [recs, leadsTotal])
+
+  const projectionSeries = useMemo(
+    () =>
+      periodStart && periodEnd ? buildProjectionSeries(periodStart, periodEnd, recs, metas) : null,
+    [periodStart, periodEnd, recs, metas]
+  )
+
+  const activityDaily = useMemo(() => {
+    if (!periodStart || !periodEnd) return null
+    const days: string[] = []
+    const d = new Date(periodStart + 'T12:00:00')
+    const endD = new Date(periodEnd + 'T12:00:00')
+    while (d <= endD) {
+      days.push(d.toISOString().split('T')[0])
+      d.setDate(d.getDate() + 1)
+    }
+    const map = new Map<string, { ag: number; re: number; vn: number }>()
+    for (const r of recs) {
+      const dt = r.data || ''
+      if (!dt) continue
+      if (!map.has(dt)) map.set(dt, { ag: 0, re: 0, vn: 0 })
+      const o = map.get(dt)!
+      if (r.tipo === 'reuniao_agendada') o.ag += 1
+      else if (r.tipo === 'reuniao_realizada') o.re += 1
+      else if (r.tipo === 'venda') o.vn += 1
+    }
+    return {
+      dates: days,
+      leads: days.map((dt) => leadsByDay[dt] ?? 0),
+      ag: days.map((dt) => map.get(dt)?.ag ?? 0),
+      re: days.map((dt) => map.get(dt)?.re ?? 0),
+      vn: days.map((dt) => map.get(dt)?.vn ?? 0)
+    }
+  }, [recs, periodStart, periodEnd, leadsByDay])
 
   return (
     <div className="content db-page">
@@ -403,7 +566,8 @@ export function DashboardPage() {
             </div>
           </section>
 
-          <section className="db-bento" style={{ gridTemplateColumns: '1fr', marginBottom: 20 }}>
+          <div className="db-main-stack">
+          <section className="db-bento db-bento--single">
             <div className="db-card">
               <div className="db-kpi-strip-title">Taxas e ticket médio</div>
               <div
@@ -450,6 +614,7 @@ export function DashboardPage() {
             </div>
           </section>
 
+          <div className="db-section-block">
           <div className="db-section-title">Indicadores do período</div>
           <div className="db-stats-grid">
             {STATS.map((s) => {
@@ -457,268 +622,100 @@ export function DashboardPage() {
               const metaVal = metas[metaKeys[STATS.indexOf(s)] as keyof MetasConfig] as number | undefined
               const metaP =
                 metaVal != null && metaVal > 0 ? metaPctParts(Number(val), metaVal) : null
-              const display = s.money ? fmt(val) : String(val)
+              const cur = fmtCurrencyParts(Number(val))
+              const pillClass =
+                metaP == null
+                  ? 'db-stat-pill db-stat-pill--neutral'
+                  : metaP.rawPct >= 100
+                    ? 'db-stat-pill db-stat-pill--up'
+                    : metaP.rawPct >= 70
+                      ? 'db-stat-pill db-stat-pill--mid'
+                      : 'db-stat-pill db-stat-pill--down'
               return (
-                <div key={s.key} className={`stat-card ${s.col}`}>
-                  <div className="glow-dot" />
-                  <div className="stat-icon" aria-hidden>
-                    <s.Icon {...icLg} />
-                  </div>
-                  <div className={`stat-value${s.col === 'orange' ? ' v-orange' : ''}`}>
-                    {display}
-                  </div>
-                  <div className="stat-label">{s.label}</div>
-                  {metaVal != null && (
-                    <div className="stat-sub" style={{ marginTop: 4 }}>
-                      <span style={{ color: 'var(--text3)', fontSize: 11 }}>
-                        Meta: {s.money ? fmt(metaVal) : metaVal}
-                      </span>
-                      {metaP != null && (
-                        <div className="prog-wrap">
-                          <div className="prog-label">
-                            <span>Progresso</span>
-                            <span title={metaP.superacaoPct != null ? metaP.labelLong : undefined}>{metaP.labelShort}</span>
-                          </div>
-                          <div className="prog-bar">
-                            <div
-                              className={`prog-fill ${metaP.rawPct >= 100 ? 'green' : metaP.rawPct >= 70 ? 'orange' : metaP.rawPct >= 40 ? 'amber' : 'red'}`}
-                              style={{ width: `${metaP.barPct}%` }}
-                            />
-                          </div>
+                <div key={s.key} className={`db-stat-card db-stat-card--${s.col}`}>
+                  <div className="db-stat-card-inner">
+                    <div className="db-stat-ic-wrap" aria-hidden>
+                      <s.Icon size={20} strokeWidth={1.65} />
+                    </div>
+                    <div className="db-stat-body">
+                      <div className="db-stat-label">{s.label}</div>
+                      <div
+                        className="db-stat-value-row"
+                        title={s.money ? fmt(Number(val)) : fmtCountFormatted(Number(val))}
+                      >
+                        {s.money ? (
+                          <>
+                            <span className="db-stat-currency">{cur.sym}</span>
+                            <span className="db-stat-value-num">{cur.num}</span>
+                          </>
+                        ) : (
+                          <span className="db-stat-value-num">{fmtCountFormatted(Number(val))}</span>
+                        )}
+                      </div>
+                      {metaVal != null && metaVal > 0 && (
+                        <div
+                          className="db-stat-meta-line"
+                          title={`Meta: ${s.money ? fmt(metaVal) : String(metaVal)}`}
+                        >
+                          Meta {s.money ? fmt(metaVal) : metaVal}
                         </div>
                       )}
                     </div>
-                  )}
+                    <div className="db-stat-trend">
+                      {metaP != null ? (
+                        <span
+                          className={pillClass}
+                          title={metaP.superacaoPct != null ? metaP.labelLong : `Progresso: ${metaP.labelShort}`}
+                        >
+                          {metaP.rawPct >= 100 ? (
+                            <TrendingUp size={14} strokeWidth={2.25} className="db-stat-pill-ic" aria-hidden />
+                          ) : (
+                            <TrendingDown size={14} strokeWidth={2.25} className="db-stat-pill-ic" aria-hidden />
+                          )}
+                          <span className="db-stat-pill-txt">{metaP.labelShort}</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="db-stat-pill db-stat-pill--neutral"
+                          title={metaVal != null && metaVal > 0 ? 'Meta sem percentual válido' : 'Sem meta definida'}
+                        >
+                          <span className="db-stat-pill-txt">
+                            {metaVal != null && metaVal > 0 ? '—' : 'Sem meta'}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )
             })}
           </div>
-
-          {/* Projeções — gráficos de linha com acumulado diário + projeção tracejada */}
-          {periodStart && periodEnd && (
-            <>
-              <div className="db-section-title" style={{ marginTop: 8 }}>
-                Projeções
-              </div>
-              <div className="db-proj-grid mb">
-              {(() => {
-                const totalDays = daysBetweenInclusive(periodStart, periodEnd)
-                const todayStr = today()
-                const elapsedDays = Math.max(1, Math.min(daysBetweenInclusive(periodStart, todayStr), totalDays))
-                const factor = totalDays / elapsedDays
-
-                const projItems: Array<{
-                  key: string
-                  title: string
-                  TitleIcon: LucideIcon
-                  color: string
-                  tipos: string[]
-                  money?: boolean
-                  field?: 'valor' | 'cashCollected'
-                }> = [
-                  {
-                    key: 'ag',
-                    title: 'Projeção — Reuniões agendadas',
-                    TitleIcon: CalendarClock,
-                    color: 'var(--accent)',
-                    tipos: ['reuniao_agendada']
-                  },
-                  {
-                    key: 're',
-                    title: 'Projeção — Reuniões realizadas',
-                    TitleIcon: CheckCircle2,
-                    color: '#22c55e',
-                    tipos: ['reuniao_realizada']
-                  },
-                  {
-                    key: 'cl',
-                    title: 'Projeção — Reuniões closer',
-                    TitleIcon: Handshake,
-                    color: '#a855f7',
-                    tipos: ['reuniao_closer']
-                  },
-                  {
-                    key: 'vn',
-                    title: 'Projeção — Vendas',
-                    TitleIcon: BriefcaseBusiness,
-                    color: '#fbbf24',
-                    tipos: ['venda']
-                  },
-                  {
-                    key: 'ft',
-                    title: 'Projeção — Faturamento',
-                    TitleIcon: Wallet,
-                    color: '#22c55e',
-                    tipos: ['venda'],
-                    money: true,
-                    field: 'valor'
-                  },
-                  {
-                    key: 'ca',
-                    title: 'Projeção — Cash Collected',
-                    TitleIcon: Banknote,
-                    color: '#06b6d4',
-                    tipos: ['venda'],
-                    money: true,
-                    field: 'cashCollected'
-                  }
-                ]
-
-                const allDates: string[] = []
-                const d = new Date(periodStart + 'T12:00:00')
-                const endD = new Date(periodEnd + 'T12:00:00')
-                while (d <= endD) {
-                  allDates.push(d.toISOString().split('T')[0])
-                  d.setDate(d.getDate() + 1)
-                }
-
-                return projItems.map((pi) => {
-                  const metaKey =
-                    pi.key === 'ag'
-                      ? 'meta_reunioes_agendadas'
-                      : pi.key === 're'
-                        ? 'meta_reunioes_realizadas'
-                        : pi.key === 'cl'
-                          ? 'meta_reunioes_closer'
-                          : pi.key === 'vn'
-                            ? 'meta_vendas'
-                            : pi.key === 'ft'
-                              ? 'meta_faturamento'
-                              : 'meta_cash'
-                  const metaVal = metas[metaKey as keyof MetasConfig] as number | undefined
-
-                  const dailyMap = new Map<string, number>()
-                  for (const dt of allDates) dailyMap.set(dt, 0)
-                  for (const r of recs) {
-                    if (!pi.tipos.includes(r.tipo)) continue
-                    if (!dailyMap.has(r.data)) continue
-                    dailyMap.set(r.data, (dailyMap.get(r.data) ?? 0) + (pi.field ? (r[pi.field] || 0) : 1))
-                  }
-
-                  const cumulative: number[] = []
-                  let runSum = 0
-                  const realPoints: number[] = []
-                  for (let i = 0; i < allDates.length; i++) {
-                    runSum += dailyMap.get(allDates[i]) ?? 0
-                    cumulative.push(runSum)
-                    if (allDates[i] <= todayStr) realPoints.push(runSum)
-                  }
-
-                  const lastReal = realPoints.length > 0 ? realPoints[realPoints.length - 1] : 0
-                  const projected = Math.round(lastReal * factor)
-                  const fmtVal = (v: number) => pi.money ? fmt(v) : String(v)
-                  const fmtShort = (v: number) => {
-                    if (!pi.money) return String(v)
-                    if (v >= 1000) return `R$${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`
-                    return `R$${v}`
-                  }
-
-                  const dailyRate = realPoints.length > 0 ? lastReal / realPoints.length : 0
-                  const projectedCumulative = cumulative.map((v, i) => {
-                    if (i < realPoints.length) return v
-                    return Math.round(lastReal + dailyRate * (i - realPoints.length + 1))
-                  })
-
-                  return (
-                    <ProjectionChart
-                      key={pi.key}
-                      chartKey={pi.key}
-                      title={pi.title}
-                      TitleIcon={pi.TitleIcon}
-                      color={pi.color}
-                      realPoints={realPoints}
-                      projectedCumulative={projectedCumulative}
-                      allDates={allDates}
-                      projected={projected}
-                      fmtVal={fmtVal}
-                      fmtShort={fmtShort}
-                      metaVal={metaVal}
-                      money={pi.money}
-                    />
-                  )
-                })
-              })()}
-            </div>
-            </>
-          )}
-
-          {/* Quadro de progresso de todas as metas */}
-          <div className="db-card mb">
-            <div className="db-card-header">
-              <span className="db-card-title">
-                <Target size={14} strokeWidth={1.65} className="db-card-title-ic" />
-                Progresso de metas
-              </span>
-            </div>
-            <div className="db-card-body">
-              {metaKeys.length === 0 ? (
-                <div className="db-empty">
-                  <p>Sem metas configuradas</p>
-                </div>
-              ) : (
-                <div className="db-meta-list">
-                  {metaKeys.map((k) => {
-                    const alvo = metas[k] as number | undefined
-                    if (alvo == null || alvo <= 0) return null
-                    const atual =
-                      k === 'meta_reunioes_agendadas'
-                        ? t.ag
-                        : k === 'meta_reunioes_realizadas'
-                          ? t.re
-                          : k === 'meta_reunioes_closer'
-                            ? t.cl
-                            : k === 'meta_vendas'
-                              ? t.vn
-                              : k === 'meta_faturamento'
-                                ? t.ft
-                                : t.ca
-                    const mp = metaPctParts(Number(atual), alvo)
-                    const label =
-                      k === 'meta_reunioes_agendadas'
-                        ? 'Reuniões agendadas'
-                        : k === 'meta_reunioes_realizadas'
-                          ? 'Reuniões realizadas'
-                          : k === 'meta_reunioes_closer'
-                            ? 'Reuniões closer'
-                            : k === 'meta_vendas'
-                              ? 'Vendas'
-                              : k === 'meta_faturamento'
-                                ? 'Faturamento'
-                                : 'Cash collected'
-                    const isMoney = k === 'meta_faturamento' || k === 'meta_cash'
-                    return (
-                      <div key={k} className="db-meta-item">
-                        <div className="db-meta-head">
-                          <span className="db-meta-label">{label}</span>
-                          <span className="db-meta-vals">
-                            {isMoney ? fmt(atual) : atual} / {isMoney ? fmt(alvo) : alvo}
-                            <br />
-                            <span title={mp.superacaoPct != null ? mp.labelLong : undefined}>{mp.labelShort}</span>
-                          </span>
-                        </div>
-                        <div className="db-prog-track">
-                          <div
-                            className={`prog-fill ${mp.rawPct >= 100 ? 'green' : mp.rawPct >= 70 ? 'orange' : mp.rawPct >= 40 ? 'amber' : 'red'}`}
-                            style={{ width: `${mp.barPct}%` }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
           </div>
 
+          {/* Projeções — um quadro com alternância por métrica (mesmo padrão da atividade diária) */}
+          {periodStart && periodEnd && projectionSeries && projectionSeries.length > 0 && (
+            <div className="db-card">
+              <div className="db-card-header">
+                <span className="db-card-title">
+                  <TrendingUp size={14} strokeWidth={1.65} className="db-card-title-ic" />
+                  Projeções
+                </span>
+              </div>
+              <div className="db-card-body db-card-body--activity-spline">
+                <UnifiedProjectionsChart items={projectionSeries} />
+              </div>
+            </div>
+          )}
+
           {/* Produtos mais vendidos no período */}
-          <div className="db-card mb">
+          <div className="db-card">
             <div className="db-card-header">
               <span className="db-card-title">
                 <Package size={14} strokeWidth={1.65} className="db-card-title-ic" />
                 Produtos mais vendidos
               </span>
             </div>
-            <div className="db-card-body">
+            <div className="db-card-body db-card-body--activity-spline">
               {(() => {
                 const vendas = recs.filter((r) => r.tipo === 'venda')
                 if (!vendas.length) {
@@ -795,8 +792,13 @@ export function DashboardPage() {
                   }
                 })
                 return (
-                  <div className="db-prod-bento">
-                    <div className="db-donut-wrap">
+                  <div className="da-spline da-prod-panel">
+                    <p className="da-spline-subtitle da-prod-subtitle">
+                      Participação por quantidade vendida no período filtrado
+                    </p>
+                    <div className="da-spline-chart-wrap">
+                  <div className="db-prod-bento db-prod-bento--in-chart">
+                    <div className="db-donut-wrap db-donut-wrap--soft">
                     <svg
                       viewBox="0 0 180 180"
                       width={176}
@@ -830,31 +832,28 @@ export function DashboardPage() {
                       )}
                     </svg>
                     </div>
-                    <div className="db-prod-list">
-                      {slices.map((s, i) => {
-                        const tagCl = ['db-tag--orange', 'db-tag--green', 'db-tag--purple', 'db-tag--amber'][i % 4]
-                        return (
-                          <div key={s.id} className="db-list-row" style={{ marginBottom: 0 }}>
-                            <span className={`db-tag ${tagCl}`}>{s.pct}%</span>
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                              <div style={{ fontWeight: 700, lineHeight: 1.3, fontSize: 13 }}>{s.nome}</div>
-                              <div style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.45, marginTop: 4 }}>
+                    <div className="db-prod-list db-prod-list--soft">
+                      {slices.map((s) => (
+                          <div key={s.id} className="db-prod-row">
+                            <span className="db-prod-pct">{s.pct}%</span>
+                            <div className="db-prod-row-main">
+                              <div className="db-prod-name">{s.nome}</div>
+                              <div className="db-prod-meta">
                                 {s.qtd} unid. · {s.vendas} {s.vendas === 1 ? 'venda' : 'vendas'} · {fmt(s.total)}
                               </div>
                             </div>
                             <span
+                              className="db-prod-swatch"
                               style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: 99,
                                 background: s.color,
-                                flexShrink: 0,
-                                boxShadow: `0 0 10px ${s.color}`
+                                boxShadow: `0 0 8px ${s.color}55`
                               }}
+                              aria-hidden
                             />
                           </div>
-                        )
-                      })}
+                      ))}
+                    </div>
+                  </div>
                     </div>
                   </div>
                 )
@@ -862,354 +861,140 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* Atividade diária por data, separando agendadas, realizadas e vendas */}
-          <div className="db-card mb">
+          {/* Atividade diária — spline + filtro por série */}
+          <div className="db-card">
             <div className="db-card-header">
               <span className="db-card-title">
                 <Activity size={14} strokeWidth={1.65} className="db-card-title-ic" />
                 Atividade diária
               </span>
-              <div className="db-legend">
-                <span className="db-legend-item">
-                  <span className="db-legend-dot db-legend-dot--ag" /> Agendadas
-                </span>
-                <span className="db-legend-item">
-                  <span className="db-legend-dot db-legend-dot--re" /> Realizadas
-                </span>
-                <span className="db-legend-item">
-                  <span className="db-legend-dot db-legend-dot--vn" /> Vendas
-                </span>
-              </div>
             </div>
-            <div className="db-card-body">
-              {(() => {
-                if (!recs.length) {
-                  return (
-                    <div className="db-empty">
-                      <p>Sem atividade no período</p>
-                    </div>
-                  )
-                }
-                const map = new Map<string, { ag: number; re: number; cl: number; vn: number }>()
-                for (const r of recs) {
-                  const d = r.data || ''
-                  if (!d) continue
-                  if (!map.has(d)) map.set(d, { ag: 0, re: 0, cl: 0, vn: 0 })
-                  const obj = map.get(d)!
-                  if (r.tipo === 'reuniao_agendada') obj.ag += 1
-                  else if (r.tipo === 'reuniao_realizada') obj.re += 1
-                  else if (r.tipo === 'reuniao_closer') obj.cl += 1
-                  else if (r.tipo === 'venda') obj.vn += 1
-                }
-                const rows = Array.from(map.entries())
-                  .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-                  .slice(-14)
-                const maxVal = rows.length
-                  ? Math.max(
-                      ...rows.map(([, v]) => Math.max(v.ag, v.re, v.vn, 1)),
-                      1
-                    )
-                  : 1
-                return (
-                  <div className="db-activity-wrap">
-                    <div className="db-activity-chart">
-                      {rows.map(([d, v]) => {
-                        const label = d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : ''
-                        const hAg = (v.ag / maxVal) * 100
-                        const hRe = (v.re / maxVal) * 100
-                        const hVn = (v.vn / maxVal) * 100
-                        return (
-                          <div key={d} className="db-activity-col">
-                            <div className="db-activity-bars">
-                              <div
-                                className="db-activity-bar db-activity-bar--ag"
-                                style={{ height: `${hAg}%` }}
-                                title={`${v.ag} agendadas`}
-                              />
-                              <div
-                                className="db-activity-bar db-activity-bar--re"
-                                style={{ height: `${hRe}%` }}
-                                title={`${v.re} realizadas`}
-                              />
-                              <div
-                                className="db-activity-bar db-activity-bar--vn"
-                                style={{ height: `${hVn}%` }}
-                                title={`${v.vn} vendas`}
-                              />
-                            </div>
-                            <span className="db-activity-label">{label}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })()}
+            <div className="db-card-body db-card-body--activity-spline">
+              {activityDaily && activityDaily.dates.length > 0 ? (
+                <DailyActivitySplineChart
+                  dates={activityDaily.dates}
+                  leads={activityDaily.leads}
+                  agendadas={activityDaily.ag}
+                  realizadas={activityDaily.re}
+                  vendas={activityDaily.vn}
+                />
+              ) : (
+                <div className="db-empty">
+                  <p>Sem dados no período</p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Top SDRs, Closers e desconto por closer */}
-          <div className="db-split db-split--3col mb">
-            <div className="db-card">
-              <div className="db-card-header">
-                <span className="db-card-title">
-                  <Trophy size={14} strokeWidth={1.65} className="db-card-title-ic" />
-                  Top SDRs — Realizadas
-                </span>
-              </div>
-              {(() => {
-                const byUser = new Map<
-                  string,
-                  { id: string; nome: string; cargo: string; ag: number; re: number; vn: number }
-                >()
-                for (const r of recs) {
-                  const id = r.userId || r.userName
-                  if (!id) continue
-                  if (!byUser.has(id)) {
-                    byUser.set(id, {
-                      id,
-                      nome: r.userName || '—',
-                      cargo: r.userCargo || '',
-                      ag: 0,
-                      re: 0,
-                      vn: 0
-                    })
-                  }
-                  const u = byUser.get(id)!
-                  if (r.tipo === 'reuniao_agendada') u.ag += 1
-                  if (r.tipo === 'reuniao_realizada') u.re += 1
-                  if (r.tipo === 'venda') u.vn += 1
-                }
-                const rows = Array.from(byUser.values())
-                  .filter((u) => (u.cargo || '').toLowerCase() === 'sdr' && (u.re > 0 || u.ag > 0))
-                  .sort((a, b) => (b.re - a.re) || (b.ag - a.ag))
-                  .slice(0, 5)
-                if (!rows.length) {
-                  return (
-                    <div className="db-empty">
-                      <p>Sem dados de SDR no período</p>
-                    </div>
-                  )
-                }
-                return (
-                  <div className="db-rank-list">
-                    {rows.map((u, idx) => (
-                      <div key={u.id} className={`db-rank-row${idx === 0 ? ' db-rank-row--lead' : ''}`}>
-                        <span className={`db-rank-badge ${dbRankBadgeMod(idx)}`}>{idx + 1}</span>
-                        <div className="db-rank-main">
-                          <div className="db-rank-name">{u.nome}</div>
-                          {(() => {
-                            const noShowPct = u.ag > 0 ? Math.round(((u.ag - u.re) / u.ag) * 100) : null
-                            return (
-                              <div className="db-rank-meta">
-                                {u.re} realizadas · {u.ag} agendadas
-                                {noShowPct != null && <> · {noShowPct}% no-show</>}
-                              </div>
-                            )
-                          })()}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()}
-            </div>
-
-            <div className="db-card">
-              <div className="db-card-header">
-                <span className="db-card-title">
-                  <Award size={14} strokeWidth={1.65} className="db-card-title-ic" />
-                  Top Closers
-                </span>
-              </div>
-              {(() => {
-                const byUser = new Map<
-                  string,
-                  { id: string; nome: string; cargo: string; vn: number; ft: number; cl: number }
-                >()
-                for (const r of recs) {
-                  const id = r.userId || r.userName
-                  if (!id) continue
-                  if (!byUser.has(id)) {
-                    byUser.set(id, {
-                      id,
-                      nome: r.userName || '—',
-                      cargo: r.userCargo || '',
-                      vn: 0,
-                      ft: 0,
-                      cl: 0
-                    })
-                  }
-                  const u = byUser.get(id)!
-                  if (r.tipo === 'reuniao_closer') {
-                    u.cl += 1
-                  }
-                  if (r.tipo === 'venda') {
-                    u.vn += 1
-                    u.ft += r.valor || 0
-                  }
-                }
-                const rows = Array.from(byUser.values())
-                  .filter((u) => (u.cargo || '').toLowerCase() === 'closer' && (u.vn > 0 || u.ft > 0))
-                  .sort((a, b) => (b.ft - a.ft) || (b.vn - a.vn))
-                  .slice(0, 5)
-                if (!rows.length) {
-                  return (
-                    <div className="db-empty">
-                      <p>Sem dados de Closers no período</p>
-                    </div>
-                  )
-                }
-                return (
-                  <div className="db-rank-list">
-                    {rows.map((u, idx) => (
-                      <div key={u.id} className={`db-rank-row${idx === 0 ? ' db-rank-row--lead' : ''}`}>
-                        <span className={`db-rank-badge ${dbRankBadgeMod(idx)}`}>{idx + 1}</span>
-                        <div className="db-rank-main">
-                          <div className="db-rank-name">{u.nome}</div>
-                          {(() => {
-                            const convPct =
-                              u.cl > 0 ? Math.round((u.vn / u.cl) * 100) : null
-                            const ticket = u.vn > 0 ? u.ft / u.vn : 0
-                            return (
-                              <div className="db-rank-meta">
-                                {u.vn} vendas · {u.cl} reuniões · {convPct != null ? `${convPct}% conv.` : '—'}
-                                {u.vn > 0 && <> · TM: {fmt(ticket)}</>}
-                              </div>
-                            )
-                          })()}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()}
-            </div>
-
-            <div className="db-card">
-              <div className="db-card-header">
-                <span className="db-card-title">
-                  <Percent size={14} strokeWidth={1.65} className="db-card-title-ic" />
-                  Desconto por closer
-                </span>
-              </div>
-              {(() => {
-                const byUser = new Map<
-                  string,
-                  { id: string; nome: string; cargo: string; dc: number; vn: number }
-                >()
-                for (const r of recs) {
-                  if (r.tipo !== 'venda') continue
-                  const id = r.userId || r.userName
-                  if (!id) continue
-                  if (!byUser.has(id)) {
-                    byUser.set(id, {
-                      id,
-                      nome: r.userName || '—',
-                      cargo: r.userCargo || '',
-                      dc: 0,
-                      vn: 0
-                    })
-                  }
-                  const u = byUser.get(id)!
-                  u.vn += 1
-                  u.dc += r.descontoCloser ?? 0
-                }
-                const rows = Array.from(byUser.values())
-                  .filter((u) => (u.cargo || '').toLowerCase() === 'closer' && (u.dc > 0 || u.vn > 0))
-                  .sort((a, b) => (b.dc - a.dc) || (b.vn - a.vn))
-                  .slice(0, 5)
-                if (!rows.length) {
-                  return (
-                    <div className="db-empty">
-                      <p>Sem desconto registrado no período</p>
-                    </div>
-                  )
-                }
-                return (
-                  <div className="db-rank-list">
-                    {rows.map((u, idx) => (
-                      <div key={u.id} className={`db-rank-row${idx === 0 ? ' db-rank-row--lead' : ''}`}>
-                        <span className={`db-rank-badge ${dbRankBadgeMod(idx)}`}>{idx + 1}</span>
-                        <div className="db-rank-main">
-                          <div className="db-rank-name">{u.nome}</div>
-                          <div className="db-rank-meta">
-                            {fmt(u.dc)} em desconto · {u.vn} {u.vn === 1 ? 'venda' : 'vendas'}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()}
-            </div>
-          </div>
-
-          <div className="db-card mb" style={{ marginTop: 8 }}>
+          <div className="db-card db-card--recent-regs">
             <div className="db-card-header">
               <span className="db-card-title">
                 <ClipboardList size={14} strokeWidth={1.65} className="db-card-title-ic" />
                 Registros recentes
               </span>
             </div>
-            <div className="db-card-body" style={{ padding: '8px 4px 16px' }}>
+            <div className="db-card-body db-recent-body">
               {recs.length === 0 ? (
                 <div className="db-empty">
                   <p>Sem registros no período</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                  {recs.slice(0, 8).map((r) => {
-                    const tipoLabel =
-                      r.tipo === 'reuniao_agendada'
-                        ? 'Agendada'
-                        : r.tipo === 'reuniao_realizada'
-                          ? 'Realizada'
-                          : r.tipo === 'reuniao_closer'
-                            ? 'Closer'
-                            : 'Venda'
-                    const tagCl =
-                      r.tipo === 'reuniao_agendada'
-                        ? 'db-tag--orange'
-                        : r.tipo === 'reuniao_realizada'
-                          ? 'db-tag--green'
-                          : r.tipo === 'reuniao_closer'
-                            ? 'db-tag--purple'
-                            : 'db-tag--amber'
-                    const RegIcon: LucideIcon =
-                      r.tipo === 'reuniao_agendada'
-                        ? CalendarPlus
-                        : r.tipo === 'reuniao_realizada'
-                          ? CalendarCheck
-                          : r.tipo === 'reuniao_closer'
-                            ? Handshake
-                            : CircleDollarSign
-                    return (
-                      <div key={r.id} className="db-list-row">
-                        <div className="db-reg-icon" aria-hidden>
-                          <RegIcon size={18} strokeWidth={1.65} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 14, fontWeight: 700 }}>{r.userName}</span>
-                            <span className={`db-tag ${tagCl}`} style={{ fontSize: 9, padding: '3px 8px' }}>
-                              {tipoLabel}
-                            </span>
-                          </div>
-                          {r.tipo === 'venda' && r.nomeCliente ? (
-                            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>{r.nomeCliente}</div>
-                          ) : null}
-                        </div>
-                        {r.tipo === 'venda' && <span className="db-reg-val">{fmt(r.valor)}</span>}
-                        <span className="db-reg-date">
-                          {r.data ? `${r.data.slice(8, 10)}/${r.data.slice(5, 7)}/${r.data.slice(0, 4)}` : '—'}
-                        </span>
-                      </div>
-                    )
-                  })}
+                <div className="db-recent-panel">
+                  <div className="db-recent-table-wrap">
+                    <table className="db-recent-table">
+                      <thead>
+                        <tr>
+                          <RecentSortTh
+                            label="Registro"
+                            sortKey="titulo"
+                            current={recentSort}
+                            onToggle={toggleRecentSort}
+                          />
+                          <RecentSortTh
+                            label="Responsável"
+                            sortKey="userName"
+                            current={recentSort}
+                            onToggle={toggleRecentSort}
+                          />
+                          <RecentSortTh
+                            label="Tipo"
+                            sortKey="tipo"
+                            current={recentSort}
+                            onToggle={toggleRecentSort}
+                          />
+                          <RecentSortTh
+                            label="Valor"
+                            sortKey="valor"
+                            current={recentSort}
+                            onToggle={toggleRecentSort}
+                          />
+                          <RecentSortTh
+                            label="Data"
+                            sortKey="data"
+                            current={recentSort}
+                            onToggle={toggleRecentSort}
+                          />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentSorted.map((r) => {
+                          const RegIcon: LucideIcon =
+                            r.tipo === 'reuniao_agendada'
+                              ? CalendarPlus
+                              : r.tipo === 'reuniao_realizada'
+                                ? CalendarCheck
+                                : r.tipo === 'reuniao_closer'
+                                  ? Handshake
+                                  : CircleDollarSign
+                          const hue = hueFromString(r.userId || r.userName)
+                          return (
+                            <tr key={r.id} className="db-recent-row">
+                              <td className="db-recent-td db-recent-td--reg">
+                                <div className="db-recent-reg-cell">
+                                  <div className="db-recent-type-icon" aria-hidden>
+                                    <RegIcon size={17} strokeWidth={1.65} />
+                                  </div>
+                                  <div className="db-recent-reg-text">
+                                    <div className="db-recent-primary">{primaryTitleRecent(r)}</div>
+                                    <div className="db-recent-secondary">{subtitleRecent(r)}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="db-recent-td db-recent-td--user">
+                                <div className="db-recent-user-cell">
+                                  <span
+                                    className="db-recent-avatar"
+                                    style={{ ['--avatar-h' as string]: String(hue) } as CSSProperties}
+                                    aria-hidden
+                                  >
+                                    {userInitials(r.userName)}
+                                  </span>
+                                  <span className="db-recent-user-name">{r.userName}</span>
+                                </div>
+                              </td>
+                              <td className="db-recent-td db-recent-td--tipo">
+                                <span className="db-recent-tipo-text">{tipoLabelRecent(r)}</span>
+                              </td>
+                              <td className="db-recent-td db-recent-td--val">
+                                {r.tipo === 'venda' ? (
+                                  <span className="db-recent-val">{fmt(r.valor)}</span>
+                                ) : (
+                                  <span className="db-recent-val db-recent-val--empty">—</span>
+                                )}
+                              </td>
+                              <td className="db-recent-td db-recent-td--date">
+                                {formatRecentDate(r.data)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
+          </div>
           </div>
         </>
       )}

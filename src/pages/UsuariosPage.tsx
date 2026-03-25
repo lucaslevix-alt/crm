@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Pencil, Trash2, Users } from 'lucide-react'
 import { listUsers, deleteUser, updateUser } from '../firebase/firestore'
 import type { CrmUser } from '../store/useAppStore'
@@ -161,7 +162,10 @@ export function UsuariosPage() {
     <div className="content">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+          <Link to="/config" className="config-sub-back">
+            ← Configurações
+          </Link>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, marginTop: 10 }}>
             <Users size={24} strokeWidth={1.65} aria-hidden />
             Usuários
           </h2>

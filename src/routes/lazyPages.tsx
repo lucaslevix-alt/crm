@@ -34,7 +34,12 @@ export const UsuariosPage = lazy(() =>
 export const ProdutosPage = lazy(() =>
   import('../pages/ProdutosPage').then((m) => ({ default: m.ProdutosPage }))
 )
-export const ConfigPage = lazy(() => import('../pages/ConfigPage').then((m) => ({ default: m.ConfigPage })))
+export const ConfigHubPage = lazy(() =>
+  import('../pages/ConfigHubPage').then((m) => ({ default: m.ConfigHubPage }))
+)
+export const ConfigMetasPage = lazy(() =>
+  import('../pages/ConfigMetasPage').then((m) => ({ default: m.ConfigMetasPage }))
+)
 export const AuditoriaPage = lazy(() =>
   import('../pages/AuditoriaPage').then((m) => ({ default: m.AuditoriaPage }))
 )

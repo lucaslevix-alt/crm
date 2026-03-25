@@ -19,7 +19,15 @@ const ROUTE_TITLES: Record<string, string> = {
 }
 
 function getPageTitle(pathname: string): string {
-  const segment = pathname.replace(/^\//, '').split('/')[0] || 'dashboard'
+  const parts = pathname.replace(/^\//, '').split('/').filter(Boolean)
+  if (parts[0] === 'config') {
+    if (parts[1] === 'metas') return 'Configuração de metas'
+    if (parts[1] === 'usuarios') return 'Usuários'
+    if (parts[1] === 'squads') return 'Squads'
+    if (parts[1] === 'produtos') return 'Produtos'
+    return ROUTE_TITLES.config
+  }
+  const segment = parts[0] || 'dashboard'
   return ROUTE_TITLES[segment] ?? segment
 }
 

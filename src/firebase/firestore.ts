@@ -347,7 +347,13 @@ export interface LeadSdrRow {
   quantidade: number
 }
 
-export async function getLeadsSdrByRange(start: string, end: string): Promise<LeadSdrRow[]> {
+/** Agregação de leads SDR no intervalo: por usuário e por dia (YYYY-MM-DD). */
+export interface LeadsSdrRangeBundle {
+  byUser: LeadSdrRow[]
+  byDay: Record<string, number>
+}
+
+export async function getLeadsSdrRangeBundle(start: string, end: string): Promise<LeadsSdrRangeBundle> {
   const q = query(
     collection(db, 'leads_sdr'),
     where('data', '>=', start),
@@ -355,11 +361,16 @@ export async function getLeadsSdrByRange(start: string, end: string): Promise<Le
   )
   const snapshot = await getDocs(q)
   const byUser = new Map<string, { userName: string; quantidade: number }>()
+  const byDay = new Map<string, number>()
   snapshot.docs.forEach((d) => {
     const x = d.data()
     const uid = String(x.userId ?? '')
     const nome = String(x.userName ?? '—')
     const qtd = Number(x.quantidade ?? 0)
+    const dataStr = String(x.data ?? '')
+    if (dataStr) {
+      byDay.set(dataStr, (byDay.get(dataStr) ?? 0) + qtd)
+    }
     const cur = byUser.get(uid)
     if (cur) {
       cur.quantidade += qtd
@@ -367,11 +378,19 @@ export async function getLeadsSdrByRange(start: string, end: string): Promise<Le
       byUser.set(uid, { userName: nome, quantidade: qtd })
     }
   })
-  return Array.from(byUser.entries()).map(([userId, v]) => ({
-    userId,
-    userName: v.userName,
-    quantidade: v.quantidade
-  }))
+  return {
+    byUser: Array.from(byUser.entries()).map(([userId, v]) => ({
+      userId,
+      userName: v.userName,
+      quantidade: v.quantidade
+    })),
+    byDay: Object.fromEntries(byDay)
+  }
+}
+
+export async function getLeadsSdrByRange(start: string, end: string): Promise<LeadSdrRow[]> {
+  const b = await getLeadsSdrRangeBundle(start, end)
+  return b.byUser
 }
 
 export async function addUser(params: { nome: string; email: string; cargo: string; hasPassword?: boolean }): Promise<string> {

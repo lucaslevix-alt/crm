@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Package, Pencil, Trash2 } from 'lucide-react'
 import {
   getProdutos,
@@ -134,7 +135,10 @@ export function ProdutosPage() {
     <div className="content">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+          <Link to="/config" className="config-sub-back">
+            ← Configurações
+          </Link>
+          <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, marginTop: 10 }}>
             <Package size={24} strokeWidth={1.65} aria-hidden />
             Produtos
           </h2>

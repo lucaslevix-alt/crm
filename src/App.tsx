@@ -1,10 +1,11 @@
 import { Suspense } from 'react'
 import { Target } from 'lucide-react'
-import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, Navigate, Outlet } from 'react-router-dom'
 import { LoginPage } from './pages/LoginPage'
 import {
   AuditoriaPage,
-  ConfigPage,
+  ConfigHubPage,
+  ConfigMetasPage,
   DashboardPage,
   FunilPage,
   MetaAdsPage,
@@ -61,6 +62,10 @@ function ComercialProdutosRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function ConfigOutlet() {
+  return <Outlet />
+}
+
 export default function App() {
   return (
     <div className="text-sm text-[var(--text)] bg-[var(--bg)] min-h-screen app-root">
@@ -83,17 +88,44 @@ export default function App() {
               <Route path="ranking-sdr" element={<Navigate to="/rankings/sdr" replace />} />
               <Route path="ranking-closer" element={<Navigate to="/rankings/closer" replace />} />
               <Route path="ranking-squads" element={<Navigate to="/rankings/squads" replace />} />
-              <Route path="usuarios" element={<AdminOnlyRoute><UsuariosPage /></AdminOnlyRoute>} />
-              <Route path="squads" element={<AdminOnlyRoute><SquadsPage /></AdminOnlyRoute>} />
-              <Route
-                path="produtos"
-                element={
-                  <ComercialProdutosRoute>
-                    <ProdutosPage />
-                  </ComercialProdutosRoute>
-                }
-              />
-              <Route path="config" element={<ConfigPage />} />
+              <Route path="usuarios" element={<Navigate to="/config/usuarios" replace />} />
+              <Route path="squads" element={<Navigate to="/config/squads" replace />} />
+              <Route path="config" element={<ConfigOutlet />}>
+                <Route index element={<ConfigHubPage />} />
+                <Route
+                  path="metas"
+                  element={
+                    <AdminOnlyRoute>
+                      <ConfigMetasPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="usuarios"
+                  element={
+                    <AdminOnlyRoute>
+                      <UsuariosPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="squads"
+                  element={
+                    <AdminOnlyRoute>
+                      <SquadsPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="produtos"
+                  element={
+                    <ComercialProdutosRoute>
+                      <ProdutosPage />
+                    </ComercialProdutosRoute>
+                  }
+                />
+              </Route>
+              <Route path="produtos" element={<Navigate to="/config/produtos" replace />} />
               <Route path="auditoria" element={<AuditoriaPage />} />
               <Route path="negociacoes" element={<NegociacoesPage />} />
               <Route

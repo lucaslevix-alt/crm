@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Moon, Sun, Target } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { Moon, Sun, Target } from 'lucide-react'
 import { getMetasConfig, setMetasConfig, type MetasConfig } from '../firebase/firestore'
 import { useAppStore } from '../store/useAppStore'
 
-export function ConfigPage() {
+export function ConfigMetasPage() {
   const { showToast, themeMode, setThemeMode } = useAppStore()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -65,8 +65,13 @@ export function ConfigPage() {
   return (
     <div className="content">
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Configurações</h2>
-        <p style={{ color: 'var(--text2)' }}>Metas, produtos e parâmetros do sistema</p>
+        <Link to="/config" className="config-sub-back">
+          ← Configurações
+        </Link>
+        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, marginTop: 10 }}>
+          Configuração de metas
+        </h2>
+        <p style={{ color: 'var(--text2)' }}>Metas mensais globais e preferências de aparência</p>
       </div>
       {loading && (
         <div className="loading" style={{ padding: 24 }}>
@@ -79,11 +84,14 @@ export function ConfigPage() {
             <div className="card-header">
               <span className="card-title card-title--ic">
                 <Target size={16} strokeWidth={1.65} aria-hidden />
-                Metas Mensais
+                Metas mensais
               </span>
             </div>
             <form onSubmit={handleSaveMetas}>
-              <div className="fg2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16 }}>
+              <div
+                className="fg2"
+                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16 }}
+              >
                 <div className="fg">
                   <label htmlFor="cm-ag">Meta Reuniões Agendadas</label>
                   <input id="cm-ag" type="number" value={ag} onChange={(e) => setAg(e.target.value)} placeholder="80" />
@@ -110,19 +118,24 @@ export function ConfigPage() {
                 </div>
               </div>
               <button type="submit" className="btn btn-primary" style={{ marginTop: 12 }} disabled={saving}>
-                {saving ? 'Salvando...' : 'Salvar Metas'}
+                {saving ? 'Salvando...' : 'Salvar metas'}
               </button>
             </form>
           </div>
-          <div className="card mb">
+          <div className="card">
             <div className="card-header">
               <span className="card-title card-title--ic">
-                {themeMode === 'dark' ? <Sun size={16} strokeWidth={1.65} aria-hidden /> : <Moon size={16} strokeWidth={1.65} aria-hidden />}
+                {themeMode === 'dark' ? (
+                  <Sun size={16} strokeWidth={1.65} aria-hidden />
+                ) : (
+                  <Moon size={16} strokeWidth={1.65} aria-hidden />
+                )}
                 Aparência
               </span>
             </div>
             <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 14, lineHeight: 1.5 }}>
-              Modo claro com contraste de texto ajustado para leitura em ambientes iluminados. A preferência fica salva neste navegador.
+              Modo claro com contraste de texto ajustado para leitura em ambientes iluminados. A preferência fica salva neste
+              navegador.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
               <button
@@ -144,12 +157,6 @@ export function ConfigPage() {
                 Claro
               </button>
             </div>
-          </div>
-          <div className="card">
-            <div className="card-header">Navegação</div>
-            <Link to="/metas" className="btn btn-ghost btn-sm" style={{ marginTop: 8 }}>
-              ← Voltar para Metas
-            </Link>
           </div>
         </>
       )}

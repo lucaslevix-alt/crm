@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Pencil, Trash2, UsersRound } from 'lucide-react'
 import { listSquads, listUsers, addSquad, updateSquad, deleteSquad, type SquadRow } from '../firebase/firestore'
 import type { CrmUser } from '../store/useAppStore'
@@ -110,7 +111,10 @@ export function SquadsPage() {
   return (
     <div className="content">
       <div style={{ marginBottom: 20 }}>
-        <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
+        <Link to="/config" className="config-sub-back">
+          ← Configurações
+        </Link>
+        <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, marginTop: 10 }}>
           <UsersRound size={24} strokeWidth={1.65} aria-hidden />
           Squads
         </h2>

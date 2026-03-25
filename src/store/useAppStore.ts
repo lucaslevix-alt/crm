@@ -53,6 +53,8 @@ interface AppStoreState {
   fbConfig: FirebaseConfig | null
   themeMode: ThemeMode
   quickBarHidden: boolean
+  /** Apenas desktop (≥1040px): menu lateral ícone vs. etiquetas */
+  sidebarCollapsed: boolean
   activeModalId: string | null
   toast: ToastState
   registrosVersion: number
@@ -91,6 +93,7 @@ interface AppStoreState {
   setFbConfig: (config: FirebaseConfig | null) => void
   setThemeMode: (mode: ThemeMode) => void
   setQuickBarHidden: (hidden: boolean) => void
+  setSidebarCollapsed: (collapsed: boolean) => void
   openModal: (id: string) => void
   closeModal: () => void
   showToast: (message: string, variant?: ToastVariant) => void
@@ -102,6 +105,7 @@ interface AppStoreState {
 const CRM_USER_KEY = 'crm_user'
 const FB_CFG_KEY = 'fb_cfg'
 const QRB_KEY = 'qrb_hidden'
+const SIDEBAR_COLLAPSED_KEY = 'sidebar_collapsed'
 
 function loadUserFromStorage(): CrmUser | null {
   try {
@@ -132,11 +136,20 @@ function loadQuickBarHidden(): boolean {
   }
 }
 
+function loadSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export const useAppStore = create<AppStoreState>((set) => ({
   currentUser: typeof window !== 'undefined' ? loadUserFromStorage() : null,
   fbConfig: typeof window !== 'undefined' ? loadFbConfigFromStorage() : null,
   themeMode: typeof window !== 'undefined' ? getStoredTheme() : 'dark',
   quickBarHidden: typeof window !== 'undefined' ? loadQuickBarHidden() : false,
+  sidebarCollapsed: typeof window !== 'undefined' ? loadSidebarCollapsed() : false,
   activeModalId: null,
   toast: { message: null, variant: 'ok' },
   registrosVersion: 0,
@@ -180,6 +193,13 @@ export const useAppStore = create<AppStoreState>((set) => ({
       window.localStorage.setItem(QRB_KEY, hidden ? '1' : '0')
     }
     set({ quickBarHidden: hidden })
+  },
+
+  setSidebarCollapsed: (collapsed) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
+    }
+    set({ sidebarCollapsed: collapsed })
   },
 
   openModal: (id) => set({ activeModalId: id }),
