@@ -15,8 +15,9 @@ const tipoLabels: Record<string, string> = {
   reuniao_closer: 'Reunião closer'
 }
 
-function isSdrReuniaoTipo(tipo: string): boolean {
-  return tipo === 'reuniao_agendada' || tipo === 'reuniao_realizada'
+/** Grupo Wpp obrigatório só em "Realizei reunião" (SDR), não em "Agendei reunião". */
+function isRealizeiReuniaoSdr(tipo: string): boolean {
+  return tipo === 'reuniao_realizada'
 }
 
 export function QuickRegBar() {
@@ -41,7 +42,7 @@ export function QuickRegBar() {
         userName: currentUser.nome,
         userCargo: currentUser.cargo,
         anuncio: campanhaVal?.trim() || null,
-        grupoWpp: isSdrReuniaoTipo(tipo) ? grupoWppVal?.trim() || null : null
+        grupoWpp: isRealizeiReuniaoSdr(tipo) ? grupoWppVal?.trim() || null : null
       })
       const msg =
         tipo === 'reuniao_agendada'
@@ -65,11 +66,11 @@ export function QuickRegBar() {
 
   function confirmCampanha() {
     if (!pendingTipo) return
-    if (isSdrReuniaoTipo(pendingTipo) && !grupoWpp.trim()) {
+    if (isRealizeiReuniaoSdr(pendingTipo) && !grupoWpp.trim()) {
       useAppStore.getState().showToast('Informe o grupo de WhatsApp', 'err')
       return
     }
-    quickReg(pendingTipo, campanha, isSdrReuniaoTipo(pendingTipo) ? grupoWpp : null)
+    quickReg(pendingTipo, campanha, isRealizeiReuniaoSdr(pendingTipo) ? grupoWpp : null)
     setPendingTipo(null)
     setCampanha('')
     setGrupoWpp('')
@@ -171,7 +172,7 @@ export function QuickRegBar() {
                     className="qrb-meet-input"
                     value={campanha}
                     onChange={(e) => setCampanha(e.target.value)}
-                    autoFocus={!isSdrReuniaoTipo(pendingTipo)}
+                    autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') confirmCampanha()
                     }}
@@ -179,7 +180,7 @@ export function QuickRegBar() {
                     autoComplete="off"
                   />
                 </div>
-                {isSdrReuniaoTipo(pendingTipo) && (
+                {isRealizeiReuniaoSdr(pendingTipo) && (
                   <div className="qrb-meet-field">
                     <label htmlFor="qrb-grupo-wpp">
                       Grupo Wpp <span className="qrb-meet-req">*</span>
@@ -190,7 +191,6 @@ export function QuickRegBar() {
                       className="qrb-meet-input"
                       value={grupoWpp}
                       onChange={(e) => setGrupoWpp(e.target.value)}
-                      autoFocus
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') confirmCampanha()
                       }}
@@ -208,7 +208,7 @@ export function QuickRegBar() {
                   type="button"
                   className="qrb-meet-btn qrb-meet-btn--primary"
                   onClick={confirmCampanha}
-                  disabled={isSdrReuniaoTipo(pendingTipo) && !grupoWpp.trim()}
+                  disabled={isRealizeiReuniaoSdr(pendingTipo) && !grupoWpp.trim()}
                 >
                   OK
                 </button>

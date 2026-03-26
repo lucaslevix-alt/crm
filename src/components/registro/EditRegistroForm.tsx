@@ -120,7 +120,8 @@ export function EditRegistroForm() {
   }
 
   const isVenda = tipo === 'venda'
-  const isSdrReuniao = tipo === 'reuniao_agendada' || tipo === 'reuniao_realizada'
+  /** Grupo Wpp só em "Reunião realizada" (SDR). */
+  const needsGrupoWpp = tipo === 'reuniao_realizada'
   const linhasById = useMemo(() => new Map(linhas.map((l) => [l.id, l])), [linhas])
   const idealPorProduto = useMemo(() => idealLinePorProduto(linhas), [linhas])
 
@@ -161,7 +162,7 @@ export function EditRegistroForm() {
       showToast('Selecione a forma de pagamento', 'err')
       return
     }
-    if (isSdrReuniao && !grupoWpp.trim()) {
+    if (needsGrupoWpp && !grupoWpp.trim()) {
       showToast('Informe o grupo de WhatsApp', 'err')
       return
     }
@@ -193,7 +194,7 @@ export function EditRegistroForm() {
         userName: u?.nome ?? '—',
         userCargo: u?.cargo ?? '—',
         anuncio: anuncio.trim() || null,
-        grupoWpp: isSdrReuniao ? grupoWpp.trim() || null : null,
+        grupoWpp: needsGrupoWpp ? grupoWpp.trim() || null : null,
         valor: valorNum,
         cashCollected: tipo === 'venda' ? parseFloat(cashCollected) || 0 : 0,
         formaPagamento: tipo === 'venda' ? parseFormaPagamentoVenda(formaPagamento) : null,
@@ -258,7 +259,7 @@ export function EditRegistroForm() {
             <label>Campanha (Meta Ads)</label>
             <input type="text" className="di" value={anuncio} onChange={(e) => setAnuncio(e.target.value)} placeholder="Ex: Nome da Campanha" />
           </div>
-          {isSdrReuniao && (
+          {needsGrupoWpp && (
             <div className="fg">
               <label>Grupo Wpp *</label>
               <input

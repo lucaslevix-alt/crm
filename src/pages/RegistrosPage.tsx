@@ -316,14 +316,14 @@ export function RegistrosPage() {
                           </span>
                         </td>
                         <td>
-                          {r.anuncio || r.grupoWpp ? (
+                          {r.anuncio || (r.tipo === 'reuniao_realizada' && r.grupoWpp) ? (
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                               {r.anuncio ? (
                                 <span className="chip" title={r.anuncio}>
                                   {r.anuncio}
                                 </span>
                               ) : null}
-                              {r.grupoWpp ? (
+                              {r.tipo === 'reuniao_realizada' && r.grupoWpp ? (
                                 <span className="chip" title={r.grupoWpp} style={{ borderColor: 'rgba(34,197,94,.35)', color: 'var(--green)' }}>
                                   Wpp: {r.grupoWpp}
                                 </span>
