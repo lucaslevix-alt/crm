@@ -22,8 +22,10 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 
-# Env
+# Env — nunca commitar segredos (Vite expõe VITE_* no bundle)
 .env
+.env.*
+!.env.example
 .env.local
 .env.*.local
 
