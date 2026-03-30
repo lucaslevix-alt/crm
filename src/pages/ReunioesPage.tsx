@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CalendarClock, Handshake, RefreshCw } from 'lucide-react'
 import { getRegistrosCloserByRange, type AgendaReuniaoRow } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { today, wRange } from '../lib/dates'
 import { useAppStore } from '../store/useAppStore'
 
@@ -41,7 +42,7 @@ export function ReunioesPage() {
       if (period === 'pendentes') rows = rows.filter((r) => r.data >= today())
       setRecs(rows)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setRecs([])
     } finally {
       setLoading(false)

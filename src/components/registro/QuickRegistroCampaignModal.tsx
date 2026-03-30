@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Banknote, CalendarClock, Handshake } from 'lucide-react'
 import { addRegistro } from '../../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import { useAppStore } from '../../store/useAppStore'
 
 const SKIP_KEY = 'quick_reg_campaign_skip'
@@ -98,7 +99,7 @@ export function QuickRegistroCampaignModal() {
       setQuickRegistroPrompt(null)
       closeModal()
     } catch (err) {
-      showToast(`Erro: ${err instanceof Error ? err.message : String(err)}`, 'err')
+      showToast(`Erro: ${formatFirebaseOrUnknownError(err)}`, 'err')
     } finally {
       setSaving(false)
     }
@@ -113,7 +114,7 @@ export function QuickRegistroCampaignModal() {
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>{quickRegistroPrompt.title}</div>
           <div style={{ color: 'var(--text2)', marginTop: 4 }}>
-            Campanha Meta Ads do lead (opcional - deixe vazio para pular):
+            Origem do lead (opcional — deixe vazio para ignorar):
           </div>
         </div>
       </div>
@@ -123,7 +124,7 @@ export function QuickRegistroCampaignModal() {
           className="di"
           value={anuncio}
           onChange={(event) => setAnuncio(event.target.value)}
-          placeholder="Ex: Campanha Meta Ads"
+          placeholder="Ex: Meta Ads, indicação, evento…"
           autoFocus
         />
       </div>

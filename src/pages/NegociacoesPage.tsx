@@ -20,6 +20,7 @@ import {
   produtoValorCartaoEfetivo,
   type ProdutoRow
 } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 
 interface LinhaNegociacao {
   uid: string
@@ -107,7 +108,7 @@ export function NegociacoesPage() {
       const list = await getProdutos()
       setProdutos(list)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setProdutos([])
     } finally {
       setLoading(false)

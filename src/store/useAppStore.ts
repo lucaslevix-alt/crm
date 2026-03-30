@@ -51,6 +51,8 @@ export interface EditingRegistroRow {
 
 interface AppStoreState {
   currentUser: CrmUser | null
+  /** Primeiro evento onAuthStateChanged já correu (evita flash / bypass com localStorage) */
+  authSessionReady: boolean
   fbConfig: FirebaseConfig | null
   themeMode: ThemeMode
   quickBarHidden: boolean
@@ -79,6 +81,7 @@ interface AppStoreState {
   setQuickRegistroPrompt: (p: { tipo: string; title: string; mode: 'modal' | 'save' } | null) => void
   setNewRegistroDefaults: (d: { tipo?: string; anuncio?: string } | null) => void
   setCurrentUser: (user: CrmUser | null) => void
+  setAuthSessionReady: (ready: boolean) => void
   setMetaConnectedAt: (ts: number) => void
   setEditingUser: (u: CrmUser | null) => void
   incrementUsersVersion: () => void
@@ -108,17 +111,8 @@ const FB_CFG_KEY = 'fb_cfg'
 const QRB_KEY = 'qrb_hidden'
 const SIDEBAR_COLLAPSED_KEY = 'sidebar_collapsed'
 
-function loadUserFromStorage(): CrmUser | null {
-  try {
-    const raw = window.localStorage.getItem(CRM_USER_KEY)
-    if (!raw) return null
-    return JSON.parse(raw) as CrmUser
-  } catch {
-    return null
-  }
-}
-
 function loadFbConfigFromStorage(): FirebaseConfig | null {
+  if (typeof window === 'undefined' || !import.meta.env.DEV) return null
   try {
     const raw = window.localStorage.getItem(FB_CFG_KEY)
     if (!raw) return null
@@ -146,7 +140,8 @@ function loadSidebarCollapsed(): boolean {
 }
 
 export const useAppStore = create<AppStoreState>((set) => ({
-  currentUser: typeof window !== 'undefined' ? loadUserFromStorage() : null,
+  currentUser: null,
+  authSessionReady: false,
   fbConfig: typeof window !== 'undefined' ? loadFbConfigFromStorage() : null,
   themeMode: typeof window !== 'undefined' ? getStoredTheme() : 'dark',
   quickBarHidden: typeof window !== 'undefined' ? loadQuickBarHidden() : false,
@@ -169,11 +164,12 @@ export const useAppStore = create<AppStoreState>((set) => ({
 
   setCurrentUser: (user) => {
     if (typeof window !== 'undefined') {
-      if (user) window.localStorage.setItem(CRM_USER_KEY, JSON.stringify(user))
-      else window.localStorage.removeItem(CRM_USER_KEY)
+      window.localStorage.removeItem(CRM_USER_KEY)
     }
     set({ currentUser: user })
   },
+
+  setAuthSessionReady: (ready) => set({ authSessionReady: ready }),
 
   setFbConfig: (config) => {
     if (typeof window !== 'undefined') {

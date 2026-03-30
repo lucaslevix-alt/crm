@@ -10,9 +10,17 @@ import {
   produtoPrecoReferencia
 } from '../../firebase/firestore'
 import type { LinhaNegociacaoRow, ProdutoRow } from '../../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import type { CrmUser } from '../../store/useAppStore'
 import { useAppStore } from '../../store/useAppStore'
-import { computeDescontoVenda, idealLinePorProduto } from '../../lib/vendaDesconto'
+import { computeDescontoVenda } from '../../lib/vendaDesconto'
+import {
+  buildLinhasByIdParaVenda,
+  idealPorProdutoFromProdutos,
+  labelLinhaVendaSelect,
+  linhaVirtualId,
+  opcoesLinhaDropdown
+} from '../../lib/produtoLinhasVenda'
 
 interface ProdutoSelecionadoItem {
   uid: string
@@ -23,18 +31,6 @@ interface ProdutoSelecionadoItem {
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
-}
-
-function fmtBrl(v: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
-}
-
-function labelLinhaNegociacao(l: LinhaNegociacaoRow): string {
-  const nome = l.rotulo?.trim() || `Proposta ${l.ordem + 1}`
-  const av =
-    l.valorAVista != null && l.valorAVista > 0 ? fmtBrl(l.valorAVista) : 'av. —'
-  const parc = fmtBrl(l.valorTotal)
-  return `${nome} · ${av} · parc. ${parc}`
 }
 
 export function NewRegistroForm() {
@@ -90,8 +86,11 @@ export function NewRegistroForm() {
   /** Grupo Wpp só em "Reunião realizada" (SDR), não em agendada. */
   const needsGrupoWpp = tipo === 'reuniao_realizada'
 
-  const linhasById = useMemo(() => new Map(linhas.map((l) => [l.id, l])), [linhas])
-  const idealPorProduto = useMemo(() => idealLinePorProduto(linhas), [linhas])
+  const linhasById = useMemo(
+    () => buildLinhasByIdParaVenda(produtos, linhas),
+    [produtos, linhas]
+  )
+  const idealPorProduto = useMemo(() => idealPorProdutoFromProdutos(produtos), [produtos])
 
   const descontoPreview = useMemo(() => {
     if (!isVenda) return null
@@ -125,20 +124,15 @@ export function NewRegistroForm() {
     ])
   }
 
-  function linhasDoProduto(produtoId: string) {
-    return linhas.filter((l) => l.produtoId === produtoId)
-  }
-
   function updateProdutoItem(uid: string, key: 'produtoId' | 'quantidade' | 'linhaNegociacaoId', value: string) {
     setProdutoItems((current) =>
       current.map((item) => {
         if (item.uid !== uid) return item
         if (key === 'produtoId') {
-          const opts = linhas.filter((l) => l.produtoId === value)
           return {
             ...item,
             produtoId: value,
-            linhaNegociacaoId: opts[0]?.id ?? ''
+            linhaNegociacaoId: value ? linhaVirtualId(value, 'preco_tabela') : ''
           }
         }
         return { ...item, [key]: value }
@@ -190,7 +184,7 @@ export function NewRegistroForm() {
         ? computeDescontoVenda({
             produtosDetalhes,
             linhasById,
-            idealPorProduto: idealLinePorProduto(linhas),
+            idealPorProduto,
             formaPagamento: parseFormaPagamentoVenda(formaPagamento)!
           })
         : { valorReferencia: 0, desconto: 0 }
@@ -220,7 +214,7 @@ export function NewRegistroForm() {
       closeModal()
       resetFields()
     } catch (err) {
-      showToast('Erro: ' + (err instanceof Error ? err.message : String(err)), 'err')
+      showToast('Erro: ' + formatFirebaseOrUnknownError(err), 'err')
     } finally {
       setSaving(false)
     }
@@ -265,13 +259,13 @@ export function NewRegistroForm() {
             </select>
           </div>
           <div className="fg">
-            <label>Campanha (Meta Ads)</label>
+            <label>Origem do lead</label>
             <input
               type="text"
               className="di"
               value={anuncio}
               onChange={(e) => setAnuncio(e.target.value)}
-              placeholder="Ex: Nome da Campanha"
+              placeholder="Ex: Meta Ads, indicação, evento…"
             />
           </div>
           {needsGrupoWpp && (
@@ -343,7 +337,8 @@ export function NewRegistroForm() {
                 <label>Produtos (opcional)</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {produtoItems.map((item, index) => {
-                    const opts = item.produtoId ? linhasDoProduto(item.produtoId) : []
+                    const pSel = produtos.find((x) => x.id === item.produtoId)
+                    const opts = opcoesLinhaDropdown(pSel, item.linhaNegociacaoId, linhas)
                     return (
                       <div
                         key={item.uid}
@@ -386,12 +381,12 @@ export function NewRegistroForm() {
                           value={item.linhaNegociacaoId}
                           onChange={(e) => updateProdutoItem(item.uid, 'linhaNegociacaoId', e.target.value)}
                           disabled={!item.produtoId}
-                          title="Linha em que o cliente fechou (ideal ou com desconto). O desconto é a diferença para a linha marcada como ideal no produto."
+                          title="Oferta em que o cliente fechou. A referência (ideal) é sempre o preço de tabela; o desconto do closer compara com essa referência."
                         >
-                          <option value="">{item.produtoId ? 'Linha em que fechou' : '—'}</option>
+                          <option value="">{item.produtoId ? 'Oferta em que fechou' : '—'}</option>
                           {opts.map((l) => (
                             <option key={l.id} value={l.id}>
-                              {labelLinhaNegociacao(l)}
+                              {labelLinhaVendaSelect(l)}
                             </option>
                           ))}
                         </select>
@@ -419,9 +414,9 @@ export function NewRegistroForm() {
                   </div>
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-                  Cada linha tem preço <strong>à vista</strong> e <strong>parcelado</strong>. A <strong>forma de
-                  pagamento</strong> desta venda define qual deles entra no desconto (À vista = compara à vista; cartão
-                  ou boleto = compara total parcelado). O valor do campo “Valor da venda” segue sendo o faturamento.
+                  As quatro opções vêm do cadastro do produto (tabela, oferta, última condição, carta na manga). A{' '}
+                  <strong>forma de pagamento</strong> define se o desconto usa <strong>à vista</strong> ou{' '}
+                  <strong>total parcelado</strong>. O campo “Valor da venda” é o faturamento.
                 </p>
                 {descontoPreview && descontoPreview.valorReferencia > 0 && (
                   <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 6 }}>

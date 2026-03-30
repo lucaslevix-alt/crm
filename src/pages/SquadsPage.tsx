@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Pencil, Trash2, UsersRound } from 'lucide-react'
 import { listSquads, listUsers, addSquad, updateSquad, deleteSquad, type SquadRow } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import type { CrmUser } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
 
@@ -32,7 +33,7 @@ export function SquadsPage() {
       setSquads(s)
       setUsers(u)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setSquads([])
     } finally {
       setLoading(false)
@@ -85,7 +86,7 @@ export function SquadsPage() {
       resetForm()
       await load()
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Erro ao salvar', 'err')
+      showToast(formatFirebaseOrUnknownError(err) || 'Erro ao salvar', 'err')
     } finally {
       setSaving(false)
     }
@@ -99,7 +100,7 @@ export function SquadsPage() {
       showToast('Squad removido.')
       await load()
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Erro ao remover', 'err')
+      showToast(formatFirebaseOrUnknownError(err) || 'Erro ao remover', 'err')
     }
   }
 

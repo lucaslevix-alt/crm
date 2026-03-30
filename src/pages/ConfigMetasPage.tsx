@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Moon, Sun, Target } from 'lucide-react'
 import { getMetasConfig, setMetasConfig, type MetasConfig } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { useAppStore } from '../store/useAppStore'
 
 export function ConfigMetasPage() {
@@ -16,7 +17,7 @@ export function ConfigMetasPage() {
       const m = await getMetasConfig()
       setMetas(m)
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Erro ao carregar', 'err')
+      showToast(formatFirebaseOrUnknownError(err) || 'Erro ao carregar', 'err')
     } finally {
       setLoading(false)
     }
@@ -56,7 +57,7 @@ export function ConfigMetasPage() {
       })
       showToast('Metas salvas!')
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Erro ao salvar', 'err')
+      showToast(formatFirebaseOrUnknownError(err) || 'Erro ao salvar', 'err')
     } finally {
       setSaving(false)
     }

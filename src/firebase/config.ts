@@ -14,7 +14,8 @@ function loadConfigFromLocalStorage(): FirebaseConfig | null {
 }
 
 function buildConfig(): FirebaseOptions {
-  if (typeof window !== 'undefined') {
+  /** Só em dev: `fb_cfg` no localStorage poderia apontar para outro projeto (phishing / dados em servidor errado). */
+  if (typeof window !== 'undefined' && import.meta.env.DEV) {
     const stored = loadConfigFromLocalStorage()
     if (stored && stored.apiKey && stored.projectId) {
       return stored

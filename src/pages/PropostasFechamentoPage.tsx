@@ -1,28 +1,30 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link2 } from 'lucide-react'
-import { getProdutos, getLinhasNegociacaoAll, type ProdutoRow, type LinhaNegociacaoRow } from '../firebase/firestore'
-import { LinhasNegociacaoProdutoBlock } from '../components/produto/LinhasNegociacaoProdutoBlock'
+import { Fragment, useCallback, useEffect, useState } from 'react'
+import { ChevronDown, ChevronRight, Link2 } from 'lucide-react'
+import { getProdutos, type ProdutoRow } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { ProdutoQuatroLinhasPanel } from '../components/produto/ProdutoQuatroLinhasPanel'
 import { useAppStore } from '../store/useAppStore'
+import { resumoBlocoCondicao, resumoBlocoTabela } from '../lib/produtoResumo'
+
+const COL_COUNT = 7
 
 export function PropostasFechamentoPage() {
   const { currentUser } = useAppStore()
   const podeEditar = currentUser?.cargo === 'admin'
   const [loading, setLoading] = useState(true)
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
-  const [linhas, setLinhas] = useState<LinhaNegociacaoRow[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [prods, lns] = await Promise.all([getProdutos(), getLinhasNegociacaoAll()])
+      const prods = await getProdutos()
       setProdutos(prods)
-      setLinhas(lns)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setProdutos([])
-      setLinhas([])
     } finally {
       setLoading(false)
     }
@@ -32,14 +34,14 @@ export function PropostasFechamentoPage() {
     load()
   }, [load])
 
-  const linhasPorProduto = useMemo(() => {
-    const m = new Map<string, LinhaNegociacaoRow[]>()
-    for (const l of linhas) {
-      if (!m.has(l.produtoId)) m.set(l.produtoId, [])
-      m.get(l.produtoId)!.push(l)
-    }
-    return m
-  }, [linhas])
+  function toggleExpand(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div className="content">
@@ -48,52 +50,40 @@ export function PropostasFechamentoPage() {
           <Link2 size={24} strokeWidth={1.65} aria-hidden />
           Propostas de fechamento
         </h2>
-        <p style={{ color: 'var(--text2)', maxWidth: 720 }}>
+        <p style={{ color: 'var(--text2)', maxWidth: 760 }}>
           {podeEditar ? (
             <>
-              Cada linha tem <strong>dois preços</strong>: <strong>à vista</strong> e <strong>parcelado</strong> (total +
-              parcelas), <strong>bônus</strong> opcional e <strong>link de pagamento</strong>. Marque <strong>uma</strong>{' '}
-              linha como <strong>preço ideal</strong>; as outras são <strong>com desconto</strong>. O mesmo cadastro pode
-              ser feito em <strong>Produtos</strong> ao expandir cada item.
+              Cada produto tem <strong>quatro ofertas</strong> cadastradas em <strong>Produtos</strong> (preço de tabela,
+              oferta promocional, última condição, carta na manga). São essas as <strong>linhas de negociação</strong>.
+              Expanda para ver valores, bônus e links. Para editar, use <strong>Produtos</strong> → Editar.
             </>
           ) : (
             <>
-              Visualize as propostas cadastradas e use <strong>Abrir</strong> ou <strong>Copiar</strong> no link de
-              pagamento no cartão. Apenas administradores alteram ou criam linhas.
+              Resumo das quatro ofertas por produto. Use <strong>Expandir</strong> para ver detalhes e{' '}
+              <strong>Abrir</strong> / <strong>Copiar</strong> nos links de pagamento.
             </>
           )}
         </p>
-        {podeEditar && (
-          <div
-            className="card"
-            style={{
-              marginTop: 14,
-              padding: '14px 16px',
-              maxWidth: 720,
-              background: 'var(--bg3)',
-              borderColor: 'var(--border)',
-              fontSize: 13,
-              lineHeight: 1.55,
-              color: 'var(--text2)'
-            }}
-          >
-            <strong style={{ color: 'var(--text)' }}>Resumo</strong>
-            <ol style={{ margin: '10px 0 0', paddingLeft: 20 }}>
-              <li>
-                Em cada linha informe <strong>valor à vista</strong> e <strong>valor total parcelado</strong> (com
-                parcelas).
-              </li>
-              <li>
-                Uma linha é <strong>ideal</strong> (os dois modelos dessa linha são referência); as outras são{' '}
-                <strong>com desconto</strong>.
-              </li>
-              <li>
-                Na venda, com <strong>À vista</strong> compara-se o à vista da linha ideal com o à vista da linha em que
-                fechou; com <strong>cartão/boleto</strong> compara-se o total parcelado de cada uma.
-              </li>
-            </ol>
-          </div>
-        )}
+        <div
+          className="card"
+          style={{
+            marginTop: 14,
+            padding: '14px 16px',
+            maxWidth: 720,
+            background: 'var(--bg3)',
+            borderColor: 'var(--border)',
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: 'var(--text2)'
+          }}
+        >
+          <strong style={{ color: 'var(--text)' }}>Desconto do closer nas vendas</strong>
+          <p style={{ margin: '8px 0 0' }}>
+            A referência (preço ideal) é sempre o bloco <strong>Preço de tabela</strong>. Nas vendas, escolhe-se em qual
+            das quatro ofertas o cliente fechou; o sistema compara com a tabela conforme a forma de pagamento (à vista
+            ou parcelado).
+          </p>
+        </div>
       </div>
 
       {loading && (
@@ -110,23 +100,79 @@ export function PropostasFechamentoPage() {
       {!loading && !error && !produtos.length && (
         <div className="card empty">
           <p>
-            Nenhum produto cadastrado. Cadastre produtos em <strong>Produtos</strong> para criar propostas.
+            Nenhum produto cadastrado. Cadastre produtos em <strong>Produtos</strong> com as quatro ofertas.
           </p>
         </div>
       )}
 
-      {!loading &&
-        !error &&
-        produtos.map((p) => (
-          <LinhasNegociacaoProdutoBlock
-            key={p.id}
-            produto={p}
-            linhas={linhasPorProduto.get(p.id) ?? []}
-            todasLinhas={linhas}
-            podeEditar={podeEditar}
-            onAfterChange={load}
-          />
-        ))}
+      {!loading && !error && produtos.length > 0 && (
+        <div className="card">
+          <div className="tw">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 44 }} aria-label="Expandir" />
+                  <th>Produto</th>
+                  <th>Preço de tabela</th>
+                  <th>Oferta promocional</th>
+                  <th>Última condição</th>
+                  <th>Carta na manga</th>
+                  <th>Linhas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {produtos.map((p) => {
+                  const isOpen = expanded.has(p.id)
+                  return (
+                    <Fragment key={p.id}>
+                      <tr>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: 4 }}
+                            onClick={() => toggleExpand(p.id)}
+                            aria-expanded={isOpen}
+                            title={isOpen ? 'Recolher' : 'Expandir as 4 ofertas'}
+                          >
+                            {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                          </button>
+                        </td>
+                        <td>
+                          <strong>{p.nome}</strong>
+                        </td>
+                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
+                          {resumoBlocoTabela(p.blocoPrecoTabela)}
+                        </td>
+                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
+                          {resumoBlocoCondicao(p.blocoOferta)}
+                        </td>
+                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
+                          {resumoBlocoCondicao(p.blocoUltimaCondicao)}
+                        </td>
+                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
+                          {resumoBlocoCondicao(p.blocoCartaNaManga)}
+                        </td>
+                        <td style={{ fontSize: 13 }}>4</td>
+                      </tr>
+                      {isOpen ? (
+                        <tr className="prod-ln-expand-row">
+                          <td
+                            colSpan={COL_COUNT}
+                            style={{ background: 'var(--bg2)', padding: '12px 16px 16px', verticalAlign: 'top' }}
+                          >
+                            <ProdutoQuatroLinhasPanel produto={p} showEditHint={podeEditar} />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

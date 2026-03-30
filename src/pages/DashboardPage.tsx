@@ -17,8 +17,15 @@ import {
   TrendingUp,
   Wallet
 } from 'lucide-react'
-import { getRegistrosByRange, getMetasConfig, getProdutos, getLeadsSdrRangeBundle } from '../firebase/firestore'
+import {
+  getRegistrosByRange,
+  getMetasConfig,
+  getProdutos,
+  getLeadsSdrRangeBundle,
+  listUsers
+} from '../firebase/firestore'
 import type { RegistroRow, MetasConfig, ProdutoRow } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { UnifiedProjectionsChart, buildProjectionSeries } from '../components/dashboard/UnifiedProjectionsChart'
 import { DailyActivitySplineChart } from '../components/dashboard/DailyActivitySplineChart'
 import { metaPctParts } from '../utils/metaProgress'
@@ -187,10 +194,25 @@ function RecentSortTh({
   )
 }
 
-function derivedRates(recs: RegistroRow[], leadsTotal: number) {
+/** Quem entra na taxa “Lead → reunião agendada” (mesmos perfis da barra rápida SDR). */
+function isSdrFunnelRole(cargo: string | undefined): boolean {
+  const c = String(cargo ?? '').trim().toLowerCase()
+  return c === 'sdr' || c === 'admin'
+}
+
+/**
+ * Taxa Lead → RA: só reuniões agendadas lançadas por SDR/Admin ÷ leads (leads_sdr) desses mesmos utilizadores.
+ * Antes usava-se todas as agendadas da empresa no numerador, o que distorcia a % face ao denominador “SDR”.
+ */
+function derivedRates(recs: RegistroRow[], leadsTotalSdrFunnel: number, sdrFunnelUserIds: Set<string>) {
   const t = totals(recs)
   const ticketMedio = t.vn > 0 ? t.ft / t.vn : null
-  const leadParaReuniao = leadsTotal > 0 ? (t.ag / leadsTotal) * 100 : null
+  const agSdrFunnel =
+    sdrFunnelUserIds.size > 0
+      ? recs.filter((r) => r.tipo === 'reuniao_agendada' && sdrFunnelUserIds.has(r.userId)).length
+      : recs.filter((r) => r.tipo === 'reuniao_agendada').length
+  const leadParaReuniao =
+    leadsTotalSdrFunnel > 0 ? (agSdrFunnel / leadsTotalSdrFunnel) * 100 : null
   const taxaShow = t.ag > 0 ? (t.re / t.ag) * 100 : null
   const convVendas = t.re > 0 ? (t.vn / t.re) * 100 : null
   return { ticketMedio, leadParaReuniao, taxaShow, convVendas }
@@ -323,6 +345,7 @@ export function DashboardPage() {
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
   const [leadsTotal, setLeadsTotal] = useState(0)
   const [leadsByDay, setLeadsByDay] = useState<Record<string, number>>({})
+  const [sdrFunnelUserIds, setSdrFunnelUserIds] = useState<Set<string>>(() => new Set())
   const [recentSort, setRecentSort] = useState<{ key: RecentSortKey; dir: 'asc' | 'desc' }>({
     key: 'data',
     dir: 'desc'
@@ -343,19 +366,24 @@ export function DashboardPage() {
       const { start, end } = dpRange(dp, customStart, customEnd)
       setPeriodStart(start)
       setPeriodEnd(end)
-      const [rows, mt, prods, leadsBundle] = await Promise.all([
+      const [rows, mt, prods, users] = await Promise.all([
         getRegistrosByRange(start, end),
         getMetasConfig(),
         getProdutos(),
-        getLeadsSdrRangeBundle(start, end)
+        listUsers()
       ])
+      const funnelIds = new Set(users.filter((u) => isSdrFunnelRole(u.cargo)).map((u) => u.id))
+      const leadsBundle = await getLeadsSdrRangeBundle(start, end, {
+        onlyUserIds: funnelIds.size > 0 ? funnelIds : undefined
+      })
       setRecs(rows)
       setMetas(mt ?? {})
       setProdutos(prods)
+      setSdrFunnelUserIds(funnelIds)
       setLeadsTotal(leadsBundle.byUser.reduce((s, r) => s + r.quantidade, 0))
       setLeadsByDay(leadsBundle.byDay)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(e) || 'Erro ao carregar')
     } finally {
       setLoading(false)
     }
@@ -403,7 +431,10 @@ export function DashboardPage() {
     return copy.slice(0, 14)
   }, [recs, recentSort])
 
-  const rates = useMemo(() => derivedRates(recs, leadsTotal), [recs, leadsTotal])
+  const rates = useMemo(
+    () => derivedRates(recs, leadsTotal, sdrFunnelUserIds),
+    [recs, leadsTotal, sdrFunnelUserIds]
+  )
 
   const projectionSeries = useMemo(
     () =>
@@ -585,7 +616,7 @@ export function DashboardPage() {
                 </div>
                 <div
                   className="db-kpi-mini"
-                  title="Reuniões agendadas ÷ leads (SDR) no período"
+                  title="Reuniões agendadas por SDR/Admin ÷ leads registrados (leads_sdr) dos mesmos utilizadores no período"
                 >
                   <div className="db-kpi-mini-val" style={{ color: 'var(--accent2)' }}>
                     {fmtPct(rates.leadParaReuniao)}

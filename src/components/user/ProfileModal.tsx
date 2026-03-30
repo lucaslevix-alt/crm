@@ -3,6 +3,7 @@ import { User } from 'lucide-react'
 import { getAuth, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
 import { initFirebaseApp } from '../../firebase/config'
 import { updateUser } from '../../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import { useAppStore } from '../../store/useAppStore'
 
 export function ProfileModal() {
@@ -73,7 +74,7 @@ export function ProfileModal() {
       showToast('Perfil atualizado')
       closeModal()
     } catch (err) {
-      showToast(`Erro: ${err instanceof Error ? err.message : 'Erro'}`, 'err')
+      showToast(`Erro: ${formatFirebaseOrUnknownError(err)}`, 'err')
     } finally {
       setLoading(false)
     }

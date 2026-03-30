@@ -1,57 +1,17 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Package, Pencil, Trash2 } from 'lucide-react'
-import {
-  getProdutos,
-  getLinhasNegociacaoAll,
-  deleteProduto,
-  type ProdutoRow,
-  type LinhaNegociacaoRow,
-  type ProdutoBlocoPrecoTabela,
-  type ProdutoBlocoCondicaoComercial
-} from '../firebase/firestore'
-import { LinhasNegociacaoProdutoBlock } from '../components/produto/LinhasNegociacaoProdutoBlock'
+import { getProdutos, deleteProduto, type ProdutoRow } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { ProdutoQuatroLinhasPanel } from '../components/produto/ProdutoQuatroLinhasPanel'
 import { useAppStore } from '../store/useAppStore'
-
-function fmt(v: number | null): string {
-  if (v == null) return '—'
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
-}
-
-function resumoParcela(total: number | null, parc: number | null): string {
-  if (total == null || parc == null || parc <= 0) return '—'
-  return `${parc}x ${fmt(total / parc)}`
-}
-
-function resumoBlocoTabela(bt: ProdutoBlocoPrecoTabela): string {
-  const parts: string[] = []
-  if (bt.valorTotal != null && bt.valorTotal > 0) parts.push(`Tot. ${fmt(bt.valorTotal)}`)
-  if (bt.valorAVista != null && bt.valorAVista > 0) parts.push(`À vista ${fmt(bt.valorAVista)}`)
-  if (bt.valorParceladoCartao != null && bt.valorParceladoCartao > 0) {
-    parts.push(`${resumoParcela(bt.valorParceladoCartao, bt.parcelasCartao)}`)
-  }
-  if (bt.linkPagamento?.trim()) parts.push('🔗')
-  return parts.length ? parts.join(' · ') : '—'
-}
-
-function resumoBlocoCondicao(bc: ProdutoBlocoCondicaoComercial): string {
-  const parts: string[] = []
-  if (bc.valorAVista != null && bc.valorAVista > 0) parts.push(`À vista ${fmt(bc.valorAVista)}`)
-  if (bc.valorParceladoCartao != null && bc.valorParceladoCartao > 0) {
-    parts.push(`Cartão ${resumoParcela(bc.valorParceladoCartao, bc.parcelasCartao)}`)
-  }
-  const b = bc.bonus?.trim()
-  if (b) parts.push(b.length > 48 ? `${b.slice(0, 48)}…` : b)
-  if (bc.linkPagamento?.trim()) parts.push('🔗')
-  return parts.length ? parts.join(' · ') : '—'
-}
+import { resumoBlocoCondicao, resumoBlocoTabela } from '../lib/produtoResumo'
 
 export function ProdutosPage() {
   const { openModal, showToast, produtosVersion, currentUser } = useAppStore()
   const podeEditar = currentUser?.cargo === 'admin'
   const [loading, setLoading] = useState(true)
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
-  const [linhas, setLinhas] = useState<LinhaNegociacaoRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
@@ -59,13 +19,11 @@ export function ProdutosPage() {
     setLoading(true)
     setError(null)
     try {
-      const [list, lns] = await Promise.all([getProdutos(), getLinhasNegociacaoAll()])
+      const list = await getProdutos()
       setProdutos(list)
-      setLinhas(lns)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setProdutos([])
-      setLinhas([])
     } finally {
       setLoading(false)
     }
@@ -74,15 +32,6 @@ export function ProdutosPage() {
   useEffect(() => {
     loadTudo()
   }, [loadTudo, produtosVersion])
-
-  const linhasPorProduto = useMemo(() => {
-    const m = new Map<string, LinhaNegociacaoRow[]>()
-    for (const l of linhas) {
-      if (!m.has(l.produtoId)) m.set(l.produtoId, [])
-      m.get(l.produtoId)!.push(l)
-    }
-    return m
-  }, [linhas])
 
   function toggleExpand(id: string) {
     setExpanded((prev) => {
@@ -125,7 +74,7 @@ export function ProdutosPage() {
       })
       loadTudo()
     } catch (err) {
-      showToast(`Erro: ${err instanceof Error ? err.message : 'Erro'}`, 'err')
+      showToast(`Erro: ${formatFirebaseOrUnknownError(err)}`, 'err')
     }
   }
 
@@ -144,8 +93,8 @@ export function ProdutosPage() {
           </h2>
           <p style={{ color: 'var(--text2)' }}>
             {podeEditar
-              ? 'Catálogo comercial e linhas de negociação por produto (expandir a linha). A página Negociações continua só para simular carrinho com o cliente.'
-              : 'Consulta do catálogo e das linhas de proposta — expandir o produto. Negociações (menu) é o simulador de carrinho.'}
+              ? 'As quatro ofertas (tabela, oferta, última condição, carta na manga) são as linhas de negociação. Edite no modal do produto; expanda a linha para ver o detalhe. Negociações simula o carrinho.'
+              : 'Consulta do catálogo — expandir para ver as quatro ofertas. Negociações é o simulador de carrinho.'}
           </p>
         </div>
         {podeEditar ? (
@@ -203,7 +152,6 @@ export function ProdutosPage() {
               </thead>
               <tbody>
                 {produtos.map((p) => {
-                  const nLinhas = (linhasPorProduto.get(p.id) ?? []).length
                   const isOpen = expanded.has(p.id)
                   return (
                     <Fragment key={p.id}>
@@ -223,11 +171,19 @@ export function ProdutosPage() {
                         <td>
                           <strong>{p.nome}</strong>
                         </td>
-                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>{resumoBlocoTabela(p.blocoPrecoTabela)}</td>
-                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>{resumoBlocoCondicao(p.blocoOferta)}</td>
-                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>{resumoBlocoCondicao(p.blocoUltimaCondicao)}</td>
-                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>{resumoBlocoCondicao(p.blocoCartaNaManga)}</td>
-                        <td style={{ fontSize: 13 }}>{nLinhas}</td>
+                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
+                          {resumoBlocoTabela(p.blocoPrecoTabela)}
+                        </td>
+                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
+                          {resumoBlocoCondicao(p.blocoOferta)}
+                        </td>
+                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
+                          {resumoBlocoCondicao(p.blocoUltimaCondicao)}
+                        </td>
+                        <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
+                          {resumoBlocoCondicao(p.blocoCartaNaManga)}
+                        </td>
+                        <td style={{ fontSize: 13 }}>4</td>
                         {podeEditar ? (
                           <td style={{ display: 'flex', gap: 6 }}>
                             <button
@@ -254,14 +210,7 @@ export function ProdutosPage() {
                       {isOpen ? (
                         <tr className="prod-ln-expand-row">
                           <td colSpan={colCount} style={{ background: 'var(--bg2)', padding: '12px 16px 16px', verticalAlign: 'top' }}>
-                            <LinhasNegociacaoProdutoBlock
-                              produto={p}
-                              linhas={linhasPorProduto.get(p.id) ?? []}
-                              todasLinhas={linhas}
-                              podeEditar={podeEditar}
-                              onAfterChange={loadTudo}
-                              embedded
-                            />
+                            <ProdutoQuatroLinhasPanel produto={p} showEditHint={podeEditar} />
                           </td>
                         </tr>
                       ) : null}

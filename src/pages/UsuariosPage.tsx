@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Pencil, Trash2, Users } from 'lucide-react'
 import { listUsers, deleteUser, updateUser } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import type { CrmUser } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
 
@@ -66,7 +67,7 @@ export function UsuariosPage() {
       const list = await listUsers()
       setUsers(list)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setUsers([])
     } finally {
       setLoading(false)
@@ -94,7 +95,7 @@ export function UsuariosPage() {
       showToast(`${u.nome} removido`)
       loadUsers()
     } catch (err) {
-      showToast(`Erro: ${err instanceof Error ? err.message : 'Erro'}`, 'err')
+      showToast(`Erro: ${formatFirebaseOrUnknownError(err)}`, 'err')
     }
   }
 
@@ -150,7 +151,7 @@ export function UsuariosPage() {
       showToast('Migration de usuários para Auth concluída.')
       loadUsers()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao executar migration'
+      const message = formatFirebaseOrUnknownError(err) || 'Erro ao executar migration'
       setMigrationSummary(`Erro geral: ${message}`)
       showToast('Erro ao executar migration de usuários.', 'err')
     } finally {

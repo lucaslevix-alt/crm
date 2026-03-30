@@ -8,6 +8,7 @@ import {
   type ProdutoBlocoCondicaoComercial,
   type ProdutoBlocoPrecoTabela
 } from '../../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import { useAppStore } from '../../store/useAppStore'
 
 function parseMoney(s: string): number | null {
@@ -124,7 +125,7 @@ export function ProdutoFormModal() {
       closeModal()
       useAppStore.getState().incrementProdutosVersion()
     } catch (err) {
-      showToast(`Erro: ${err instanceof Error ? err.message : 'Erro'}`, 'err')
+      showToast(`Erro: ${formatFirebaseOrUnknownError(err)}`, 'err')
     } finally {
       setLoading(false)
     }

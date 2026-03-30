@@ -14,13 +14,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <!-- Reduz exfiltração do token Meta (e outros dados) para origens não listadas; N8N self-hosted: acrescente o host em connect-src. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self' ws: wss: https://firestore.googleapis.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.cloudfunctions.net https://graph.facebook.com https://*.facebook.com https://*.n8n.cloud http://localhost:5678; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    />
     <title>CRM Comercial — Performance</title>
-    <script type="module" crossorigin src="/assets/index-CME_f5Nr.js"></script>
+    <script type="module" crossorigin src="/assets/index-MB877ivy.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-DF2fYuay.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-firebase-DNoO5_38.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-firebase-V_0Su6qB.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-react-CIQ0kHvD.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-router-DDfyUmHJ.js">
-    <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-a6Rc5LQs.js">
+    <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-DYw8Mg4I.js">
     <link rel="stylesheet" crossorigin href="/assets/index-C0px_lQC.css">
   </head>
   <body>

@@ -12,6 +12,7 @@ import {
   Wallet
 } from 'lucide-react'
 import { getRegistrosByRange } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { today, mRange, formatPeriodLabel } from '../lib/dates'
 import { metaFetch, metaLoadSaved, getConversionKeys, extractActionFromInsights } from '../lib/meta-ads'
 import type { MetaInsightRow } from '../lib/meta-ads'
@@ -333,7 +334,7 @@ export function FunilPage() {
         </>
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setContent(null)
     } finally {
       setLoading(false)

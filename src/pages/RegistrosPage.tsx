@@ -7,6 +7,7 @@ import {
   labelFormaPagamento,
   type RegistroRow
 } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import type { CrmUser } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
 
@@ -90,7 +91,7 @@ export function RegistrosPage() {
       setRecs(rows)
       setUsers(userList)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(e) || 'Erro ao carregar')
     } finally {
       setLoading(false)
     }
@@ -147,7 +148,7 @@ export function RegistrosPage() {
       showToast('Deletado')
       incrementRegistrosVersion()
     } catch (e) {
-      showToast('Erro: ' + (e instanceof Error ? e.message : String(e)), 'err')
+      showToast('Erro: ' + formatFirebaseOrUnknownError(e), 'err')
     }
   }
 
@@ -230,7 +231,7 @@ export function RegistrosPage() {
                 type="text"
                 className="di"
                 style={{ width: '100%', paddingRight: 28 }}
-                placeholder="Campanha, grupo Wpp, profissional..."
+                placeholder="Origem do lead, grupo Wpp, profissional..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
               />
@@ -289,7 +290,7 @@ export function RegistrosPage() {
                       <th>Data</th>
                       <th>Tipo</th>
                       <th>Profissional</th>
-                      <th>Campanha / Grupo Wpp</th>
+                      <th>Origem do lead / Grupo Wpp</th>
                       <th>Cliente</th>
                       <th>Valor</th>
                       <th>Pagamento</th>
@@ -316,11 +317,16 @@ export function RegistrosPage() {
                           </span>
                         </td>
                         <td>
-                          {r.anuncio || (r.tipo === 'reuniao_realizada' && r.grupoWpp) ? (
+                          {r.anuncio || r.grupoWpp ? (
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                               {r.anuncio ? (
                                 <span className="chip" title={r.anuncio}>
                                   {r.anuncio}
+                                </span>
+                              ) : null}
+                              {r.tipo === 'reuniao_agendada' && r.grupoWpp ? (
+                                <span className="chip" title={r.grupoWpp} style={{ borderColor: 'rgba(34,197,94,.35)', color: 'var(--green)' }}>
+                                  Lead: {r.grupoWpp}
                                 </span>
                               ) : null}
                               {r.tipo === 'reuniao_realizada' && r.grupoWpp ? (

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getRegistrosByRange, listSquads, type SquadRow } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { today, mRange, wRange } from '../lib/dates'
 import { Trophy } from 'lucide-react'
 import { RankingPodiumThree } from '../components/ranking/RankingPodium'
@@ -104,7 +105,7 @@ export function RankingSquadsPage() {
       const totalFt = withSales.reduce((sum, x) => sum + x.ft, 0)
       setTicketMedio(totalVn > 0 ? totalFt / totalVn : 0)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setList([])
       setTicketMedio(0)
     } finally {

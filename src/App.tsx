@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { AuthSync } from './components/auth/AuthSync'
 import { Target } from 'lucide-react'
 import { BrowserRouter, Route, Routes, Navigate, Outlet } from 'react-router-dom'
 import { LoginPage } from './pages/LoginPage'
@@ -19,6 +20,7 @@ import {
   RankingsPage,
   SquadsPage,
   RegistrosPage,
+  AgendaPage,
   UsuariosPage
 } from './routes/lazyPages'
 import { RouteFallback } from './components/layout/RouteFallback'
@@ -34,7 +36,8 @@ import { Modal } from './components/ui/Modal'
 import { useAppStore } from './store/useAppStore'
 
 function ProtectedShell() {
-  const { currentUser } = useAppStore()
+  const { currentUser, authSessionReady } = useAppStore()
+  if (!authSessionReady) return <RouteFallback />
   if (!currentUser) return <Navigate to="/login" replace />
   return <AppLayout />
 }
@@ -62,6 +65,16 @@ function ComercialProdutosRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function AgendaRoute({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useAppStore()
+  const ok =
+    currentUser?.cargo === 'admin' ||
+    currentUser?.cargo === 'sdr' ||
+    currentUser?.cargo === 'closer'
+  if (!ok) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 function ConfigOutlet() {
   return <Outlet />
 }
@@ -70,6 +83,7 @@ export default function App() {
   return (
     <div className="text-sm text-[var(--text)] bg-[var(--bg)] min-h-screen app-root">
       <BrowserRouter>
+        <AuthSync />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -77,6 +91,14 @@ export default function App() {
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="registros" element={<RegistrosPage />} />
+              <Route
+                path="agenda"
+                element={
+                  <AgendaRoute>
+                    <AgendaPage />
+                  </AgendaRoute>
+                }
+              />
               <Route path="funil" element={<FunilPage />} />
               <Route path="metas" element={<MetasPage />} />
               <Route path="rankings" element={<RankingsPage />}>

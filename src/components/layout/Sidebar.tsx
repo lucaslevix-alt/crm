@@ -9,6 +9,7 @@ import {
   Handshake,
   LayoutDashboard,
   Link2,
+  CalendarClock,
   LogOut,
   Megaphone,
   Package,
@@ -21,6 +22,8 @@ import {
   UsersRound,
   Zap
 } from 'lucide-react'
+import { getAuth, signOut } from 'firebase/auth'
+import { initFirebaseApp } from '../../firebase/config'
 import { useAppStore } from '../../store/useAppStore'
 import { icNavStripe } from '../../lib/icon-sizes'
 
@@ -62,7 +65,12 @@ export function Sidebar() {
     })
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      await signOut(getAuth(initFirebaseApp()))
+    } catch {
+      /* ignore */
+    }
     useAppStore.getState().setCurrentUser(null)
     navigate('/login')
   }
@@ -124,6 +132,14 @@ export function Sidebar() {
               </span>
               <span className="nav-label">Registros</span>
             </NavLink>
+            {(currentUser?.cargo === 'admin' || currentUser?.cargo === 'sdr' || currentUser?.cargo === 'closer') && (
+              <NavLink to="/agenda" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Agenda do squad">
+                <span className="nav-icon">
+                  <CalendarClock {...icNavStripe} />
+                </span>
+                <span className="nav-label">Agenda</span>
+              </NavLink>
+            )}
             <NavLink
               to="/negociacoes"
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}

@@ -6,6 +6,9 @@ export const DashboardPage = lazy(() =>
 export const RegistrosPage = lazy(() =>
   import('../pages/RegistrosPage').then((m) => ({ default: m.RegistrosPage }))
 )
+export const AgendaPage = lazy(() =>
+  import('../pages/AgendaPage').then((m) => ({ default: m.AgendaPage }))
+)
 export const MetasPage = lazy(() => import('../pages/MetasPage').then((m) => ({ default: m.MetasPage })))
 export const FunilPage = lazy(() => import('../pages/FunilPage').then((m) => ({ default: m.FunilPage })))
 export const RankingsPage = lazy(() =>

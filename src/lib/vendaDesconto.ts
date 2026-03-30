@@ -1,25 +1,12 @@
-import type { LinhaNegociacaoRow, RegistroProdutoItem } from '../firebase/firestore'
-
-/** Uma linha “ideal” por produto (a primeira encontrada, se houver duplicata no Firestore) */
-export function idealLinePorProduto(linhas: LinhaNegociacaoRow[]): Map<string, LinhaNegociacaoRow> {
-  const m = new Map<string, LinhaNegociacaoRow>()
-  for (const l of linhas) {
-    if (l.linhaPrecoRole !== 'ideal') continue
-    if (!m.has(l.produtoId)) m.set(l.produtoId, l)
-  }
-  return m
-}
+import type { RegistroProdutoItem } from '../firebase/firestore'
+import type { LinhaVendaComparable } from './produtoLinhasVenda'
 
 /** Com forma “À vista” na venda compara `valorAVista` das linhas; caso contrário compara o total parcelado (`valorTotal`). */
 export function vendaUsaPrecoAvista(formaPagamento: string | null | undefined): boolean {
   return formaPagamento === 'a_vista'
 }
 
-/**
- * Valor usado na comparação ideal vs linha fechada.
- * Se à vista e não houver `valorAVista` cadastrado, usa `valorTotal` (linhas antigas).
- */
-export function valorComparavelLinha(l: LinhaNegociacaoRow, compararAvista: boolean): number {
+export function valorComparavelLinha(l: LinhaVendaComparable, compararAvista: boolean): number {
   if (compararAvista) {
     if (l.valorAVista != null && l.valorAVista > 0) return l.valorAVista
     return l.valorTotal
@@ -29,12 +16,12 @@ export function valorComparavelLinha(l: LinhaNegociacaoRow, compararAvista: bool
 
 /**
  * Desconto = soma (valor ideal no mesmo modelo de pagamento − valor fechado) × qtd,
- * quando a linha fechada não é a ideal. Modelo = à vista vs parcelado conforme `formaPagamento` da venda.
+ * quando a linha fechada não é a ideal. Referência ideal = sempre **Preço de tabela** do produto.
  */
 export function computeDescontoVenda(params: {
   produtosDetalhes: RegistroProdutoItem[]
-  linhasById: Map<string, LinhaNegociacaoRow>
-  idealPorProduto: Map<string, LinhaNegociacaoRow>
+  linhasById: Map<string, LinhaVendaComparable>
+  idealPorProduto: Map<string, LinhaVendaComparable>
   formaPagamento: string | null
 }): { valorReferencia: number; desconto: number } {
   const compararAvista = vendaUsaPrecoAvista(params.formaPagamento)
@@ -48,6 +35,7 @@ export function computeDescontoVenda(params: {
     const q = Math.max(1, item.quantidade || 1)
     const vi = valorComparavelLinha(ideal, compararAvista)
     const vf = valorComparavelLinha(fechada, compararAvista)
+    if (vi <= 0 && vf <= 0) continue
     valorReferencia += vi * q
     if (fechada.id === ideal.id) continue
     desconto += Math.max(0, vi - vf) * q

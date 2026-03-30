@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ClipboardList, Pencil, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { getAuditoriaLogs, listUsers, type AuditLogRow } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import type { CrmUser } from '../store/useAppStore'
 
 const ACAO_LABEL: Record<string, string> = {
@@ -60,7 +61,7 @@ function diffView(antes: Record<string, unknown> | null, depois: Record<string, 
     tipo: 'Tipo',
     valor: 'Valor',
     cashCollected: 'Cash',
-    anuncio: 'Campanha',
+    anuncio: 'Origem do lead',
     grupoWpp: 'Grupo Wpp',
     obs: 'Obs',
     userName: 'Profissional'
@@ -100,7 +101,7 @@ export function AuditoriaPage() {
       setUsers(uList)
       setLogs(logList)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setLogs([])
     } finally {
       setLoading(false)

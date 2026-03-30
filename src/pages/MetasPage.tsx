@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CalendarDays } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getRegistrosByRange, getMetasConfig } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import type { RegistroRow, MetasConfig } from '../firebase/firestore'
 import { metaPctParts } from '../utils/metaProgress'
 
@@ -59,7 +60,7 @@ export function MetasPage() {
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Erro ao carregar')
+        if (!cancelled) setError(formatFirebaseOrUnknownError(e) || 'Erro ao carregar')
       })
       .finally(() => {
         if (!cancelled) setLoading(false)

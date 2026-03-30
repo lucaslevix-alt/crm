@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import type { FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
+import { useNavigate, Navigate } from 'react-router-dom'
+import { getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { initFirebaseApp } from '../firebase/config'
 import { findUserByEmail } from '../firebase/firestore'
 import { useAppStore } from '../store/useAppStore'
+
+const MSG_LOGIN_GENERIC =
+  'E-mail ou senha incorretos. Tente novamente ou contacte o administrador se precisar de acesso.'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -14,7 +17,19 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   const navigate = useNavigate()
-  const { setCurrentUser, showToast, themeMode, setThemeMode } = useAppStore()
+  const { setCurrentUser, showToast, themeMode, setThemeMode, authSessionReady, currentUser } = useAppStore()
+
+  if (!authSessionReady) {
+    return (
+      <div id="login-screen" className="loading" style={{ minHeight: '100vh', justifyContent: 'center' }}>
+        <div className="spin" />
+      </div>
+    )
+  }
+
+  if (currentUser) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -32,25 +47,27 @@ export function LoginPage() {
       const fbApp = initFirebaseApp()
       const auth = getAuth(fbApp)
 
-      const user = await findUserByEmail({ email: trimmed })
-      if (!user) {
-        setError('Usuário não encontrado. Verifique o e-mail e tente novamente.')
-        return
-      }
-
-      if (!user.hasPassword) {
-        setError('Este usuário ainda não possui senha cadastrada. Contate o administrador.')
-        return
-      }
-
       await signInWithEmailAndPassword(auth, trimmed, pwd)
+
+      const fbUser = auth.currentUser
+      if (!fbUser?.email) {
+        await signOut(auth)
+        setError(MSG_LOGIN_GENERIC)
+        return
+      }
+
+      const user = await findUserByEmail({ email: fbUser.email })
+      if (!user || !user.hasPassword) {
+        await signOut(auth)
+        setError(MSG_LOGIN_GENERIC)
+        return
+      }
 
       setCurrentUser(user)
       showToast(`Bem-vindo(a), ${user.nome}!`)
       navigate('/dashboard')
-    } catch (err) {
-      console.error(err)
-      setError('Falha ao conectar no CRM. Tente novamente em instantes.')
+    } catch {
+      setError(MSG_LOGIN_GENERIC)
     } finally {
       setIsSubmitting(false)
     }

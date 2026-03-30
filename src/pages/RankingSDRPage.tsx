@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getRegistrosByRange, getLeadsSdrByRange, listUsers } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { today, mRange, wRange } from '../lib/dates'
 import { useAppStore } from '../store/useAppStore'
 import type { CrmUser } from '../store/useAppStore'
@@ -117,7 +118,7 @@ export function RankingSDRPage() {
           })
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setByAg([])
       setByRe([])
       setByLeads([])

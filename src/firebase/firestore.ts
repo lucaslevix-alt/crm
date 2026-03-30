@@ -132,14 +132,9 @@ export async function findUserByEmail(params: {
   const normalized = email.trim().toLowerCase()
   if (!normalized) return null
 
-  const usuariosRef = collection(db, 'usuarios')
-  const snapshot = await getDocs(usuariosRef)
-  const found = snapshot.docs.find((d) => {
-    const data = d.data() as { email?: string }
-    const value = (data.email || '').trim().toLowerCase()
-    return value === normalized
-  })
-
+  const q = query(collection(db, 'usuarios'), where('email', '==', normalized), limit(1))
+  const snapshot = await getDocs(q)
+  const found = snapshot.docs[0]
   if (!found) return null
 
   const data = found.data() as Record<string, unknown>
@@ -362,7 +357,11 @@ export interface LeadsSdrRangeBundle {
   byDay: Record<string, number>
 }
 
-export async function getLeadsSdrRangeBundle(start: string, end: string): Promise<LeadsSdrRangeBundle> {
+export async function getLeadsSdrRangeBundle(
+  start: string,
+  end: string,
+  opts?: { onlyUserIds?: Set<string> }
+): Promise<LeadsSdrRangeBundle> {
   const q = query(
     collection(db, 'leads_sdr'),
     where('data', '>=', start),
@@ -371,9 +370,11 @@ export async function getLeadsSdrRangeBundle(start: string, end: string): Promis
   const snapshot = await getDocs(q)
   const byUser = new Map<string, { userName: string; quantidade: number }>()
   const byDay = new Map<string, number>()
+  const filterIds = opts?.onlyUserIds
   snapshot.docs.forEach((d) => {
     const x = d.data()
     const uid = String(x.userId ?? '')
+    if (filterIds && filterIds.size > 0 && !filterIds.has(uid)) return
     const nome = String(x.userName ?? '—')
     const qtd = Number(x.quantidade ?? 0)
     const dataStr = String(x.data ?? '')
@@ -695,7 +696,10 @@ export async function deleteProduto(id: string): Promise<void> {
   await deleteDoc(doc(db, 'produtos', id))
 }
 
-/** Linhas de proposta (valor + parcelas + link de cartão) por produto — menu Propostas de fechamento */
+/**
+ * Coleção legada `linhas_negociacao` (linhas livres por produto). O CRM atual usa as quatro ofertas do documento do
+ * produto; estes tipos permanecem para ler vendas antigas e limpar ao apagar produto.
+ */
 export interface LinhaNegociacaoRow {
   id: string
   produtoId: string
@@ -835,7 +839,7 @@ export async function getAuditoriaLogs(params: {
   acao?: string
   userId?: string
 }): Promise<AuditLogRow[]> {
-  let q = query(
+  const q = query(
     collection(db, 'auditoria'),
     orderBy('ts', 'desc'),
     limit(params.limitCount ?? 500)
@@ -923,5 +927,231 @@ export async function updateSquad(
 
 export async function deleteSquad(id: string): Promise<void> {
   await deleteDoc(doc(db, 'squads', id))
+}
+
+/** Agenda interna (Firestore): reuniões agendadas pelo SDR, ações do closer */
+export type AgendamentoStatus = 'agendada' | 'realizada' | 'venda'
+
+export interface AgendamentoRow {
+  id: string
+  squadId: string
+  squadNome: string
+  sdrUserId: string
+  sdrUserName: string
+  sdrUserCargo: string
+  origemLead: string | null
+  grupoWpp: string
+  data: string
+  status: AgendamentoStatus
+  registroAgendadaId: string
+  registroRealizadaSdrId: string | null
+  registroCloserId: string | null
+  registroVendaId: string | null
+  closerUserId: string | null
+  closerUserName: string | null
+  criadoEm?: Timestamp | null
+}
+
+function docToAgendamento(d: { id: string; data: () => Record<string, unknown> }): AgendamentoRow {
+  const x = d.data()
+  const st = x.status
+  const status: AgendamentoStatus =
+    st === 'realizada' || st === 'venda' ? st : 'agendada'
+  return {
+    id: d.id,
+    squadId: String(x.squadId ?? ''),
+    squadNome: String(x.squadNome ?? ''),
+    sdrUserId: String(x.sdrUserId ?? ''),
+    sdrUserName: String(x.sdrUserName ?? ''),
+    sdrUserCargo: String(x.sdrUserCargo ?? 'sdr'),
+    origemLead: (() => {
+      const raw = x.origemLead ?? x.campanhaMetaAds
+      return raw != null && String(raw).trim() !== '' ? String(raw).trim() : null
+    })(),
+    grupoWpp: String(x.grupoWpp ?? ''),
+    data: String(x.data ?? ''),
+    status,
+    registroAgendadaId: String(x.registroAgendadaId ?? ''),
+    registroRealizadaSdrId: x.registroRealizadaSdrId != null ? String(x.registroRealizadaSdrId) : null,
+    registroCloserId: x.registroCloserId != null ? String(x.registroCloserId) : null,
+    registroVendaId: x.registroVendaId != null ? String(x.registroVendaId) : null,
+    closerUserId: x.closerUserId != null ? String(x.closerUserId) : null,
+    closerUserName: x.closerUserName != null ? String(x.closerUserName) : null,
+    criadoEm: (x.criadoEm as Timestamp | undefined) ?? null
+  }
+}
+
+export async function resolveSquadForUserId(userId: string): Promise<{ squadId: string; squadNome: string } | null> {
+  const squads = await listSquads()
+  for (const s of squads) {
+    if (s.memberIds.includes(userId)) return { squadId: s.id, squadNome: s.nome }
+  }
+  return null
+}
+
+export async function createAgendamentoFromSdr(params: {
+  sdrUserId: string
+  sdrUserName: string
+  sdrCargo: string
+  origemLead: string
+  grupoWpp: string
+}): Promise<{ agendamentoId: string; registroAgendadaId: string; squadId: string; squadNome: string }> {
+  const squad = await resolveSquadForUserId(params.sdrUserId)
+  if (!squad) throw new Error('O utilizador precisa estar num squad para agendar na agenda do squad.')
+  const origem = params.origemLead.trim()
+  const grupo = params.grupoWpp.trim()
+  if (!origem || !grupo) throw new Error('Origem do lead e nome do lead são obrigatórios.')
+  const data = new Date().toISOString().split('T')[0]
+  const registroAgendadaId = await addRegistro({
+    data,
+    tipo: 'reuniao_agendada',
+    userId: params.sdrUserId,
+    userName: params.sdrUserName,
+    userCargo: params.sdrCargo,
+    anuncio: origem,
+    grupoWpp: grupo
+  })
+  const ref = await addDoc(collection(db, 'agendamentos'), {
+    squadId: squad.squadId,
+    squadNome: squad.squadNome,
+    sdrUserId: params.sdrUserId,
+    sdrUserName: params.sdrUserName,
+    sdrUserCargo: params.sdrCargo,
+    origemLead: origem,
+    grupoWpp: grupo,
+    data,
+    status: 'agendada',
+    registroAgendadaId,
+    registroRealizadaSdrId: null,
+    registroCloserId: null,
+    registroVendaId: null,
+    closerUserId: null,
+    closerUserName: null,
+    criadoEm: serverTimestamp()
+  })
+  return { agendamentoId: ref.id, registroAgendadaId, squadId: squad.squadId, squadNome: squad.squadNome }
+}
+
+export async function listAgendamentos(params: { squadId: string | null; admin: boolean }): Promise<AgendamentoRow[]> {
+  if (params.admin) {
+    const q = query(collection(db, 'agendamentos'), orderBy('criadoEm', 'desc'), limit(500))
+    const snap = await getDocs(q)
+    return snap.docs.map((d) => docToAgendamento({ id: d.id, data: () => d.data() as Record<string, unknown> }))
+  }
+  if (!params.squadId) return []
+  const q = query(collection(db, 'agendamentos'), where('squadId', '==', params.squadId))
+  const snap = await getDocs(q)
+  const rows = snap.docs.map((d) => docToAgendamento({ id: d.id, data: () => d.data() as Record<string, unknown> }))
+  rows.sort((a, b) => {
+    const ma = a.criadoEm?.toMillis?.() ?? 0
+    const mb = b.criadoEm?.toMillis?.() ?? 0
+    return mb - ma
+  })
+  return rows
+}
+
+export async function marcarAgendamentoRealizada(params: {
+  agendamentoId: string
+  closer: { id: string; nome: string; cargo: string }
+}): Promise<void> {
+  const ref = doc(db, 'agendamentos', params.agendamentoId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Agendamento não encontrado.')
+  const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
+  if (row.status !== 'agendada') throw new Error('Só é possível marcar como realizada quando o status é “agendada”.')
+  const obsSdr = `Agenda · closer ${params.closer.nome}`
+  const registroRealizadaSdrId = await addRegistro({
+    data: row.data,
+    tipo: 'reuniao_realizada',
+    userId: row.sdrUserId,
+    userName: row.sdrUserName,
+    userCargo: row.sdrUserCargo,
+    anuncio: row.origemLead,
+    grupoWpp: row.grupoWpp,
+    obs: obsSdr
+  })
+  const registroCloserId = await addRegistro({
+    data: row.data,
+    tipo: 'reuniao_closer',
+    userId: params.closer.id,
+    userName: params.closer.nome,
+    userCargo: params.closer.cargo,
+    anuncio: row.origemLead,
+    grupoWpp: row.grupoWpp,
+    obs: `Squad ${row.squadNome} · SDR ${row.sdrUserName}`
+  })
+  await updateDoc(ref, {
+    status: 'realizada',
+    registroRealizadaSdrId,
+    registroCloserId,
+    closerUserId: params.closer.id,
+    closerUserName: params.closer.nome,
+    atualizadoEm: serverTimestamp()
+  })
+}
+
+export async function marcarAgendamentoVenda(params: {
+  agendamentoId: string
+  closer: { id: string; nome: string; cargo: string }
+  nomeCliente: string
+  valor: number
+  cashCollected?: number
+  formaPagamento: FormaPagamentoVenda
+  produtosIds: string[]
+  produtosDetalhes: RegistroProdutoItem[]
+  valorReferenciaVenda: number
+  descontoCloser: number
+}): Promise<void> {
+  const ref = doc(db, 'agendamentos', params.agendamentoId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Agendamento não encontrado.')
+  const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
+  if (row.status === 'venda') throw new Error('Este agendamento já está marcado como venda.')
+
+  let registroRealizadaSdrId = row.registroRealizadaSdrId
+  let registroCloserId = row.registroCloserId
+
+  if (row.status === 'agendada') {
+    const obsSdr = `Agenda · venda · closer ${params.closer.nome}`
+    registroRealizadaSdrId = await addRegistro({
+      data: row.data,
+      tipo: 'reuniao_realizada',
+      userId: row.sdrUserId,
+      userName: row.sdrUserName,
+      userCargo: row.sdrUserCargo,
+      anuncio: row.origemLead,
+      grupoWpp: row.grupoWpp,
+      obs: obsSdr
+    })
+  }
+
+  const registroVendaId = await addRegistro({
+    data: row.data,
+    tipo: 'venda',
+    userId: params.closer.id,
+    userName: params.closer.nome,
+    userCargo: params.closer.cargo,
+    anuncio: row.origemLead,
+    grupoWpp: row.grupoWpp,
+    valor: params.valor,
+    cashCollected: params.cashCollected ?? 0,
+    formaPagamento: params.formaPagamento,
+    nomeCliente: params.nomeCliente.trim(),
+    obs: `Agenda · SDR ${row.sdrUserName} · ${row.grupoWpp}`,
+    produtosIds: params.produtosIds,
+    produtosDetalhes: params.produtosDetalhes,
+    valorReferenciaVenda: params.valorReferenciaVenda,
+    descontoCloser: params.descontoCloser
+  })
+
+  await updateDoc(ref, {
+    status: 'venda',
+    registroRealizadaSdrId,
+    registroCloserId,
+    registroVendaId,
+    closerUserId: params.closer.id,
+    closerUserName: params.closer.nome,
+    atualizadoEm: serverTimestamp()
+  })
 }
 

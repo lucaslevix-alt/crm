@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   BarChart3,
   Briefcase,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import {
   metaFetch,
+  metaGetEffectiveToken,
   metaLoadSaved,
   metaSaveAccId,
   metaSaveFav,
@@ -31,6 +32,7 @@ import {
 } from '../lib/meta-ads'
 import { RankMarker } from '../components/ui/RankMarker'
 import { getRegistrosByRange } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { useAppStore } from '../store/useAppStore'
 
 function fmtCurrency(v: number): string {
@@ -119,7 +121,7 @@ interface CampaignRow {
 
 export function MetaAdsPage() {
   const { openModal, metaConnectedAt, setMetaConnectedAt } = useAppStore()
-  const [token, setToken] = useState('')
+  const hasToken = useMemo(() => Boolean(metaGetEffectiveToken()), [metaConnectedAt])
   const [convMode, setConvMode] = useState<MetaConvMode>('lead')
   const [accId, setAccId] = useState('')
   const [favAccId, setFavAccId] = useState('')
@@ -142,21 +144,7 @@ export function MetaAdsPage() {
   const [showCustomDates, setShowCustomDates] = useState(false)
 
   const loadMetaPage = useCallback(async () => {
-    let t = token
-    let m = convMode
-    let fav = favAccId
-    let savedAcc = accId
-    if (!t) {
-      const saved = metaLoadSaved()
-      t = saved.token
-      m = saved.mode as MetaConvMode
-      fav = saved.favAccId
-      savedAcc = saved.accId
-      setToken(t)
-      setConvMode(m)
-      setFavAccId(fav)
-      setAccId(savedAcc || fav)
-    }
+    const t = metaGetEffectiveToken()
     if (!t) {
       setLoading(false)
       return
@@ -170,11 +158,12 @@ export function MetaAdsPage() {
       setDateLabel(label)
       type AccRes = { data?: MetaAccount[] }
       let allAccs: MetaAccount[] = []
+      let accountLoadError: string | null = null
       try {
         const r = await metaFetch<AccRes>(`/me/adaccounts`, { access_token: t, fields: 'id,name,currency', limit: '200' })
         allAccs = r.data || []
-      } catch {
-        // ignore
+      } catch (e) {
+        accountLoadError = e instanceof Error ? e.message : 'Erro ao listar contas de anúncios'
       }
       try {
         type BizRes = { data?: Array<{ id: string }> }
@@ -182,21 +171,35 @@ export function MetaAdsPage() {
         for (const bm of biz.data || []) {
           try {
             const [o, c] = await Promise.all([
-              metaFetch<AccRes>(`/${bm.id}/owned_ad_accounts`, { access_token: t, fields: 'id,name,currency', limit: '200' }).catch(() => ({ data: [] })),
-              metaFetch<AccRes>(`/${bm.id}/client_ad_accounts`, { access_token: t, fields: 'id,name,currency', limit: '200' }).catch(() => ({ data: [] }))
+              metaFetch<AccRes>(`/${bm.id}/owned_ad_accounts`, { access_token: t, fields: 'id,name,currency', limit: '200' }).catch(
+                () => ({ data: [] as MetaAccount[] })
+              ),
+              metaFetch<AccRes>(`/${bm.id}/client_ad_accounts`, { access_token: t, fields: 'id,name,currency', limit: '200' }).catch(
+                () => ({ data: [] as MetaAccount[] })
+              )
             ])
             for (const a of [...(o.data || []), ...(c.data || [])]) {
               if (!allAccs.find((x) => x.id === a.id)) allAccs.push(a)
             }
           } catch {
-            // ignore
+            /* ignora falhas por BM individual */
           }
         }
       } catch {
-        // ignore
+        /* /me/businesses é opcional */
+      }
+
+      if (allAccs.length === 0 && accountLoadError) {
+        setError(accountLoadError)
+      } else if (allAccs.length === 0) {
+        setError(
+          'Nenhuma conta de anúncios encontrada. Gere o token com as permissões ads_read ou ads_management e acesso às contas no Meta Business.'
+        )
+      } else {
+        setError(null)
       }
       setAccounts(allAccs)
-      const preferred = fav || savedAcc || (allAccs[0]?.id ?? '')
+      const preferred = favAccId || accId || (allAccs[0]?.id ?? '')
       const chosenId = allAccs.find((a) => a.id === preferred) ? preferred : allAccs[0]?.id ?? ''
       setAccId(chosenId)
       metaSaveAccId(chosenId)
@@ -204,14 +207,13 @@ export function MetaAdsPage() {
       setSelectedAccountName(chosen?.name || chosenId)
       setLoading(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar contas')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar contas')
       setLoading(false)
     }
-  }, [token, convMode, favAccId, accId, period, customSince, customUntil, setMetaConnectedAt])
+  }, [convMode, favAccId, accId, period, customSince, customUntil])
 
   useEffect(() => {
     const saved = metaLoadSaved()
-    setToken(saved.token)
     setConvMode(saved.mode as MetaConvMode)
     setFavAccId(saved.favAccId)
     setAccId(saved.accId)
@@ -225,19 +227,16 @@ export function MetaAdsPage() {
   }, [])
 
   useEffect(() => {
-    if (!token && metaConnectedAt) {
-      const saved = metaLoadSaved()
-      if (saved.token) setToken(saved.token)
-    }
-    if (!token) {
+    if (!metaGetEffectiveToken()) {
       setLoading(false)
       return
     }
     loadMetaPage()
-  }, [token, metaConnectedAt])
+  }, [metaConnectedAt, loadMetaPage])
 
   const loadMetaData = useCallback(async () => {
-    if (!token || !accId || !since) return
+    const tokenNow = metaGetEffectiveToken()
+    if (!tokenNow || !accId || !since) return
     setLoadingData(true)
     setError(null)
     const timeRange = JSON.stringify({ since, until })
@@ -247,14 +246,14 @@ export function MetaAdsPage() {
       type InsRes = { data?: MetaInsightRow[] }
       type CampRes = { data?: MetaCampaign[] }
       const [insData, campaignsData, dailyData] = await Promise.all([
-        metaFetch<InsRes>(`/${accId}/insights`, { access_token: token, fields, time_range: timeRange }),
+        metaFetch<InsRes>(`/${accId}/insights`, { access_token: tokenNow, fields, time_range: timeRange }),
         metaFetch<CampRes>(`/${accId}/campaigns`, {
-          access_token: token,
+          access_token: tokenNow,
           fields: `id,name,insights.time_range(${timeRange}){spend,impressions,actions,cost_per_action_type,ctr}`,
           limit: '100'
         }),
         metaFetch<InsRes>(`/${accId}/insights`, {
-          access_token: token,
+          access_token: tokenNow,
           fields: 'spend,date_start',
           time_increment: '1',
           time_range: timeRange
@@ -344,7 +343,7 @@ export function MetaAdsPage() {
         })
       setCampaignRows(ads)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar dados')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar dados')
       setKpis(null)
       setFunilSteps([])
       setDailySpend([])
@@ -352,11 +351,11 @@ export function MetaAdsPage() {
     } finally {
       setLoadingData(false)
     }
-  }, [token, accId, since, until, convMode])
+  }, [metaConnectedAt, accId, since, until, convMode])
 
   useEffect(() => {
-    if (token && accId && since) loadMetaData()
-  }, [token, accId, since, until, loadMetaData])
+    if (hasToken && accId && since) loadMetaData()
+  }, [hasToken, accId, since, until, loadMetaData])
 
   function setMetaPeriod(p: MetaPeriod) {
     setPeriod(p)
@@ -404,7 +403,7 @@ export function MetaAdsPage() {
 
   const maxDaily = dailySpend.length ? Math.max(...dailySpend.map((d) => d.spend), 1) : 1
 
-  if (!token && !loading) {
+  if (!hasToken && !loading) {
     return (
       <div className="content meta-ads-page">
         <div style={{ marginBottom: 16 }}>
@@ -473,6 +472,15 @@ export function MetaAdsPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="card mb" style={{ marginBottom: 16, padding: 16, background: 'rgba(239,68,68,.08)', borderColor: 'var(--red)' }}>
+          <p style={{ color: 'var(--red)' }}>{error}</p>
+          <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => openModal('modal-meta-config')}>
+            Reconfigurar token
+          </button>
+        </div>
+      )}
+
       <div className="card mb" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
@@ -524,7 +532,7 @@ export function MetaAdsPage() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <select value={accId} onChange={onAccountChange} className="meta-select">
                 {accounts.length === 0 ? (
-                  <option value="">Carregando contas...</option>
+                  <option value="">{loading ? 'Carregando contas...' : 'Nenhuma conta (mensagem no topo)'}</option>
                 ) : (
                   [...accounts]
                     .sort((a, b) => {
@@ -561,15 +569,6 @@ export function MetaAdsPage() {
           </div>
         </div>
       </div>
-
-      {error && (
-        <div className="card mb" style={{ padding: 16, background: 'rgba(239,68,68,.08)', borderColor: 'var(--red)' }}>
-          <p style={{ color: 'var(--red)' }}>{error}</p>
-          <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => openModal('modal-meta-config')}>
-            Reconfigurar
-          </button>
-        </div>
-      )}
 
       <div className="meta-kpi-grid">
         {(

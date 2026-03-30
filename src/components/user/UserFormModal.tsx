@@ -3,6 +3,7 @@ import { Pencil, User } from 'lucide-react'
 import { getAuth, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
 import { initFirebaseApp } from '../../firebase/config'
 import { addUser, updateUser } from '../../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import { useAppStore } from '../../store/useAppStore'
 
 export function UserFormModal() {
@@ -112,7 +113,7 @@ export function UserFormModal() {
       closeModal()
       useAppStore.getState().incrementUsersVersion()
     } catch (err) {
-      showToast(`Erro: ${err instanceof Error ? err.message : 'Erro'}`, 'err')
+      showToast(`Erro: ${formatFirebaseOrUnknownError(err)}`, 'err')
     } finally {
       setLoading(false)
     }

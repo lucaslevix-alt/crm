@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getRegistrosByRange, listUsers } from '../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { today, mRange, wRange } from '../lib/dates'
 import type { CrmUser } from '../store/useAppStore'
 import { Briefcase, Trophy } from 'lucide-react'
@@ -95,7 +96,7 @@ export function RankingCloserPage() {
       const totalFt = sorted.reduce((sum, x) => sum + x.ft, 0)
       setTicketMedio(totalVn > 0 ? totalFt / totalVn : 0)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
       setList([])
       setTicketMedio(0)
     } finally {

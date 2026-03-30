@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CalendarCheck, CalendarPlus, CircleDollarSign, Handshake, Target, Zap } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
-import { addRegistro } from '../../firebase/firestore'
+import { addRegistro, createAgendamentoFromSdr } from '../../firebase/firestore'
+import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import { icSm } from '../../lib/icon-sizes'
+import { getN8nAgendamentoWebhookUrl, triggerN8nAgendamentoWebhook } from '../../lib/n8nAgendamentoWebhook'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
@@ -15,15 +17,18 @@ const tipoLabels: Record<string, string> = {
   reuniao_closer: 'Reunião closer'
 }
 
-/** Grupo Wpp obrigatório só em "Realizei reunião" (SDR), não em "Agendei reunião". */
 function isRealizeiReuniaoSdr(tipo: string): boolean {
   return tipo === 'reuniao_realizada'
 }
 
+function isAgendeiReuniaoSdr(tipo: string): boolean {
+  return tipo === 'reuniao_agendada'
+}
+
 export function QuickRegBar() {
-  const { currentUser, quickBarHidden } = useAppStore()
+  const { currentUser, quickBarHidden, showToast, incrementRegistrosVersion } = useAppStore()
   const [pendingTipo, setPendingTipo] = useState<string | null>(null)
-  const [campanha, setCampanha] = useState('')
+  const [origemLead, setOrigemLead] = useState('')
   const [grupoWpp, setGrupoWpp] = useState('')
 
   const isSdr = currentUser && (currentUser.cargo === 'sdr' || currentUser.cargo === 'admin')
@@ -32,53 +37,95 @@ export function QuickRegBar() {
   const showSdr = isSdr && !quickBarHidden
   const showCloser = isCloser && !quickBarHidden
 
-  async function quickReg(tipo: string, campanhaVal?: string, grupoWppVal?: string | null) {
+  async function quickReg(tipo: string, origemLeadVal?: string, grupoWppVal?: string | null) {
     if (!currentUser) return
     try {
-      await addRegistro({
-        data: today(),
-        tipo,
-        userId: currentUser.id,
-        userName: currentUser.nome,
-        userCargo: currentUser.cargo,
-        anuncio: campanhaVal?.trim() || null,
-        grupoWpp: isRealizeiReuniaoSdr(tipo) ? grupoWppVal?.trim() || null : null
-      })
-      const msg =
-        tipo === 'reuniao_agendada'
-          ? 'Reunião agendada.'
-          : tipo === 'reuniao_realizada'
+      if (tipo === 'reuniao_agendada') {
+        const created = await createAgendamentoFromSdr({
+          sdrUserId: currentUser.id,
+          sdrUserName: currentUser.nome,
+          sdrCargo: currentUser.cargo,
+          origemLead: (origemLeadVal ?? '').trim(),
+          grupoWpp: (grupoWppVal ?? '').trim()
+        })
+        const dataStr = today()
+        triggerN8nAgendamentoWebhook({
+          event: 'reuniao_agendada_sdr',
+          origemLead: (origemLeadVal ?? '').trim(),
+          nomeLead: (grupoWppVal ?? '').trim(),
+          sdrUserId: currentUser.id,
+          sdrUserName: currentUser.nome,
+          sdrCargo: currentUser.cargo,
+          squadId: created.squadId,
+          squadNome: created.squadNome,
+          agendamentoId: created.agendamentoId,
+          registroAgendadaId: created.registroAgendadaId,
+          data: dataStr,
+          source: 'crm_quick_bar'
+        })
+        const n8nOn = Boolean(getN8nAgendamentoWebhookUrl())
+        showToast(
+          n8nOn
+            ? 'Reunião agendada. Automação N8N notificada (criação do grupo no WhatsApp).'
+            : 'Reunião agendada (registro + agenda do squad).'
+        )
+      } else {
+        await addRegistro({
+          data: today(),
+          tipo,
+          userId: currentUser.id,
+          userName: currentUser.nome,
+          userCargo: currentUser.cargo,
+          anuncio: origemLeadVal?.trim() || null,
+          grupoWpp: isRealizeiReuniaoSdr(tipo) ? grupoWppVal?.trim() || null : null
+        })
+        const msg =
+          tipo === 'reuniao_realizada'
             ? 'Reunião realizada.'
             : tipo === 'reuniao_closer'
               ? 'Reunião closer registrada.'
               : 'Registro salvo.'
-      useAppStore.getState().showToast(msg)
+        showToast(msg)
+      }
+      incrementRegistrosVersion()
     } catch (err) {
-      useAppStore.getState().showToast('Erro: ' + (err instanceof Error ? err.message : String(err)), 'err')
+      showToast('Erro: ' + formatFirebaseOrUnknownError(err), 'err')
     }
   }
 
   function handleQuickAction(tipo: string) {
     setPendingTipo(tipo)
-    setCampanha('')
+    setOrigemLead('')
     setGrupoWpp('')
   }
 
   function confirmCampanha() {
     if (!pendingTipo) return
+    if (isAgendeiReuniaoSdr(pendingTipo)) {
+      if (!origemLead.trim()) {
+        showToast('Informe a origem do lead', 'err')
+        return
+      }
+      if (!grupoWpp.trim()) {
+        showToast('Informe o nome do lead', 'err')
+        return
+      }
+    }
     if (isRealizeiReuniaoSdr(pendingTipo) && !grupoWpp.trim()) {
-      useAppStore.getState().showToast('Informe o grupo de WhatsApp', 'err')
+      showToast('Informe o grupo de WhatsApp', 'err')
       return
     }
-    quickReg(pendingTipo, campanha, isRealizeiReuniaoSdr(pendingTipo) ? grupoWpp : null)
+    const gw =
+      isAgendeiReuniaoSdr(pendingTipo) || isRealizeiReuniaoSdr(pendingTipo) ? grupoWpp : null
+    void quickReg(pendingTipo, origemLead, gw)
     setPendingTipo(null)
-    setCampanha('')
+    setOrigemLead('')
     setGrupoWpp('')
   }
 
   function cancelCampanha() {
     setPendingTipo(null)
-    setCampanha('')
+    setOrigemLead('')
     setGrupoWpp('')
   }
 
@@ -162,28 +209,40 @@ export function QuickRegBar() {
               </h2>
               <div className="qrb-meet-fields">
                 <div className="qrb-meet-field">
-                  <label htmlFor="qrb-campanha">
-                    Campanha Meta Ads{' '}
-                    <span className="qrb-meet-hint">(opcional)</span>
+                  <label htmlFor="qrb-origem-lead">
+                    Origem do lead{' '}
+                    {isAgendeiReuniaoSdr(pendingTipo) ? (
+                      <span className="qrb-meet-req">*</span>
+                    ) : (
+                      <span className="qrb-meet-hint">(opcional)</span>
+                    )}
                   </label>
                   <input
-                    id="qrb-campanha"
+                    id="qrb-origem-lead"
                     type="text"
                     className="qrb-meet-input"
-                    value={campanha}
-                    onChange={(e) => setCampanha(e.target.value)}
+                    value={origemLead}
+                    onChange={(e) => setOrigemLead(e.target.value)}
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') confirmCampanha()
                     }}
-                    placeholder="Nome da campanha ou deixe vazio"
+                    placeholder="Ex: Meta Ads, indicação, evento…"
                     autoComplete="off"
                   />
                 </div>
-                {isRealizeiReuniaoSdr(pendingTipo) && (
+                {(isRealizeiReuniaoSdr(pendingTipo) || isAgendeiReuniaoSdr(pendingTipo)) && (
                   <div className="qrb-meet-field">
                     <label htmlFor="qrb-grupo-wpp">
-                      Grupo Wpp <span className="qrb-meet-req">*</span>
+                      {isAgendeiReuniaoSdr(pendingTipo) ? (
+                        <>
+                          Nome do lead <span className="qrb-meet-req">*</span>
+                        </>
+                      ) : (
+                        <>
+                          Grupo Wpp <span className="qrb-meet-req">*</span>
+                        </>
+                      )}
                     </label>
                     <input
                       id="qrb-grupo-wpp"
@@ -194,24 +253,31 @@ export function QuickRegBar() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') confirmCampanha()
                       }}
-                      placeholder="Identificação ou link do grupo"
+                      placeholder={
+                        isAgendeiReuniaoSdr(pendingTipo)
+                          ? 'Nome para identificar o lead (o N8N pode usar para criar o grupo)'
+                          : 'Identificação ou link do grupo'
+                      }
                       autoComplete="off"
                     />
                   </div>
                 )}
-              </div>
-              <div className="qrb-meet-actions">
-                <button type="button" className="qrb-meet-btn qrb-meet-btn--secondary" onClick={cancelCampanha}>
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="qrb-meet-btn qrb-meet-btn--primary"
-                  onClick={confirmCampanha}
-                  disabled={isRealizeiReuniaoSdr(pendingTipo) && !grupoWpp.trim()}
-                >
-                  OK
-                </button>
+                <div className="qrb-meet-actions">
+                  <button type="button" className="qrb-meet-btn qrb-meet-btn--secondary" onClick={cancelCampanha}>
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="qrb-meet-btn qrb-meet-btn--primary"
+                    onClick={confirmCampanha}
+                    disabled={
+                      (isAgendeiReuniaoSdr(pendingTipo) && (!origemLead.trim() || !grupoWpp.trim())) ||
+                      (isRealizeiReuniaoSdr(pendingTipo) && !grupoWpp.trim())
+                    }
+                  >
+                    OK
+                  </button>
+                </div>
               </div>
             </div>
           </div>,

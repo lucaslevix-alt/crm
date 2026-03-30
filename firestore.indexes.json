@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "registros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "data", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
