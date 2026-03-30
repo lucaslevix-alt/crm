@@ -930,7 +930,7 @@ export async function deleteSquad(id: string): Promise<void> {
 }
 
 /** Agenda interna (Firestore): reuniões agendadas pelo SDR, ações do closer */
-export type AgendamentoStatus = 'agendada' | 'realizada' | 'venda'
+export type AgendamentoStatus = 'agendada' | 'realizada' | 'venda' | 'no_show'
 
 export interface AgendamentoRow {
   id: string
@@ -947,6 +947,7 @@ export interface AgendamentoRow {
   registroRealizadaSdrId: string | null
   registroCloserId: string | null
   registroVendaId: string | null
+  registroNoShowId: string | null
   closerUserId: string | null
   closerUserName: string | null
   criadoEm?: Timestamp | null
@@ -956,7 +957,7 @@ function docToAgendamento(d: { id: string; data: () => Record<string, unknown> }
   const x = d.data()
   const st = x.status
   const status: AgendamentoStatus =
-    st === 'realizada' || st === 'venda' ? st : 'agendada'
+    st === 'realizada' || st === 'venda' || st === 'no_show' ? st : 'agendada'
   return {
     id: d.id,
     squadId: String(x.squadId ?? ''),
@@ -975,6 +976,7 @@ function docToAgendamento(d: { id: string; data: () => Record<string, unknown> }
     registroRealizadaSdrId: x.registroRealizadaSdrId != null ? String(x.registroRealizadaSdrId) : null,
     registroCloserId: x.registroCloserId != null ? String(x.registroCloserId) : null,
     registroVendaId: x.registroVendaId != null ? String(x.registroVendaId) : null,
+    registroNoShowId: x.registroNoShowId != null ? String(x.registroNoShowId) : null,
     closerUserId: x.closerUserId != null ? String(x.closerUserId) : null,
     closerUserName: x.closerUserName != null ? String(x.closerUserName) : null,
     criadoEm: (x.criadoEm as Timestamp | undefined) ?? null
@@ -1025,6 +1027,7 @@ export async function createAgendamentoFromSdr(params: {
     registroRealizadaSdrId: null,
     registroCloserId: null,
     registroVendaId: null,
+    registroNoShowId: null,
     closerUserId: null,
     closerUserName: null,
     criadoEm: serverTimestamp()
@@ -1058,7 +1061,9 @@ export async function marcarAgendamentoRealizada(params: {
   const snap = await getDoc(ref)
   if (!snap.exists()) throw new Error('Agendamento não encontrado.')
   const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
-  if (row.status !== 'agendada') throw new Error('Só é possível marcar como realizada quando o status é “agendada”.')
+  if (row.status !== 'agendada') {
+    throw new Error('Só é possível marcar como realizada quando o status é “agendada”.')
+  }
   const obsSdr = `Agenda · closer ${params.closer.nome}`
   const registroRealizadaSdrId = await addRegistro({
     data: row.data,
@@ -1090,6 +1095,37 @@ export async function marcarAgendamentoRealizada(params: {
   })
 }
 
+/** Closer: lead não compareceu — registo `reuniao_no_show` (SDR) para métricas; sem realizada/closer. */
+export async function marcarAgendamentoNoShow(params: {
+  agendamentoId: string
+  closer: { id: string; nome: string; cargo: string }
+}): Promise<void> {
+  const ref = doc(db, 'agendamentos', params.agendamentoId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Agendamento não encontrado.')
+  const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
+  if (row.status !== 'agendada') {
+    throw new Error('Só é possível marcar no-show quando o status é “agendada”.')
+  }
+  const registroNoShowId = await addRegistro({
+    data: row.data,
+    tipo: 'reuniao_no_show',
+    userId: row.sdrUserId,
+    userName: row.sdrUserName,
+    userCargo: row.sdrUserCargo,
+    anuncio: row.origemLead,
+    grupoWpp: row.grupoWpp,
+    obs: `No show · closer ${params.closer.nome}`
+  })
+  await updateDoc(ref, {
+    status: 'no_show',
+    registroNoShowId,
+    closerUserId: params.closer.id,
+    closerUserName: params.closer.nome,
+    atualizadoEm: serverTimestamp()
+  })
+}
+
 export async function marcarAgendamentoVenda(params: {
   agendamentoId: string
   closer: { id: string; nome: string; cargo: string }
@@ -1107,6 +1143,7 @@ export async function marcarAgendamentoVenda(params: {
   if (!snap.exists()) throw new Error('Agendamento não encontrado.')
   const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
   if (row.status === 'venda') throw new Error('Este agendamento já está marcado como venda.')
+  if (row.status === 'no_show') throw new Error('Este agendamento está em no-show. Não é possível registrar venda.')
 
   let registroRealizadaSdrId = row.registroRealizadaSdrId
   let registroCloserId = row.registroCloserId

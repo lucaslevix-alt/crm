@@ -21,6 +21,7 @@ interface SdrStat {
   nome: string
   ag: number
   re: number
+  ns: number
   leads: number
   photoUrl?: string
 }
@@ -74,7 +75,10 @@ export function RankingSDRPage() {
       users.forEach((u) => usersById.set(u.id, u))
       const m = new Map<string, SdrStat>()
       recs
-        .filter((r) => r.tipo === 'reuniao_agendada' || r.tipo === 'reuniao_realizada')
+        .filter(
+          (r) =>
+            r.tipo === 'reuniao_agendada' || r.tipo === 'reuniao_realizada' || r.tipo === 'reuniao_no_show'
+        )
         .forEach((r) => {
           const u = usersById.get(r.userId)
           if (!m.has(r.userId)) {
@@ -83,13 +87,15 @@ export function RankingSDRPage() {
               nome: u?.nome ?? r.userName,
               ag: 0,
               re: 0,
+              ns: 0,
               leads: 0,
               photoUrl: u?.photoUrl
             })
           }
           const s = m.get(r.userId)!
           if (r.tipo === 'reuniao_agendada') s.ag++
-          else s.re++
+          else if (r.tipo === 'reuniao_realizada') s.re++
+          else s.ns++
         })
       leadsRows.forEach((l) => {
         const u = usersById.get(l.userId)
@@ -99,6 +105,7 @@ export function RankingSDRPage() {
             nome: u?.nome ?? l.userName,
             ag: 0,
             re: 0,
+            ns: 0,
             leads: 0,
             photoUrl: u?.photoUrl
           })
@@ -131,8 +138,8 @@ export function RankingSDRPage() {
     loadRanking()
   }, [loadRanking])
 
-  function noShowBadge(ag: number, re: number): React.ReactNode {
-    const ns = ag > 0 ? Math.round(((ag - re) / ag) * 100) : null
+  function noShowBadge(ag: number, nsCount: number): React.ReactNode {
+    const ns = ag > 0 ? Math.round((nsCount / ag) * 100) : null
     if (ns === null) return null
     const col = ns <= 10 ? 'var(--green)' : ns <= 25 ? 'var(--amber)' : 'var(--red)'
     return (
@@ -239,7 +246,7 @@ export function RankingSDRPage() {
                     name={
                       <>
                         {s.nome}
-                        {noShowBadge(s.ag, s.re)}
+                        {noShowBadge(s.ag, s.ns)}
                       </>
                     }
                     sub={`${s.re} realizadas`}
@@ -257,7 +264,7 @@ export function RankingSDRPage() {
             <div className="card-header">
               <span className="card-title card-title--ic">
                 <CalendarCheck size={16} strokeWidth={1.65} aria-hidden />
-                Realizadas + No-show
+                Realizadas
               </span>
             </div>
             <div>
@@ -269,7 +276,7 @@ export function RankingSDRPage() {
                     name={
                       <>
                         {s.nome}
-                        {noShowBadge(s.ag, s.re)}
+                        {noShowBadge(s.ag, s.ns)}
                       </>
                     }
                     sub={`${s.ag} agendadas`}

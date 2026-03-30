@@ -114,6 +114,7 @@ export function FunilPage() {
       const recs = await getRegistrosByRange(s, u)
       const ag = recs.filter((r) => r.tipo === 'reuniao_agendada').length
       const rr = recs.filter((r) => r.tipo === 'reuniao_realizada').length
+      const ns = recs.filter((r) => r.tipo === 'reuniao_no_show').length
       const vendas = recs.filter((r) => r.tipo === 'venda')
       const vn = vendas.length
       const ft = vendas.reduce((sum, r) => sum + (r.valor || 0), 0)
@@ -144,7 +145,7 @@ export function FunilPage() {
       }
 
       const cvLeadRA = leads > 0 ? (ag / leads) * 100 : null
-      const noShow = ag > 0 ? ((ag - rr) / ag) * 100 : null
+      const noShow = ag > 0 ? (ns / ag) * 100 : null
       const winRate = rr > 0 ? (vn / rr) * 100 : null
       const tm = vn > 0 ? ft / vn : 0
       const collectedPct = ft > 0 ? Math.round((ca / ft) * 100) : null
@@ -204,7 +205,11 @@ export function FunilPage() {
           icon={<CheckCircle2 size={20} strokeWidth={1.65} />}
           label="Reuniões Realizadas"
           num={String(rr)}
-          sub={ag > 0 ? `De ${ag} agendadas — ${pct(noShow ?? null)} no-show` : null}
+          sub={
+            ag > 0
+              ? `De ${ag} agendadas · ${rr} realizadas · ${ns} no-show (${pct(noShow ?? null)})`
+              : null
+          }
           badge={
             noShow !== null ? (
               <span className={`fn-badge ${funilBadgeClass(100 - noShow, { good: 90, warn: 75 })}`}>

@@ -37,6 +37,7 @@ const TIPO_LABEL: Record<string, string> = {
   reuniao_agendada: 'Agendada',
   reuniao_realizada: 'Realizada',
   reuniao_closer: 'Closer',
+  reuniao_no_show: 'No show',
   venda: 'Venda'
 }
 

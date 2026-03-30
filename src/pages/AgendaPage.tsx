@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarClock, CheckCircle2 } from 'lucide-react'
+import { CalendarClock, CheckCircle2, ChevronDown, CircleDollarSign, UserX } from 'lucide-react'
 import {
   listAgendamentos,
   marcarAgendamentoRealizada,
+  marcarAgendamentoNoShow,
   resolveSquadForUserId,
   type AgendamentoRow,
   type AgendamentoStatus
@@ -53,13 +54,165 @@ function fdt(s: string): string {
 const STATUS_LABEL: Record<AgendamentoStatus, string> = {
   agendada: 'Agendada',
   realizada: 'Realizada',
-  venda: 'Venda'
+  venda: 'Venda',
+  no_show: 'No show'
 }
 
 const STATUS_BADGE: Record<AgendamentoStatus, string> = {
   agendada: 'b-sdr',
   realizada: 'b-green',
-  venda: 'b-amber'
+  venda: 'b-amber',
+  no_show: 'b-no-show'
+}
+
+type MenuRect = { top: number; right: number; minWidth: number }
+
+function AgendaCloserOutcomeMenu({
+  disabled,
+  variant,
+  onPick
+}: {
+  disabled: boolean
+  variant: 'agendada' | 'realizada'
+  onPick: (action: 'realizada' | 'no_show' | 'venda') => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [menuRect, setMenuRect] = useState<MenuRect | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const placeMenu = useCallback(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const minWidth = Math.max(176, Math.ceil(r.width))
+    const right = Math.max(8, window.innerWidth - r.right)
+    setMenuRect({ top: Math.round(r.bottom + 4), right, minWidth })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuRect(null)
+      return
+    }
+    placeMenu()
+  }, [open, placeMenu])
+
+  useEffect(() => {
+    if (!open) return
+    const onScrollOrResize = () => placeMenu()
+    window.addEventListener('resize', onScrollOrResize)
+    window.addEventListener('scroll', onScrollOrResize, true)
+    return () => {
+      window.removeEventListener('resize', onScrollOrResize)
+      window.removeEventListener('scroll', onScrollOrResize, true)
+    }
+  }, [open, placeMenu])
+
+  useEffect(() => {
+    if (!open) return
+    const onDocDown = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (wrapRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDocDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const menuBody =
+    variant === 'agendada' ? (
+      <>
+        <button
+          type="button"
+          className="agenda-dd-item"
+          role="menuitem"
+          onClick={() => {
+            setOpen(false)
+            onPick('realizada')
+          }}
+        >
+          <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
+          Realizada
+        </button>
+        <button
+          type="button"
+          className="agenda-dd-item"
+          role="menuitem"
+          onClick={() => {
+            setOpen(false)
+            onPick('no_show')
+          }}
+        >
+          <UserX size={16} strokeWidth={1.65} aria-hidden />
+          No show
+        </button>
+        <button
+          type="button"
+          className="agenda-dd-item agenda-dd-item--primary"
+          role="menuitem"
+          onClick={() => {
+            setOpen(false)
+            onPick('venda')
+          }}
+        >
+          Venda
+        </button>
+      </>
+    ) : (
+      <button
+        type="button"
+        className="agenda-dd-item agenda-dd-item--primary"
+        role="menuitem"
+        onClick={() => {
+          setOpen(false)
+          onPick('venda')
+        }}
+      >
+        <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
+        Registrar venda
+      </button>
+    )
+
+  return (
+    <div className="agenda-dd" ref={wrapRef}>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm agenda-dd-trigger"
+        disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((v) => !v)}
+      >
+        Desfecho
+        <ChevronDown size={14} strokeWidth={2} aria-hidden className="agenda-dd-chevron" />
+      </button>
+      {open &&
+        menuRect &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="agenda-dd-menu"
+            style={{
+              top: menuRect.top,
+              right: menuRect.right,
+              minWidth: menuRect.minWidth
+            }}
+            role="menu"
+          >
+            {menuBody}
+          </div>,
+          document.body
+        )}
+    </div>
+  )
 }
 
 export function AgendaPage() {
@@ -145,6 +298,25 @@ export function AgendaPage() {
     }
   }
 
+  async function handleNoShow(a: AgendamentoRow) {
+    if (!currentUser) return
+    if (!window.confirm('Marcar como no show? O lead não compareceu — será criado um registo para métricas (SDR).')) return
+    setMarcandoId(a.id)
+    try {
+      await marcarAgendamentoNoShow({
+        agendamentoId: a.id,
+        closer: { id: currentUser.id, nome: currentUser.nome, cargo: currentUser.cargo }
+      })
+      showToast('Marcado como no show.')
+      incrementRegistrosVersion()
+      void load()
+    } catch (e) {
+      showToast('Erro: ' + formatFirebaseOrUnknownError(e), 'err')
+    } finally {
+      setMarcandoId(null)
+    }
+  }
+
   return (
     <div className="content">
       <div className="page-title-row" style={{ marginBottom: 16 }}>
@@ -152,9 +324,9 @@ export function AgendaPage() {
         <h1 className="page-title">Agenda do squad</h1>
       </div>
       <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 16, maxWidth: 720 }}>
-        Reuniões agendadas pelo SDR (barra rápida «Agendei reunião»). O closer vê o nome do lead e pode marcar como
-        realizada ou registrar venda. Opcionalmente um webhook N8N pode criar o grupo no WhatsApp. Administradores veem
-        todos os squads.
+        Reuniões agendadas pelo SDR (barra rápida «Agendei reunião»). O closer usa o menu{' '}
+        <strong>Desfecho</strong> na linha para escolher realizada, no show ou venda. Administradores veem todos os
+        squads.
       </p>
 
       {!isAdmin && !mySquadId && (
@@ -199,6 +371,7 @@ export function AgendaPage() {
               <option value="agendada">Agendada</option>
               <option value="realizada">Realizada</option>
               <option value="venda">Venda</option>
+              <option value="no_show">No show</option>
             </select>
           </div>
         </div>
@@ -234,7 +407,16 @@ export function AgendaPage() {
                 <p>{busca || fStatus ? 'Nenhum item para os filtros.' : 'Nenhum agendamento no período.'}</p>
               </div>
             ) : (
-              <table>
+              <table className="agenda-table">
+                <colgroup>
+                  <col className="agenda-col-data" />
+                  <col className="agenda-col-lead" />
+                  <col className="agenda-col-origem" />
+                  <col className="agenda-col-sdr" />
+                  <col className="agenda-col-squad" />
+                  <col className="agenda-col-status" />
+                  <col className="agenda-col-actions" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Data</th>
@@ -252,52 +434,62 @@ export function AgendaPage() {
                       <td className="mono" style={{ fontSize: 12 }}>
                         {fdt(a.data)}
                       </td>
-                      <td style={{ fontWeight: 600, maxWidth: 220 }}>
-                        <span className="chip" title={a.grupoWpp} style={{ borderColor: 'rgba(34,197,94,.35)', color: 'var(--green)' }}>
+                      <td className="agenda-td-text" style={{ fontWeight: 600 }}>
+                        <span
+                          className="chip agenda-chip"
+                          title={a.grupoWpp}
+                          style={{ borderColor: 'rgba(34,197,94,.35)', color: 'var(--green)' }}
+                        >
                           {a.grupoWpp}
                         </span>
                       </td>
-                      <td style={{ maxWidth: 160 }}>
+                      <td className="agenda-td-text">
                         {a.origemLead ? (
-                          <span className="chip" title={a.origemLead}>
+                          <span className="chip agenda-chip" title={a.origemLead}>
                             {a.origemLead}
                           </span>
                         ) : (
                           '—'
                         )}
                       </td>
-                      <td>
-                        <strong>{a.sdrUserName}</strong>
+                      <td className="agenda-td-text">
+                        <strong className="agenda-td-ellipsis">{a.sdrUserName}</strong>
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--text2)' }}>{a.squadNome}</td>
-                      <td>
-                        <span className={`badge ${STATUS_BADGE[a.status]}`}>{STATUS_LABEL[a.status]}</span>
-                        {a.closerUserName && (
-                          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{a.closerUserName}</div>
-                        )}
+                      <td className="agenda-td-text" style={{ fontSize: 12, color: 'var(--text2)' }}>
+                        <span className="agenda-td-ellipsis">{a.squadNome}</span>
                       </td>
-                      <td>
+                      <td className="agenda-td-status">
+                        <span
+                          className={`badge ${STATUS_BADGE[a.status]}`}
+                          title={
+                            a.closerUserName
+                              ? `${STATUS_LABEL[a.status]} · Closer: ${a.closerUserName}`
+                              : STATUS_LABEL[a.status]
+                          }
+                        >
+                          {STATUS_LABEL[a.status]}
+                        </span>
+                      </td>
+                      <td className="agenda-td-actions">
                         {a.status === 'agendada' && podeAgirNoItem(a) && currentUser && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              disabled={marcandoId === a.id}
-                              onClick={() => void handleRealizada(a)}
-                              title="Marcar realizada"
-                            >
-                              <CheckCircle2 size={16} strokeWidth={1.65} />
-                              Realizada
-                            </button>
-                            <button type="button" className="btn btn-primary btn-sm" onClick={() => setVendaPara(a)}>
-                              Venda
-                            </button>
-                          </div>
+                          <AgendaCloserOutcomeMenu
+                            variant="agendada"
+                            disabled={marcandoId === a.id}
+                            onPick={(action) => {
+                              if (action === 'realizada') void handleRealizada(a)
+                              else if (action === 'no_show') void handleNoShow(a)
+                              else setVendaPara(a)
+                            }}
+                          />
                         )}
                         {a.status === 'realizada' && podeAgirNoItem(a) && currentUser && (
-                          <button type="button" className="btn btn-primary btn-sm" onClick={() => setVendaPara(a)}>
-                            Registrar venda
-                          </button>
+                          <AgendaCloserOutcomeMenu
+                            variant="realizada"
+                            disabled={marcandoId === a.id}
+                            onPick={(action) => {
+                              if (action === 'venda') setVendaPara(a)
+                            }}
+                          />
                         )}
                       </td>
                     </tr>

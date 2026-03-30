@@ -15,6 +15,7 @@ import {
   Package,
   TrendingDown,
   TrendingUp,
+  UserX,
   Wallet
 } from 'lucide-react'
 import {
@@ -70,6 +71,7 @@ function totals(recs: RegistroRow[]) {
   return {
     ag: recs.filter((r) => r.tipo === 'reuniao_agendada').length,
     re: recs.filter((r) => r.tipo === 'reuniao_realizada').length,
+    ns: recs.filter((r) => r.tipo === 'reuniao_no_show').length,
     cl: recs.filter((r) => r.tipo === 'reuniao_closer').length,
     vn: vendas.length,
     ft: vendas.reduce((s, r) => s + (r.valor || 0), 0),
@@ -113,6 +115,8 @@ function tipoLabelRecent(r: RegistroRow): string {
       return 'Realizada'
     case 'reuniao_closer':
       return 'Closer'
+    case 'reuniao_no_show':
+      return 'No show'
     case 'venda':
       return 'Venda'
     default:
@@ -214,8 +218,9 @@ function derivedRates(recs: RegistroRow[], leadsTotalSdrFunnel: number, sdrFunne
   const leadParaReuniao =
     leadsTotalSdrFunnel > 0 ? (agSdrFunnel / leadsTotalSdrFunnel) * 100 : null
   const taxaShow = t.ag > 0 ? (t.re / t.ag) * 100 : null
+  const taxaNoShow = t.ag > 0 ? (t.ns / t.ag) * 100 : null
   const convVendas = t.re > 0 ? (t.vn / t.re) * 100 : null
-  return { ticketMedio, leadParaReuniao, taxaShow, convVendas }
+  return { ticketMedio, leadParaReuniao, taxaShow, taxaNoShow, convVendas }
 }
 
 function dailyFaturamentoSpark(recs: RegistroRow[], start: string, end: string): number[] {
@@ -588,6 +593,12 @@ export function DashboardPage() {
                   <div className="db-kpi-mini-lbl">Closer</div>
                 </div>
                 <div className="db-kpi-mini">
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--red)' }}>
+                    {t.ns}
+                  </div>
+                  <div className="db-kpi-mini-lbl">No show</div>
+                </div>
+                <div className="db-kpi-mini">
                   <div className="db-kpi-mini-val" style={{ color: 'var(--amber)' }}>
                     {t.vn}
                   </div>
@@ -625,12 +636,21 @@ export function DashboardPage() {
                 </div>
                 <div
                   className="db-kpi-mini"
-                  title="Reuniões realizadas ÷ reuniões agendadas"
+                  title="Reuniões realizadas ÷ reuniões agendadas (registos no período)"
                 >
                   <div className="db-kpi-mini-val" style={{ color: 'var(--green)' }}>
                     {fmtPct(rates.taxaShow)}
                   </div>
                   <div className="db-kpi-mini-lbl">Taxa de show</div>
+                </div>
+                <div
+                  className="db-kpi-mini"
+                  title="Registos «No show» (closer) ÷ reuniões agendadas — reuniões ainda sem desfecho não entram como no-show"
+                >
+                  <div className="db-kpi-mini-val" style={{ color: 'var(--red)' }}>
+                    {fmtPct(rates.taxaNoShow)}
+                  </div>
+                  <div className="db-kpi-mini-lbl">Taxa de no-show</div>
                 </div>
                 <div
                   className="db-kpi-mini"
@@ -976,7 +996,9 @@ export function DashboardPage() {
                                 ? CalendarCheck
                                 : r.tipo === 'reuniao_closer'
                                   ? Handshake
-                                  : CircleDollarSign
+                                  : r.tipo === 'reuniao_no_show'
+                                    ? UserX
+                                    : CircleDollarSign
                           const hue = hueFromString(r.userId || r.userName)
                           return (
                             <tr key={r.id} className="db-recent-row">
