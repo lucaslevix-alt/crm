@@ -111,6 +111,21 @@ const FB_CFG_KEY = 'fb_cfg'
 const QRB_KEY = 'qrb_hidden'
 const SIDEBAR_COLLAPSED_KEY = 'sidebar_collapsed'
 
+function loadCrmUserFromStorage(): CrmUser | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(CRM_USER_KEY)
+    if (!raw) return null
+    const u = JSON.parse(raw) as CrmUser
+    if (u && typeof u.id === 'string' && typeof u.email === 'string' && typeof u.nome === 'string') {
+      return u
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function loadFbConfigFromStorage(): FirebaseConfig | null {
   if (typeof window === 'undefined' || !import.meta.env.DEV) return null
   try {
@@ -140,7 +155,7 @@ function loadSidebarCollapsed(): boolean {
 }
 
 export const useAppStore = create<AppStoreState>((set) => ({
-  currentUser: null,
+  currentUser: typeof window !== 'undefined' ? loadCrmUserFromStorage() : null,
   authSessionReady: false,
   fbConfig: typeof window !== 'undefined' ? loadFbConfigFromStorage() : null,
   themeMode: typeof window !== 'undefined' ? getStoredTheme() : 'dark',
@@ -164,7 +179,19 @@ export const useAppStore = create<AppStoreState>((set) => ({
 
   setCurrentUser: (user) => {
     if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(CRM_USER_KEY)
+      if (user) {
+        try {
+          window.localStorage.setItem(CRM_USER_KEY, JSON.stringify(user))
+        } catch {
+          /* ignore */
+        }
+      } else {
+        try {
+          window.localStorage.removeItem(CRM_USER_KEY)
+        } catch {
+          /* ignore */
+        }
+      }
     }
     set({ currentUser: user })
   },

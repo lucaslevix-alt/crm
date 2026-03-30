@@ -101,13 +101,16 @@ export function UserFormModal() {
           cargo,
           hasPassword: nextHasPassword
         })
-        showToast(`${n} atualizado`)
         if (canEditPassword && newPassword && isAdmin && !isEditingSelf) {
-          showToast('Usuário marcado com senha. Para aplicar no login use o Console do Firebase (Authentication) ou uma Cloud Function.')
+          showToast(
+            `${n} atualizado. Para a senha nova funcionar no login, use o Firebase Console → Authentication ou o botão de migration em Utilizadores.`
+          )
+        } else {
+          showToast(`${n} atualizado`)
         }
       } else {
         await addUser({ nome: n, email: email.trim().toLowerCase(), cargo, hasPassword: true })
-        showToast(`${n} cadastrado`)
+        showToast(`${n} cadastrado. Se ainda não existir, crie o mesmo e-mail em Authentication.`)
       }
       setEditingUser(null)
       closeModal()

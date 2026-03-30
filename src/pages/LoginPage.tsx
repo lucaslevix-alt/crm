@@ -57,7 +57,7 @@ export function LoginPage() {
       }
 
       const user = await findUserByEmail({ email: fbUser.email })
-      if (!user || !user.hasPassword) {
+      if (!user) {
         await signOut(auth)
         setError(MSG_LOGIN_GENERIC)
         return
