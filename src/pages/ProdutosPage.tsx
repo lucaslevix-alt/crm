@@ -56,7 +56,8 @@ export function ProdutosPage() {
       blocoPrecoTabela: p.blocoPrecoTabela,
       blocoOferta: p.blocoOferta,
       blocoUltimaCondicao: p.blocoUltimaCondicao,
-      blocoCartaNaManga: p.blocoCartaNaManga
+      blocoCartaNaManga: p.blocoCartaNaManga,
+      negociacao6Meses: p.negociacao6Meses
     })
     openModal('modal-produto')
   }
@@ -93,8 +94,8 @@ export function ProdutosPage() {
           </h2>
           <p style={{ color: 'var(--text2)' }}>
             {podeEditar
-              ? 'As quatro ofertas (tabela, oferta, última condição, carta na manga) são as linhas de negociação. Edite no modal do produto; expanda a linha para ver o detalhe. Negociações simula o carrinho.'
-              : 'Consulta do catálogo — expandir para ver as quatro ofertas. Negociações é o simulador de carrinho.'}
+              ? 'Cada produto tem quatro ofertas em contrato de 3 meses e as mesmas quatro em 6 meses. Edite no modal (abas 3 e 6 meses); expanda a linha para ver as tabelas. Negociações simula o carrinho por período.'
+              : 'Consulta do catálogo — expandir para ver ofertas por 3 e 6 meses. Negociações é o simulador de carrinho.'}
           </p>
         </div>
         {podeEditar ? (
@@ -183,7 +184,9 @@ export function ProdutosPage() {
                         <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
                           {resumoBlocoCondicao(p.blocoCartaNaManga)}
                         </td>
-                        <td style={{ fontSize: 13 }}>4</td>
+                        <td style={{ fontSize: 12 }} title="Quatro ofertas × dois períodos (3 e 6 meses)">
+                          4 × 2
+                        </td>
                         {podeEditar ? (
                           <td style={{ display: 'flex', gap: 6 }}>
                             <button

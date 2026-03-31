@@ -1,5 +1,9 @@
 import { create } from 'zustand'
-import type { ProdutoBlocoCondicaoComercial, ProdutoBlocoPrecoTabela } from '../firebase/firestore'
+import type {
+  ProdutoBlocoCondicaoComercial,
+  ProdutoBlocoPrecoTabela,
+  ProdutoPacoteNegociacao
+} from '../firebase/firestore'
 import { applyTheme, getStoredTheme, persistTheme, type ThemeMode } from '../lib/theme'
 
 export type UserRole = 'admin' | 'sdr' | 'closer' | string
@@ -71,6 +75,7 @@ interface AppStoreState {
     blocoOferta: ProdutoBlocoCondicaoComercial
     blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
     blocoCartaNaManga: ProdutoBlocoCondicaoComercial
+    negociacao6Meses: ProdutoPacoteNegociacao
   } | null
   produtosVersion: number
   metaConnectedAt: number
@@ -92,6 +97,7 @@ interface AppStoreState {
     blocoOferta: ProdutoBlocoCondicaoComercial
     blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
     blocoCartaNaManga: ProdutoBlocoCondicaoComercial
+    negociacao6Meses: ProdutoPacoteNegociacao
   } | null) => void
   incrementProdutosVersion: () => void
   setFbConfig: (config: FirebaseConfig | null) => void

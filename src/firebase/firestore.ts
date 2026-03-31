@@ -437,6 +437,8 @@ export interface ProdutoBlocoPrecoTabela {
   valorParceladoCartao: number | null
   parcelasCartao: number | null
   linkPagamento: string | null
+  /** Selo opcional (ex.: “Economia de R$ X vs 2x trimestral” no contrato 6 meses) */
+  textoSelo: string | null
 }
 
 /** Oferta / última condição / carta na manga: à vista + parcelado cartão + bônus + link */
@@ -446,6 +448,16 @@ export interface ProdutoBlocoCondicaoComercial {
   parcelasCartao: number | null
   bonus: string | null
   linkPagamento: string | null
+  /** Tag na coluna “Tipo” (ex.: carta na manga com “Risco alto”) */
+  tagExibicao: 'desconto' | 'risco_alto' | null
+}
+
+/** Quatro ofertas de um mesmo período de contrato (3 ou 6 meses) */
+export interface ProdutoPacoteNegociacao {
+  blocoPrecoTabela: ProdutoBlocoPrecoTabela
+  blocoOferta: ProdutoBlocoCondicaoComercial
+  blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
+  blocoCartaNaManga: ProdutoBlocoCondicaoComercial
 }
 
 export function emptyBlocoPrecoTabela(): ProdutoBlocoPrecoTabela {
@@ -454,7 +466,8 @@ export function emptyBlocoPrecoTabela(): ProdutoBlocoPrecoTabela {
     valorAVista: null,
     valorParceladoCartao: null,
     parcelasCartao: null,
-    linkPagamento: null
+    linkPagamento: null,
+    textoSelo: null
   }
 }
 
@@ -464,17 +477,39 @@ export function emptyBlocoCondicaoComercial(): ProdutoBlocoCondicaoComercial {
     valorParceladoCartao: null,
     parcelasCartao: null,
     bonus: null,
-    linkPagamento: null
+    linkPagamento: null,
+    tagExibicao: null
+  }
+}
+
+export function emptyPacoteNegociacao(): ProdutoPacoteNegociacao {
+  return {
+    blocoPrecoTabela: emptyBlocoPrecoTabela(),
+    blocoOferta: emptyBlocoCondicaoComercial(),
+    blocoUltimaCondicao: emptyBlocoCondicaoComercial(),
+    blocoCartaNaManga: emptyBlocoCondicaoComercial()
+  }
+}
+
+function clonePacoteNegociacao(p: ProdutoPacoteNegociacao): ProdutoPacoteNegociacao {
+  return {
+    blocoPrecoTabela: { ...p.blocoPrecoTabela },
+    blocoOferta: { ...p.blocoOferta },
+    blocoUltimaCondicao: { ...p.blocoUltimaCondicao },
+    blocoCartaNaManga: { ...p.blocoCartaNaManga }
   }
 }
 
 export interface ProdutoRow {
   id: string
   nome: string
+  /** Contrato 3 meses (campos de topo = referência principal no CRM legado) */
   blocoPrecoTabela: ProdutoBlocoPrecoTabela
   blocoOferta: ProdutoBlocoCondicaoComercial
   blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
   blocoCartaNaManga: ProdutoBlocoCondicaoComercial
+  /** Contrato 6 meses — mesmas quatro ofertas com valores próprios */
+  negociacao6Meses: ProdutoPacoteNegociacao
   /** Legado / detalhamento por forma de pagamento (documentos antigos) */
   valor: number | null
   valorCartao: number | null
@@ -483,6 +518,12 @@ export interface ProdutoRow {
   parcelasBoleto: number | null
   aVista: number | null
   desc: string | null
+}
+
+function parseTagExibicao(raw: unknown): 'desconto' | 'risco_alto' | null {
+  if (raw === 'risco_alto') return 'risco_alto'
+  if (raw === 'desconto') return 'desconto'
+  return null
 }
 
 function parseBlocoPrecoTabela(x: Record<string, unknown>): ProdutoBlocoPrecoTabela {
@@ -494,7 +535,8 @@ function parseBlocoPrecoTabela(x: Record<string, unknown>): ProdutoBlocoPrecoTab
       valorAVista: numOrNull(o.valorAVista),
       valorParceladoCartao: numOrNull(o.valorParceladoCartao),
       parcelasCartao: numOrNull(o.parcelasCartao),
-      linkPagamento: strOrNull(o.linkPagamento)
+      linkPagamento: strOrNull(o.linkPagamento),
+      textoSelo: strOrNull(o.textoSelo)
     }
   }
   const oldPreco = numOrNull(x.precoTabela) ?? numOrNull(x.valor)
@@ -503,7 +545,8 @@ function parseBlocoPrecoTabela(x: Record<string, unknown>): ProdutoBlocoPrecoTab
     valorAVista: numOrNull(x.aVista) ?? oldPreco,
     valorParceladoCartao: numOrNull(x.valorCartao) ?? oldPreco,
     parcelasCartao: numOrNull(x.parcelasCartao),
-    linkPagamento: null
+    linkPagamento: null,
+    textoSelo: null
   }
 }
 
@@ -520,7 +563,8 @@ function parseBlocoCondicao(
       valorParceladoCartao: numOrNull(o.valorParceladoCartao),
       parcelasCartao: numOrNull(o.parcelasCartao),
       bonus: strOrNull(o.bonus),
-      linkPagamento: strOrNull(o.linkPagamento)
+      linkPagamento: strOrNull(o.linkPagamento),
+      tagExibicao: parseTagExibicao(o.tagExibicao)
     }
   }
   const leg = strOrNull(x[legacyTextKey])
@@ -529,16 +573,46 @@ function parseBlocoCondicao(
     valorParceladoCartao: null,
     parcelasCartao: null,
     bonus: leg,
-    linkPagamento: null
+    linkPagamento: null,
+    tagExibicao: null
   }
+}
+
+function parsePacoteNegociacao(raw: Record<string, unknown>): ProdutoPacoteNegociacao | null {
+  if (!raw || typeof raw !== 'object') return null
+  return {
+    blocoPrecoTabela: parseBlocoPrecoTabela({ ...raw, blocoPrecoTabela: raw.blocoPrecoTabela }),
+    blocoOferta: parseBlocoCondicao(raw, 'blocoOferta', 'ofertaPromocional'),
+    blocoUltimaCondicao: parseBlocoCondicao(raw, 'blocoUltimaCondicao', 'ultimaCondicao'),
+    blocoCartaNaManga: parseBlocoCondicao(raw, 'blocoCartaNaManga', 'cartaNaManga')
+  }
+}
+
+/** Pacote do período: 3 meses = campos no topo do documento; 6 meses = `negociacao6Meses`. */
+export function produtoPacotePorMeses(p: ProdutoRow, meses: 3 | 6): ProdutoPacoteNegociacao {
+  if (meses === 3) {
+    return {
+      blocoPrecoTabela: p.blocoPrecoTabela,
+      blocoOferta: p.blocoOferta,
+      blocoUltimaCondicao: p.blocoUltimaCondicao,
+      blocoCartaNaManga: p.blocoCartaNaManga
+    }
+  }
+  return p.negociacao6Meses
+}
+
+function produtoPrecoReferenciaDoBlocoTabela(bt: ProdutoBlocoPrecoTabela): number | null {
+  if (bt.valorTotal != null && bt.valorTotal > 0) return bt.valorTotal
+  if (bt.valorParceladoCartao != null && bt.valorParceladoCartao > 0) return bt.valorParceladoCartao
+  if (bt.valorAVista != null && bt.valorAVista > 0) return bt.valorAVista
+  return null
 }
 
 /** Referência única quando não há detalhe na coluna específica (ex.: só preço de tabela). */
 export function produtoPrecoReferencia(p: ProdutoRow): number | null {
   const bt = p.blocoPrecoTabela
-  if (bt.valorTotal != null && bt.valorTotal > 0) return bt.valorTotal
-  if (bt.valorParceladoCartao != null && bt.valorParceladoCartao > 0) return bt.valorParceladoCartao
-  if (bt.valorAVista != null && bt.valorAVista > 0) return bt.valorAVista
+  const fromBloco = produtoPrecoReferenciaDoBlocoTabela(bt)
+  if (fromBloco != null) return fromBloco
   if (p.valorCartao != null && p.valorCartao > 0) return p.valorCartao
   if (p.valorBoleto != null && p.valorBoleto > 0) return p.valorBoleto
   if (p.aVista != null && p.aVista > 0) return p.aVista
@@ -546,46 +620,55 @@ export function produtoPrecoReferencia(p: ProdutoRow): number | null {
   return null
 }
 
-export function produtoValorCartaoEfetivo(p: ProdutoRow): number | null {
-  const bt = p.blocoPrecoTabela
-  if (bt.valorParceladoCartao != null && bt.valorParceladoCartao > 0) return bt.valorParceladoCartao
-  if (p.valorCartao != null && p.valorCartao > 0) return p.valorCartao
-  return produtoPrecoReferencia(p)
+/** Referência a partir do preço de tabela do pacote (3 ou 6 meses), sem campos legados no documento. */
+export function produtoPrecoReferenciaPorMeses(p: ProdutoRow, meses: 3 | 6): number | null {
+  const bt = produtoPacotePorMeses(p, meses).blocoPrecoTabela
+  const fromBloco = produtoPrecoReferenciaDoBlocoTabela(bt)
+  if (fromBloco != null) return fromBloco
+  if (meses === 3) return produtoPrecoReferencia(p)
+  return null
 }
 
-export function produtoParcelasCartaoEfetivo(p: ProdutoRow): number | null {
-  const bt = p.blocoPrecoTabela
-  const v = produtoValorCartaoEfetivo(p)
+export function produtoValorCartaoEfetivo(p: ProdutoRow, meses: 3 | 6 = 3): number | null {
+  const bt = produtoPacotePorMeses(p, meses).blocoPrecoTabela
+  if (bt.valorParceladoCartao != null && bt.valorParceladoCartao > 0) return bt.valorParceladoCartao
+  if (meses === 3 && p.valorCartao != null && p.valorCartao > 0) return p.valorCartao
+  return produtoPrecoReferenciaPorMeses(p, meses)
+}
+
+export function produtoParcelasCartaoEfetivo(p: ProdutoRow, meses: 3 | 6 = 3): number | null {
+  const bt = produtoPacotePorMeses(p, meses).blocoPrecoTabela
+  const v = produtoValorCartaoEfetivo(p, meses)
   if (v == null || v <= 0) return null
   if (bt.valorParceladoCartao != null && bt.valorParceladoCartao > 0) {
     const n = bt.parcelasCartao
     return n != null && n > 0 ? n : 1
   }
-  if (p.valorCartao != null && p.valorCartao > 0) {
+  if (meses === 3 && p.valorCartao != null && p.valorCartao > 0) {
     return p.parcelasCartao != null && p.parcelasCartao > 0 ? p.parcelasCartao : 1
   }
   return 1
 }
 
-export function produtoValorBoletoEfetivo(p: ProdutoRow): number | null {
-  if (p.valorBoleto != null && p.valorBoleto > 0) return p.valorBoleto
-  return produtoPrecoReferencia(p)
+export function produtoValorBoletoEfetivo(p: ProdutoRow, meses: 3 | 6 = 3): number | null {
+  if (meses === 3 && p.valorBoleto != null && p.valorBoleto > 0) return p.valorBoleto
+  return produtoPrecoReferenciaPorMeses(p, meses)
 }
 
-export function produtoParcelasBoletoEfetivo(p: ProdutoRow): number | null {
-  const v = produtoValorBoletoEfetivo(p)
+export function produtoParcelasBoletoEfetivo(p: ProdutoRow, meses: 3 | 6 = 3): number | null {
+  const v = produtoValorBoletoEfetivo(p, meses)
   if (v == null || v <= 0) return null
-  if (p.valorBoleto != null && p.valorBoleto > 0) {
+  if (meses === 3 && p.valorBoleto != null && p.valorBoleto > 0) {
     return p.parcelasBoleto != null && p.parcelasBoleto > 0 ? p.parcelasBoleto : 1
   }
   return 1
 }
 
-export function produtoValorAVistaEfetivo(p: ProdutoRow): number | null {
-  const bt = p.blocoPrecoTabela
+export function produtoValorAVistaEfetivo(p: ProdutoRow, meses: 3 | 6 = 3): number | null {
+  const bt = produtoPacotePorMeses(p, meses).blocoPrecoTabela
   if (bt.valorAVista != null && bt.valorAVista > 0) return bt.valorAVista
-  if (p.aVista != null && p.aVista > 0) return p.aVista
-  return produtoPrecoReferencia(p)
+  if (meses === 3 && p.aVista != null && p.aVista > 0) return p.aVista
+  return produtoPrecoReferenciaPorMeses(p, meses)
 }
 
 function numOrNull(x: unknown): number | null {
@@ -605,13 +688,29 @@ export async function getProdutos(): Promise<ProdutoRow[]> {
   return snapshot.docs.map((d) => {
     const x = d.data() as Record<string, unknown>
     const valorLegado = numOrNull(x.valor)
+    const blocoPrecoTabela = parseBlocoPrecoTabela(x)
+    const blocoOferta = parseBlocoCondicao(x, 'blocoOferta', 'ofertaPromocional')
+    const blocoUltimaCondicao = parseBlocoCondicao(x, 'blocoUltimaCondicao', 'ultimaCondicao')
+    const blocoCartaNaManga = parseBlocoCondicao(x, 'blocoCartaNaManga', 'cartaNaManga')
+    const pacote3: ProdutoPacoteNegociacao = {
+      blocoPrecoTabela,
+      blocoOferta,
+      blocoUltimaCondicao,
+      blocoCartaNaManga
+    }
+    const raw6 = x.negociacao6Meses
+    const negociacao6Meses =
+      raw6 && typeof raw6 === 'object' && !Array.isArray(raw6)
+        ? parsePacoteNegociacao(raw6 as Record<string, unknown>) ?? clonePacoteNegociacao(pacote3)
+        : clonePacoteNegociacao(pacote3)
     return {
       id: d.id,
       nome: String(x.nome ?? ''),
-      blocoPrecoTabela: parseBlocoPrecoTabela(x),
-      blocoOferta: parseBlocoCondicao(x, 'blocoOferta', 'ofertaPromocional'),
-      blocoUltimaCondicao: parseBlocoCondicao(x, 'blocoUltimaCondicao', 'ultimaCondicao'),
-      blocoCartaNaManga: parseBlocoCondicao(x, 'blocoCartaNaManga', 'cartaNaManga'),
+      blocoPrecoTabela,
+      blocoOferta,
+      blocoUltimaCondicao,
+      blocoCartaNaManga,
+      negociacao6Meses,
       valor: valorLegado,
       valorCartao: numOrNull(x.valorCartao),
       parcelasCartao: numOrNull(x.parcelasCartao),
@@ -629,7 +728,8 @@ function serializeBlocoTabela(b: ProdutoBlocoPrecoTabela): Record<string, unknow
     valorAVista: b.valorAVista,
     valorParceladoCartao: b.valorParceladoCartao,
     parcelasCartao: b.parcelasCartao,
-    linkPagamento: b.linkPagamento
+    linkPagamento: b.linkPagamento,
+    textoSelo: b.textoSelo
   }
 }
 
@@ -639,7 +739,17 @@ function serializeBlocoCondicao(b: ProdutoBlocoCondicaoComercial): Record<string
     valorParceladoCartao: b.valorParceladoCartao,
     parcelasCartao: b.parcelasCartao,
     bonus: b.bonus,
-    linkPagamento: b.linkPagamento
+    linkPagamento: b.linkPagamento,
+    tagExibicao: b.tagExibicao
+  }
+}
+
+function serializePacoteNegociacao(p: ProdutoPacoteNegociacao): Record<string, unknown> {
+  return {
+    blocoPrecoTabela: serializeBlocoTabela(p.blocoPrecoTabela),
+    blocoOferta: serializeBlocoCondicao(p.blocoOferta),
+    blocoUltimaCondicao: serializeBlocoCondicao(p.blocoUltimaCondicao),
+    blocoCartaNaManga: serializeBlocoCondicao(p.blocoCartaNaManga)
   }
 }
 
@@ -649,6 +759,7 @@ export async function addProduto(params: {
   blocoOferta: ProdutoBlocoCondicaoComercial
   blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
   blocoCartaNaManga: ProdutoBlocoCondicaoComercial
+  negociacao6Meses: ProdutoPacoteNegociacao
 }): Promise<string> {
   const ref = await addDoc(collection(db, 'produtos'), {
     nome: params.nome,
@@ -656,6 +767,7 @@ export async function addProduto(params: {
     blocoOferta: serializeBlocoCondicao(params.blocoOferta),
     blocoUltimaCondicao: serializeBlocoCondicao(params.blocoUltimaCondicao),
     blocoCartaNaManga: serializeBlocoCondicao(params.blocoCartaNaManga),
+    negociacao6Meses: serializePacoteNegociacao(params.negociacao6Meses),
     valor: null,
     valorCartao: null,
     parcelasCartao: null,
@@ -676,6 +788,7 @@ export async function updateProduto(
     blocoOferta: ProdutoBlocoCondicaoComercial
     blocoUltimaCondicao: ProdutoBlocoCondicaoComercial
     blocoCartaNaManga: ProdutoBlocoCondicaoComercial
+    negociacao6Meses: ProdutoPacoteNegociacao
   }
 ): Promise<void> {
   await updateDoc(doc(db, 'produtos', id), {
@@ -683,7 +796,8 @@ export async function updateProduto(
     blocoPrecoTabela: serializeBlocoTabela(params.blocoPrecoTabela),
     blocoOferta: serializeBlocoCondicao(params.blocoOferta),
     blocoUltimaCondicao: serializeBlocoCondicao(params.blocoUltimaCondicao),
-    blocoCartaNaManga: serializeBlocoCondicao(params.blocoCartaNaManga)
+    blocoCartaNaManga: serializeBlocoCondicao(params.blocoCartaNaManga),
+    negociacao6Meses: serializePacoteNegociacao(params.negociacao6Meses)
   })
 }
 

@@ -53,14 +53,15 @@ export function PropostasFechamentoPage() {
         <p style={{ color: 'var(--text2)', maxWidth: 760 }}>
           {podeEditar ? (
             <>
-              Cada produto tem <strong>quatro ofertas</strong> cadastradas em <strong>Produtos</strong> (preço de tabela,
-              oferta promocional, última condição, carta na manga). São essas as <strong>linhas de negociação</strong>.
-              Expanda para ver valores, bônus e links. Para editar, use <strong>Produtos</strong> → Editar.
+              Cada produto tem <strong>quatro ofertas</strong> para contrato de <strong>3 meses</strong> e as mesmas
+              quatro para <strong>6 meses</strong>, cadastradas em <strong>Produtos</strong> (modal com abas). São essas
+              as <strong>linhas de negociação</strong> nas vendas. Expanda para alternar período, ver valores e links.
+              Para editar, use <strong>Produtos</strong> → Editar.
             </>
           ) : (
             <>
-              Resumo das quatro ofertas por produto. Use <strong>Expandir</strong> para ver detalhes e{' '}
-              <strong>Abrir</strong> / <strong>Copiar</strong> nos links de pagamento.
+              Resumo por produto (3 e 6 meses). Use <strong>Expandir</strong> para alternar o contrato, ver detalhes e{' '}
+              <strong>Abrir</strong> / <strong>Copiar</strong> nos links.
             </>
           )}
         </p>
@@ -79,9 +80,9 @@ export function PropostasFechamentoPage() {
         >
           <strong style={{ color: 'var(--text)' }}>Desconto do closer nas vendas</strong>
           <p style={{ margin: '8px 0 0' }}>
-            A referência (preço ideal) é sempre o bloco <strong>Preço de tabela</strong>. Nas vendas, escolhe-se em qual
-            das quatro ofertas o cliente fechou; o sistema compara com a tabela conforme a forma de pagamento (à vista
-            ou parcelado).
+            A referência (preço ideal) é o <strong>Preço de tabela</strong> do <strong>mesmo período</strong> (3 ou 6
+            meses) da linha em que o cliente fechou. O desconto do closer compara com essa tabela conforme a forma de
+            pagamento (à vista ou parcelado).
           </p>
         </div>
       </div>
@@ -117,7 +118,7 @@ export function PropostasFechamentoPage() {
                   <th>Oferta promocional</th>
                   <th>Última condição</th>
                   <th>Carta na manga</th>
-                  <th>Linhas</th>
+                  <th title="Ofertas × períodos">Linhas</th>
                 </tr>
               </thead>
               <tbody>
@@ -153,7 +154,9 @@ export function PropostasFechamentoPage() {
                         <td style={{ color: 'var(--text2)', fontSize: 11, maxWidth: 200, lineHeight: 1.35 }}>
                           {resumoBlocoCondicao(p.blocoCartaNaManga)}
                         </td>
-                        <td style={{ fontSize: 13 }}>4</td>
+                        <td style={{ fontSize: 12 }} title="4 ofertas × 2 períodos">
+                          4 × 2
+                        </td>
                       </tr>
                       {isOpen ? (
                         <tr className="prod-ln-expand-row">

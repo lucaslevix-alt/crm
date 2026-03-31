@@ -16,8 +16,7 @@ import { useAppStore } from '../../store/useAppStore'
 import { computeDescontoVenda } from '../../lib/vendaDesconto'
 import {
   buildLinhasByIdParaVenda,
-  idealPorProdutoFromProdutos,
-  labelLinhaVendaSelect,
+  labelLinhaOfertaNoGrupo,
   linhaVirtualId,
   opcoesLinhaDropdown
 } from '../../lib/produtoLinhasVenda'
@@ -90,7 +89,6 @@ export function NewRegistroForm() {
     () => buildLinhasByIdParaVenda(produtos, linhas),
     [produtos, linhas]
   )
-  const idealPorProduto = useMemo(() => idealPorProdutoFromProdutos(produtos), [produtos])
 
   const descontoPreview = useMemo(() => {
     if (!isVenda) return null
@@ -105,10 +103,9 @@ export function NewRegistroForm() {
     return computeDescontoVenda({
       produtosDetalhes,
       linhasById,
-      idealPorProduto,
       formaPagamento: fp
     })
-  }, [isVenda, produtoItems, linhasById, idealPorProduto, formaPagamento])
+  }, [isVenda, produtoItems, linhasById, formaPagamento])
 
   const filteredUsers =
     tipo === 'reuniao_agendada' || tipo === 'reuniao_realizada'
@@ -132,7 +129,7 @@ export function NewRegistroForm() {
           return {
             ...item,
             produtoId: value,
-            linhaNegociacaoId: value ? linhaVirtualId(value, 'preco_tabela') : ''
+            linhaNegociacaoId: value ? linhaVirtualId(value, 'preco_tabela', 3) : ''
           }
         }
         return { ...item, [key]: value }
@@ -184,7 +181,6 @@ export function NewRegistroForm() {
         ? computeDescontoVenda({
             produtosDetalhes,
             linhasById,
-            idealPorProduto,
             formaPagamento: parseFormaPagamentoVenda(formaPagamento)!
           })
         : { valorReferencia: 0, desconto: 0 }
@@ -381,14 +377,22 @@ export function NewRegistroForm() {
                           value={item.linhaNegociacaoId}
                           onChange={(e) => updateProdutoItem(item.uid, 'linhaNegociacaoId', e.target.value)}
                           disabled={!item.produtoId}
-                          title="Oferta em que o cliente fechou. A referência (ideal) é sempre o preço de tabela; o desconto do closer compara com essa referência."
+                          title="Oferta e período do contrato (3 ou 6 meses). A referência é o preço de tabela do mesmo período."
                         >
                           <option value="">{item.produtoId ? 'Oferta em que fechou' : '—'}</option>
-                          {opts.map((l) => (
-                            <option key={l.id} value={l.id}>
-                              {labelLinhaVendaSelect(l)}
-                            </option>
-                          ))}
+                          {([3, 6] as const).map((mes) => {
+                            const groupOpts = opts.filter((l) => l.periodoMeses === mes)
+                            if (!groupOpts.length) return null
+                            return (
+                              <optgroup key={mes} label={mes === 3 ? 'Contrato 3 meses' : 'Contrato 6 meses'}>
+                                {groupOpts.map((l) => (
+                                  <option key={l.id} value={l.id}>
+                                    {labelLinhaOfertaNoGrupo(l)}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )
+                          })}
                         </select>
                         <button
                           type="button"
@@ -414,8 +418,9 @@ export function NewRegistroForm() {
                   </div>
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-                  As quatro opções vêm do cadastro do produto (tabela, oferta, última condição, carta na manga). A{' '}
-                  <strong>forma de pagamento</strong> define se o desconto usa <strong>à vista</strong> ou{' '}
+                  Oito opções por produto (4 ofertas × contratos de 3 e 6 meses), vindas do cadastro em{' '}
+                  <strong>Produtos</strong>. A <strong>forma de pagamento</strong> define se o desconto usa{' '}
+                  <strong>à vista</strong> ou{' '}
                   <strong>total parcelado</strong>. O campo “Valor da venda” é o faturamento.
                 </p>
                 {descontoPreview && descontoPreview.valorReferencia > 0 && (

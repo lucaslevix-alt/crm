@@ -40,18 +40,19 @@ function valorParcela(valor: number | null, parcelas: number | null): number | n
 
 function textoParcelasNegocio(
   linhas: Array<{ produto: ProdutoRow }>,
-  modo: 'cartao' | 'boleto'
+  modo: 'cartao' | 'boleto',
+  meses: 3 | 6
 ): string | null {
   const vals = linhas
     .map((l) => {
       const p = l.produto
       if (modo === 'cartao') {
-        const v = produtoValorCartaoEfetivo(p)
-        const n = produtoParcelasCartaoEfetivo(p)
+        const v = produtoValorCartaoEfetivo(p, meses)
+        const n = produtoParcelasCartaoEfetivo(p, meses)
         return v != null && v > 0 && n != null && n > 0 ? n : null
       }
-      const v = produtoValorBoletoEfetivo(p)
-      const n = produtoParcelasBoletoEfetivo(p)
+      const v = produtoValorBoletoEfetivo(p, meses)
+      const n = produtoParcelasBoletoEfetivo(p, meses)
       return v != null && v > 0 && n != null && n > 0 ? n : null
     })
     .filter((x): x is number => x != null)
@@ -62,9 +63,17 @@ function textoParcelasNegocio(
   return `${sorted[0]}x a ${sorted[sorted.length - 1]}x${suffix}`
 }
 
-function CatalogCartaoCell({ p, parcCartao }: { p: ProdutoRow; parcCartao: number | null }) {
-  const vTot = produtoValorCartaoEfetivo(p)
-  const n = produtoParcelasCartaoEfetivo(p) ?? 0
+function CatalogCartaoCell({
+  p,
+  parcCartao,
+  meses
+}: {
+  p: ProdutoRow
+  parcCartao: number | null
+  meses: 3 | 6
+}) {
+  const vTot = produtoValorCartaoEfetivo(p, meses)
+  const n = produtoParcelasCartaoEfetivo(p, meses) ?? 0
   if (n > 0 && parcCartao != null && vTot != null) {
     return (
       <div className="neg-td-stack">
@@ -77,9 +86,17 @@ function CatalogCartaoCell({ p, parcCartao }: { p: ProdutoRow; parcCartao: numbe
   return <span className="neg-num">{fmt(vTot)}</span>
 }
 
-function CatalogBoletoCell({ p, parcBoleto }: { p: ProdutoRow; parcBoleto: number | null }) {
-  const vTot = produtoValorBoletoEfetivo(p)
-  const n = produtoParcelasBoletoEfetivo(p) ?? 0
+function CatalogBoletoCell({
+  p,
+  parcBoleto,
+  meses
+}: {
+  p: ProdutoRow
+  parcBoleto: number | null
+  meses: 3 | 6
+}) {
+  const vTot = produtoValorBoletoEfetivo(p, meses)
+  const n = produtoParcelasBoletoEfetivo(p, meses) ?? 0
   if (n > 0 && parcBoleto != null && vTot != null) {
     return (
       <div className="neg-td-stack">
@@ -98,6 +115,7 @@ export function NegociacoesPage() {
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
   const [linhas, setLinhas] = useState<LinhaNegociacao[]>([])
   const [painel, setPainel] = useState<PainelNegView>('catalogo')
+  const [periodoSimulacao, setPeriodoSimulacao] = useState<3 | 6>(3)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -156,29 +174,30 @@ export function NegociacoesPage() {
     })
     .filter((x): x is NonNullable<typeof x> => x != null)
 
+  const m = periodoSimulacao
   const totalValorCartao = linhasComDetalhes.reduce(
-    (s, l) => s + (produtoValorCartaoEfetivo(l.produto) ?? 0) * l.quantidade,
+    (s, l) => s + (produtoValorCartaoEfetivo(l.produto, m) ?? 0) * l.quantidade,
     0
   )
   const totalValorBoleto = linhasComDetalhes.reduce(
-    (s, l) => s + (produtoValorBoletoEfetivo(l.produto) ?? 0) * l.quantidade,
+    (s, l) => s + (produtoValorBoletoEfetivo(l.produto, m) ?? 0) * l.quantidade,
     0
   )
   const totalParcelaCartao = linhasComDetalhes.reduce((s, l) => {
-    const vp = valorParcela(produtoValorCartaoEfetivo(l.produto), produtoParcelasCartaoEfetivo(l.produto))
+    const vp = valorParcela(produtoValorCartaoEfetivo(l.produto, m), produtoParcelasCartaoEfetivo(l.produto, m))
     return s + (vp ?? 0) * l.quantidade
   }, 0)
   const totalParcelaBoleto = linhasComDetalhes.reduce((s, l) => {
-    const vp = valorParcela(produtoValorBoletoEfetivo(l.produto), produtoParcelasBoletoEfetivo(l.produto))
+    const vp = valorParcela(produtoValorBoletoEfetivo(l.produto, m), produtoParcelasBoletoEfetivo(l.produto, m))
     return s + (vp ?? 0) * l.quantidade
   }, 0)
   const totalAVista = linhasComDetalhes.reduce(
-    (s, l) => s + (produtoValorAVistaEfetivo(l.produto) ?? 0) * l.quantidade,
+    (s, l) => s + (produtoValorAVistaEfetivo(l.produto, m) ?? 0) * l.quantidade,
     0
   )
 
-  const resumoParcelasCartaoTxt = textoParcelasNegocio(linhasComDetalhes, 'cartao')
-  const resumoParcelasBoletoTxt = textoParcelasNegocio(linhasComDetalhes, 'boleto')
+  const resumoParcelasCartaoTxt = textoParcelasNegocio(linhasComDetalhes, 'cartao', m)
+  const resumoParcelasBoletoTxt = textoParcelasNegocio(linhasComDetalhes, 'boleto', m)
 
   return (
     <div className="content">
@@ -263,9 +282,31 @@ export function NegociacoesPage() {
         <div className="neg-layout">
           {painel === 'catalogo' && (
             <section className="card neg-card">
-              <div className="neg-card-head">
-                <h3 className="card-title">Catálogo</h3>
-                <p className="neg-card-desc">Preços unitários · use + para incluir · depois abra o carrinho para negociar</p>
+              <div className="neg-card-head neg-card-head--row">
+                <div>
+                  <h3 className="card-title">Catálogo</h3>
+                  <p className="neg-card-desc">
+                    Preços do contrato escolhido (3 ou 6 meses) · use + para incluir · depois abra o carrinho
+                  </p>
+                </div>
+                <div className="neg-periodo-toggle" role="group" aria-label="Período do contrato no simulador">
+                  <button
+                    type="button"
+                    className={periodoSimulacao === 3 ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+                    style={{ width: 'auto' }}
+                    onClick={() => setPeriodoSimulacao(3)}
+                  >
+                    3 meses
+                  </button>
+                  <button
+                    type="button"
+                    className={periodoSimulacao === 6 ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+                    style={{ width: 'auto' }}
+                    onClick={() => setPeriodoSimulacao(6)}
+                  >
+                    6 meses
+                  </button>
+                </div>
               </div>
               <div className="neg-table-scroll">
                 <table className="neg-table">
@@ -282,21 +323,27 @@ export function NegociacoesPage() {
                   </thead>
                   <tbody>
                     {produtos.map((p) => {
-                      const parcCartao = valorParcela(produtoValorCartaoEfetivo(p), produtoParcelasCartaoEfetivo(p))
-                      const parcBoleto = valorParcela(produtoValorBoletoEfetivo(p), produtoParcelasBoletoEfetivo(p))
+                      const parcCartao = valorParcela(
+                        produtoValorCartaoEfetivo(p, m),
+                        produtoParcelasCartaoEfetivo(p, m)
+                      )
+                      const parcBoleto = valorParcela(
+                        produtoValorBoletoEfetivo(p, m),
+                        produtoParcelasBoletoEfetivo(p, m)
+                      )
                       return (
                         <tr key={p.id}>
                           <td data-label="Produto" className="neg-td-prod">
                             {p.nome}
                           </td>
                           <td data-label="À vista">
-                            <span className="neg-num">{fmt(produtoValorAVistaEfetivo(p))}</span>
+                            <span className="neg-num">{fmt(produtoValorAVistaEfetivo(p, m))}</span>
                           </td>
                           <td data-label="Cartão">
-                            <CatalogCartaoCell p={p} parcCartao={parcCartao} />
+                            <CatalogCartaoCell p={p} parcCartao={parcCartao} meses={m} />
                           </td>
                           <td data-label="Boleto">
-                            <CatalogBoletoCell p={p} parcBoleto={parcBoleto} />
+                            <CatalogBoletoCell p={p} parcBoleto={parcBoleto} meses={m} />
                           </td>
                           <td className="neg-td-action" data-label="">
                             <button
@@ -324,12 +371,34 @@ export function NegociacoesPage() {
                   <div className="neg-card-head neg-card-head--row">
                     <div>
                       <h3 className="card-title">Carrinho · negociação</h3>
-                      <p className="neg-card-desc">Somente os itens selecionados · ajuste quantidades e apresente ao cliente</p>
+                      <p className="neg-card-desc">
+                        Contrato {m} meses (preço de tabela do pacote) · ajuste quantidades e apresente ao cliente
+                      </p>
                     </div>
-                    <span className="neg-pill">
-                      <CreditCard size={13} strokeWidth={1.75} aria-hidden />
-                      Cartão sem juros (cadastro)
-                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                      <div className="neg-periodo-toggle" role="group" aria-label="Período no carrinho">
+                        <button
+                          type="button"
+                          className={m === 3 ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+                          style={{ width: 'auto' }}
+                          onClick={() => setPeriodoSimulacao(3)}
+                        >
+                          3 meses
+                        </button>
+                        <button
+                          type="button"
+                          className={m === 6 ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+                          style={{ width: 'auto' }}
+                          onClick={() => setPeriodoSimulacao(6)}
+                        >
+                          6 meses
+                        </button>
+                      </div>
+                      <span className="neg-pill">
+                        <CreditCard size={13} strokeWidth={1.75} aria-hidden />
+                        Cartão sem juros (cadastro)
+                      </span>
+                    </div>
                   </div>
                   <div className="neg-items">
                     {linhas.map((l) => {
@@ -355,13 +424,19 @@ export function NegociacoesPage() {
                           </div>
                         )
                       }
-                      const vCartao = (produtoValorCartaoEfetivo(p) ?? 0) * l.quantidade
-                      const parcCartao = valorParcela(produtoValorCartaoEfetivo(p), produtoParcelasCartaoEfetivo(p))
+                      const vCartao = (produtoValorCartaoEfetivo(p, m) ?? 0) * l.quantidade
+                      const parcCartao = valorParcela(
+                        produtoValorCartaoEfetivo(p, m),
+                        produtoParcelasCartaoEfetivo(p, m)
+                      )
                       const linhaParcCartao = (parcCartao ?? 0) * l.quantidade
-                      const vBoleto = (produtoValorBoletoEfetivo(p) ?? 0) * l.quantidade
-                      const parcBoleto = valorParcela(produtoValorBoletoEfetivo(p), produtoParcelasBoletoEfetivo(p))
+                      const vBoleto = (produtoValorBoletoEfetivo(p, m) ?? 0) * l.quantidade
+                      const parcBoleto = valorParcela(
+                        produtoValorBoletoEfetivo(p, m),
+                        produtoParcelasBoletoEfetivo(p, m)
+                      )
                       const linhaParcBoleto = (parcBoleto ?? 0) * l.quantidade
-                      const av = (produtoValorAVistaEfetivo(p) ?? 0) * l.quantidade
+                      const av = (produtoValorAVistaEfetivo(p, m) ?? 0) * l.quantidade
                       return (
                         <div key={l.uid} className="neg-item">
                           <div className="neg-item-toolbar">

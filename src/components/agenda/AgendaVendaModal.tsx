@@ -17,8 +17,7 @@ import { useAppStore } from '../../store/useAppStore'
 import { computeDescontoVenda } from '../../lib/vendaDesconto'
 import {
   buildLinhasByIdParaVenda,
-  idealPorProdutoFromProdutos,
-  labelLinhaVendaSelect,
+  labelLinhaOfertaNoGrupo,
   linhaVirtualId,
   opcoesLinhaDropdown
 } from '../../lib/produtoLinhasVenda'
@@ -58,7 +57,6 @@ export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaMo
     () => buildLinhasByIdParaVenda(produtos, linhas),
     [produtos, linhas]
   )
-  const idealPorProduto = useMemo(() => idealPorProdutoFromProdutos(produtos), [produtos])
 
   const descontoPreview = useMemo(() => {
     const produtosDetalhes = produtoItems
@@ -72,10 +70,9 @@ export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaMo
     return computeDescontoVenda({
       produtosDetalhes,
       linhasById,
-      idealPorProduto,
       formaPagamento: fp
     })
-  }, [produtoItems, linhasById, idealPorProduto, formaPagamento])
+  }, [produtoItems, linhasById, formaPagamento])
 
   function addProdutoItem() {
     setProdutoItems((current) => [
@@ -92,7 +89,7 @@ export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaMo
           return {
             ...item,
             produtoId: value,
-            linhaNegociacaoId: value ? linhaVirtualId(value, 'preco_tabela') : ''
+            linhaNegociacaoId: value ? linhaVirtualId(value, 'preco_tabela', 3) : ''
           }
         }
         return { ...item, [key]: value }
@@ -129,7 +126,6 @@ export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaMo
     const descCalc = computeDescontoVenda({
       produtosDetalhes,
       linhasById,
-      idealPorProduto,
       formaPagamento: fp
     })
     setSaving(true)
@@ -268,13 +264,22 @@ export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaMo
                         value={item.linhaNegociacaoId}
                         onChange={(e) => updateProdutoItem(item.uid, 'linhaNegociacaoId', e.target.value)}
                         disabled={!item.produtoId}
+                        title="Contrato 3 ou 6 meses · referência = tabela do mesmo período"
                       >
                         <option value="">{item.produtoId ? 'Oferta em que fechou' : '—'}</option>
-                        {opts.map((l) => (
-                          <option key={l.id} value={l.id}>
-                            {labelLinhaVendaSelect(l)}
-                          </option>
-                        ))}
+                        {([3, 6] as const).map((mes) => {
+                          const groupOpts = opts.filter((l) => l.periodoMeses === mes)
+                          if (!groupOpts.length) return null
+                          return (
+                            <optgroup key={mes} label={mes === 3 ? 'Contrato 3 meses' : 'Contrato 6 meses'}>
+                              {groupOpts.map((l) => (
+                                <option key={l.id} value={l.id}>
+                                  {labelLinhaOfertaNoGrupo(l)}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )
+                        })}
                       </select>
                       <button
                         type="button"

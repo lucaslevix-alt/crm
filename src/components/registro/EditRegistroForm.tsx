@@ -16,8 +16,7 @@ import { useAppStore } from '../../store/useAppStore'
 import { computeDescontoVenda } from '../../lib/vendaDesconto'
 import {
   buildLinhasByIdParaVenda,
-  idealPorProdutoFromProdutos,
-  labelLinhaVendaSelect,
+  labelLinhaOfertaNoGrupo,
   linhaVirtualId,
   opcoesLinhaDropdown
 } from '../../lib/produtoLinhasVenda'
@@ -98,7 +97,7 @@ export function EditRegistroForm() {
           return {
             ...item,
             produtoId: value,
-            linhaNegociacaoId: value ? linhaVirtualId(value, 'preco_tabela') : ''
+            linhaNegociacaoId: value ? linhaVirtualId(value, 'preco_tabela', 3) : ''
           }
         }
         return { ...item, [key]: value }
@@ -117,7 +116,6 @@ export function EditRegistroForm() {
     () => buildLinhasByIdParaVenda(produtos, linhas),
     [produtos, linhas]
   )
-  const idealPorProduto = useMemo(() => idealPorProdutoFromProdutos(produtos), [produtos])
 
   const descontoPreview = useMemo(() => {
     if (!isVenda) return null
@@ -132,10 +130,9 @@ export function EditRegistroForm() {
     return computeDescontoVenda({
       produtosDetalhes,
       linhasById,
-      idealPorProduto,
       formaPagamento: fp
     })
-  }, [isVenda, produtoItems, linhasById, idealPorProduto, formaPagamento])
+  }, [isVenda, produtoItems, linhasById, formaPagamento])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -174,7 +171,6 @@ export function EditRegistroForm() {
         ? computeDescontoVenda({
             produtosDetalhes,
             linhasById,
-            idealPorProduto,
             formaPagamento: parseFormaPagamentoVenda(formaPagamento)!
           })
         : { valorReferencia: 0, desconto: 0 }
@@ -356,14 +352,22 @@ export function EditRegistroForm() {
                           value={item.linhaNegociacaoId}
                           onChange={(e) => updateProdutoItem(item.uid, 'linhaNegociacaoId', e.target.value)}
                           disabled={!item.produtoId}
-                          title="Oferta em que fechou. Referência ideal = preço de tabela."
+                          title="Oferta e período (3 ou 6 meses). Referência = preço de tabela do mesmo período."
                         >
                           <option value="">{item.produtoId ? 'Oferta em que fechou' : '—'}</option>
-                          {opts.map((l) => (
-                            <option key={l.id} value={l.id}>
-                              {labelLinhaVendaSelect(l)}
-                            </option>
-                          ))}
+                          {([3, 6] as const).map((mes) => {
+                            const groupOpts = opts.filter((l) => l.periodoMeses === mes)
+                            if (!groupOpts.length) return null
+                            return (
+                              <optgroup key={mes} label={mes === 3 ? 'Contrato 3 meses' : 'Contrato 6 meses'}>
+                                {groupOpts.map((l) => (
+                                  <option key={l.id} value={l.id}>
+                                    {labelLinhaOfertaNoGrupo(l)}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )
+                          })}
                         </select>
                         <button
                           type="button"
