@@ -4,7 +4,8 @@ import { Trophy } from 'lucide-react'
 const TABS = [
   { to: '/rankings/sdr', label: 'SDR' },
   { to: '/rankings/closer', label: 'Closer' },
-  { to: '/rankings/squads', label: 'Squads' }
+  { to: '/rankings/squads', label: 'Squads' },
+  { to: '/rankings/metas', label: 'Metas' }
 ] as const
 
 export function RankingsPage() {
@@ -16,7 +17,9 @@ export function RankingsPage() {
             <Trophy size={24} strokeWidth={1.65} aria-hidden />
             Rankings
           </h2>
-          <p style={{ color: 'var(--text2)', marginBottom: 0 }}>Alterne entre SDR, Closer e Squads</p>
+          <p style={{ color: 'var(--text2)', marginBottom: 0 }}>
+            SDR, Closer, Squads e acompanhamento das metas por squad
+          </p>
         </div>
         <nav className="rankings-tabs" aria-label="Tipo de ranking">
           {TABS.map((t) => (

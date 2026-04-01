@@ -23,6 +23,9 @@ export const RankingCloserPage = lazy(() =>
 export const RankingSquadsPage = lazy(() =>
   import('../pages/RankingSquadsPage').then((m) => ({ default: m.RankingSquadsPage }))
 )
+export const RankingMetasPage = lazy(() =>
+  import('../pages/RankingMetasPage').then((m) => ({ default: m.RankingMetasPage }))
+)
 export const SquadsPage = lazy(() => import('../pages/SquadsPage').then((m) => ({ default: m.SquadsPage })))
 export const MetaAdsPage = lazy(() => import('../pages/MetaAdsPage').then((m) => ({ default: m.MetaAdsPage })))
 export const NegociacoesPage = lazy(() =>

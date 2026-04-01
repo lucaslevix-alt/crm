@@ -1,25 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Moon, Sun, Target, Trash2, Users } from 'lucide-react'
 import {
   clearMetasPorMes,
   currentMetasMonthYm,
   getMetasFirestoreDoc,
-  listUsers,
+  listSquads,
   METAS_CONFIG_KEYS,
-  resolveMetasIndividuaisParaMes,
   resolveMetasParaMes,
+  resolveMetasSquadsParaMes,
   setMetasConfig,
   setMetasPorMes,
-  setMetasPorUsuarioRoot,
-  sumMetasPorUsuarioMap,
+  setMetasPorSquadRoot,
   type MetasConfig,
   type MetasFirestoreDoc,
-  type MetasPorUsuario
+  type MetasPorSquad,
+  type SquadRow
 } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { useAppStore } from '../store/useAppStore'
-import type { CrmUser } from '../store/useAppStore'
 
 function labelMes(ym: string): string {
   const [y, m] = ym.split('-').map(Number)
@@ -27,7 +26,7 @@ function labelMes(ym: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
-const INDIV_COLS: Array<{ lb: string; short: string; key: keyof MetasConfig; money: boolean }> = [
+const SQUAD_COLS: Array<{ lb: string; short: string; key: keyof MetasConfig; money: boolean }> = [
   { lb: 'Reuniões agendadas', short: 'Agend.', key: 'meta_reunioes_agendadas', money: false },
   { lb: 'Reuniões realizadas', short: 'Real.', key: 'meta_reunioes_realizadas', money: false },
   { lb: 'Reuniões closer', short: 'Closer', key: 'meta_reunioes_closer', money: false },
@@ -36,11 +35,11 @@ const INDIV_COLS: Array<{ lb: string; short: string; key: keyof MetasConfig; mon
   { lb: 'Cash (R$)', short: 'Cash', key: 'meta_cash', money: true }
 ]
 
-type IndivForm = Record<string, Partial<Record<keyof MetasConfig, string>>>
+type SquadForm = Record<string, Partial<Record<keyof MetasConfig, string>>>
 
-function buildMetasPorUsuarioFromState(form: IndivForm): MetasPorUsuario {
-  const out: MetasPorUsuario = {}
-  for (const [uid, fields] of Object.entries(form)) {
+function buildMetasPorSquadFromState(form: SquadForm): MetasPorSquad {
+  const out: MetasPorSquad = {}
+  for (const [sid, fields] of Object.entries(form)) {
     const partial: Partial<MetasConfig> = {}
     for (const k of METAS_CONFIG_KEYS) {
       const s = fields[k]?.trim()
@@ -49,14 +48,9 @@ function buildMetasPorUsuarioFromState(form: IndivForm): MetasPorUsuario {
       const num = isMoney ? parseFloat(s.replace(',', '.')) : parseInt(s, 10)
       if (Number.isFinite(num)) partial[k] = num
     }
-    if (Object.keys(partial).length > 0) out[uid] = partial
+    if (Object.keys(partial).length > 0) out[sid] = partial
   }
   return out
-}
-
-function fmtCmp(v: number | undefined): string {
-  if (v == null || !Number.isFinite(v)) return '—'
-  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: v % 1 !== 0 ? 2 : 0 }).format(v)
 }
 
 export function ConfigMetasPage() {
@@ -65,8 +59,8 @@ export function ConfigMetasPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [fullDoc, setFullDoc] = useState<MetasFirestoreDoc | null>(null)
-  const [users, setUsers] = useState<CrmUser[]>([])
-  const [indivForm, setIndivForm] = useState<IndivForm>({})
+  const [squads, setSquads] = useState<SquadRow[]>([])
+  const [squadForm, setSquadForm] = useState<SquadForm>({})
   const hojeYm = currentMetasMonthYm()
   const [mesAlvo, setMesAlvo] = useState(hojeYm)
 
@@ -77,40 +71,12 @@ export function ConfigMetasPage() {
   const [ft, setFt] = useState('')
   const [ca, setCa] = useState('')
 
-  const sdrUsers = useMemo(() => users.filter((u) => u.cargo === 'sdr').sort((a, b) => a.nome.localeCompare(b.nome)), [users])
-  const closerUsers = useMemo(
-    () => users.filter((u) => u.cargo === 'closer').sort((a, b) => a.nome.localeCompare(b.nome)),
-    [users]
-  )
-  const sdrIds = useMemo(() => new Set(sdrUsers.map((u) => u.id)), [sdrUsers])
-  const closerIds = useMemo(() => new Set(closerUsers.map((u) => u.id)), [closerUsers])
-  const outrosMetaUsers = useMemo(() => {
-    const seen = new Set([...sdrIds, ...closerIds])
-    return users
-      .filter((u) => !seen.has(u.id))
-      .filter((u) => {
-        const row = indivForm[u.id]
-        if (!row) return false
-        return METAS_CONFIG_KEYS.some((k) => (row[k] ?? '').trim() !== '')
-      })
-      .sort((a, b) => a.nome.localeCompare(b.nome))
-  }, [users, sdrIds, closerIds, indivForm])
-  const unknownUidsComMetas = useMemo(() => {
-    const known = new Set(users.map((u) => u.id))
-    return Object.keys(indivForm).filter((uid) => {
-      if (known.has(uid)) return false
-      const row = indivForm[uid]
-      if (!row) return false
-      return METAS_CONFIG_KEYS.some((k) => (row[k] ?? '').trim() !== '')
-    })
-  }, [indivForm, users])
-
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [d, u] = await Promise.all([getMetasFirestoreDoc(), listUsers()])
+      const [d, sq] = await Promise.all([getMetasFirestoreDoc(), listSquads()])
       setFullDoc(d)
-      setUsers(u)
+      setSquads(sq.sort((a, b) => a.nome.localeCompare(b.nome)))
     } catch (err) {
       showToast(formatFirebaseOrUnknownError(err) || 'Erro ao carregar', 'err')
     } finally {
@@ -135,23 +101,21 @@ export function ConfigMetasPage() {
 
   useEffect(() => {
     if (!fullDoc) return
-    const m = resolveMetasIndividuaisParaMes(mesAlvo, fullDoc)
-    const next: IndivForm = {}
-    const ensure = (uid: string) => {
-      if (!next[uid]) next[uid] = {}
+    const m = resolveMetasSquadsParaMes(mesAlvo, fullDoc)
+    const next: SquadForm = {}
+    const ensure = (sid: string) => {
+      if (!next[sid]) next[sid] = {}
     }
-    for (const u of users) {
-      if (u.cargo === 'sdr' || u.cargo === 'closer') ensure(u.id)
-    }
-    for (const uid of Object.keys(m)) ensure(uid)
-    for (const [uid, partial] of Object.entries(m)) {
+    for (const s of squads) ensure(s.id)
+    for (const sid of Object.keys(m)) ensure(sid)
+    for (const [sid, partial] of Object.entries(m)) {
       for (const k of METAS_CONFIG_KEYS) {
         const v = partial[k]
-        if (v != null) next[uid][k] = String(v)
+        if (v != null) next[sid][k] = String(v)
       }
     }
-    setIndivForm(next)
-  }, [fullDoc, mesAlvo, users])
+    setSquadForm(next)
+  }, [fullDoc, mesAlvo, squads])
 
   const isMesAtual = mesAlvo === hojeYm
   const mesBlock = fullDoc?.metasPorMes?.[mesAlvo]
@@ -159,48 +123,13 @@ export function ConfigMetasPage() {
     !isMesAtual &&
     mesBlock &&
     (METAS_CONFIG_KEYS.some((k) => mesBlock[k] != null) ||
-      (mesBlock.metasPorUsuario && Object.keys(mesBlock.metasPorUsuario).length > 0))
+      (mesBlock.metasPorUsuario && Object.keys(mesBlock.metasPorUsuario).length > 0) ||
+      (mesBlock.metasPorSquad && Object.keys(mesBlock.metasPorSquad).length > 0))
 
-  const builtIndiv = useMemo(() => buildMetasPorUsuarioFromState(indivForm), [indivForm])
-  const sumSdr = useMemo(() => {
-    const ids = new Set(sdrUsers.map((u) => u.id))
-    const sub: MetasPorUsuario = {}
-    for (const [uid, p] of Object.entries(builtIndiv)) {
-      if (ids.has(uid)) sub[uid] = p
-    }
-    return sumMetasPorUsuarioMap(sub)
-  }, [builtIndiv, sdrUsers])
-  const sumCloser = useMemo(() => {
-    const ids = new Set(closerUsers.map((u) => u.id))
-    const sub: MetasPorUsuario = {}
-    for (const [uid, p] of Object.entries(builtIndiv)) {
-      if (ids.has(uid)) sub[uid] = p
-    }
-    return sumMetasPorUsuarioMap(sub)
-  }, [builtIndiv, closerUsers])
-  const sumTodos = useMemo(() => sumMetasPorUsuarioMap(builtIndiv), [builtIndiv])
-
-  const globalDraft = useMemo((): MetasConfig => {
-    const o: MetasConfig = {}
-    const agN = ag ? parseInt(ag, 10) : undefined
-    const reN = re ? parseInt(re, 10) : undefined
-    const clN = cl ? parseInt(cl, 10) : undefined
-    const vnN = vn ? parseInt(vn, 10) : undefined
-    const ftN = ft ? parseFloat(ft.replace(',', '.')) : undefined
-    const caN = ca ? parseFloat(ca.replace(',', '.')) : undefined
-    if (agN != null && Number.isFinite(agN)) o.meta_reunioes_agendadas = agN
-    if (reN != null && Number.isFinite(reN)) o.meta_reunioes_realizadas = reN
-    if (clN != null && Number.isFinite(clN)) o.meta_reunioes_closer = clN
-    if (vnN != null && Number.isFinite(vnN)) o.meta_vendas = vnN
-    if (ftN != null && Number.isFinite(ftN)) o.meta_faturamento = ftN
-    if (caN != null && Number.isFinite(caN)) o.meta_cash = caN
-    return o
-  }, [ag, re, cl, vn, ft, ca])
-
-  function setIndivCell(uid: string, key: keyof MetasConfig, value: string) {
-    setIndivForm((prev) => ({
+  function setSquadCell(squadId: string, key: keyof MetasConfig, value: string) {
+    setSquadForm((prev) => ({
       ...prev,
-      [uid]: { ...(prev[uid] ?? {}), [key]: value }
+      [squadId]: { ...(prev[squadId] ?? {}), [key]: value }
     }))
   }
 
@@ -212,7 +141,7 @@ export function ConfigMetasPage() {
     }
     setSaving(true)
     try {
-      const builtMap = buildMetasPorUsuarioFromState(indivForm)
+      const builtSquad = buildMetasPorSquadFromState(squadForm)
       if (isMesAtual) {
         await setMetasConfig({
           meta_reunioes_agendadas: ag ? parseInt(ag, 10) : undefined,
@@ -222,7 +151,7 @@ export function ConfigMetasPage() {
           meta_faturamento: ft ? parseFloat(ft.replace(',', '.')) : undefined,
           meta_cash: ca ? parseFloat(ca.replace(',', '.')) : undefined
         })
-        await setMetasPorUsuarioRoot(builtMap)
+        await setMetasPorSquadRoot(builtSquad)
         showToast('Metas do mês atual salvas!')
       } else {
         const patch: Parameters<typeof setMetasPorMes>[1] = {
@@ -233,7 +162,7 @@ export function ConfigMetasPage() {
           meta_faturamento: ft ? parseFloat(ft.replace(',', '.')) : undefined,
           meta_cash: ca ? parseFloat(ca.replace(',', '.')) : undefined
         }
-        await setMetasPorMes(mesAlvo, patch, builtMap)
+        await setMetasPorMes(mesAlvo, patch, undefined, builtSquad)
         showToast(`Planejamento de ${labelMes(mesAlvo)} salvo (mês atual não foi alterado).`)
       }
       await load()
@@ -262,6 +191,8 @@ export function ConfigMetasPage() {
     }
   }
 
+  const squadsOrfaos = Object.keys(squadForm).filter((id) => !squads.some((s) => s.id === id))
+
   return (
     <div className="content">
       <div style={{ marginBottom: 20 }}>
@@ -272,8 +203,9 @@ export function ConfigMetasPage() {
           Configuração de metas
         </h2>
         <p style={{ color: 'var(--text2)' }}>
-          Metas globais da empresa por mês; pode ainda repartir cotas por SDR e por Closer — a soma das colunas ajuda a
-          alinhar com o total global. O mês em curso grava na raiz; outros meses ficam em planejamento sem alterar o atual.
+          Defina a <strong>meta global do comercial</strong> e, à parte, <strong>reparta manualmente por cada squad</strong>{' '}
+          (valores à sua escolha — não são calculados nem somados automaticamente). O mês em curso grava na raiz; outros
+          meses ficam em planejamento.
         </p>
       </div>
       {loading && (
@@ -350,27 +282,27 @@ export function ConfigMetasPage() {
                 style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16 }}
               >
                 <div className="fg">
-                  <label htmlFor="cm-ag">Meta Reuniões Agendadas</label>
+                  <label htmlFor="cm-ag">Meta global · Reuniões Agendadas</label>
                   <input id="cm-ag" type="number" value={ag} onChange={(e) => setAg(e.target.value)} placeholder="80" disabled={!podeEditarMetas} />
                 </div>
                 <div className="fg">
-                  <label htmlFor="cm-re">Meta Reuniões Realizadas</label>
+                  <label htmlFor="cm-re">Meta global · Reuniões Realizadas</label>
                   <input id="cm-re" type="number" value={re} onChange={(e) => setRe(e.target.value)} placeholder="60" disabled={!podeEditarMetas} />
                 </div>
                 <div className="fg">
-                  <label htmlFor="cm-cl">Meta Reuniões Closer</label>
+                  <label htmlFor="cm-cl">Meta global · Reuniões Closer</label>
                   <input id="cm-cl" type="number" value={cl} onChange={(e) => setCl(e.target.value)} placeholder="50" disabled={!podeEditarMetas} />
                 </div>
                 <div className="fg">
-                  <label htmlFor="cm-vn">Meta Vendas</label>
+                  <label htmlFor="cm-vn">Meta global · Vendas</label>
                   <input id="cm-vn" type="number" value={vn} onChange={(e) => setVn(e.target.value)} placeholder="20" disabled={!podeEditarMetas} />
                 </div>
                 <div className="fg">
-                  <label htmlFor="cm-ft">Meta Faturamento (R$)</label>
+                  <label htmlFor="cm-ft">Meta global · Faturamento (R$)</label>
                   <input id="cm-ft" type="number" value={ft} onChange={(e) => setFt(e.target.value)} placeholder="50000" disabled={!podeEditarMetas} />
                 </div>
                 <div className="fg">
-                  <label htmlFor="cm-ca">Meta Cash Collected (R$)</label>
+                  <label htmlFor="cm-ca">Meta global · Cash Collected (R$)</label>
                   <input id="cm-ca" type="number" value={ca} onChange={(e) => setCa(e.target.value)} placeholder="40000" disabled={!podeEditarMetas} />
                 </div>
               </div>
@@ -393,33 +325,29 @@ export function ConfigMetasPage() {
                   }}
                 >
                   <Users size={17} strokeWidth={1.65} aria-hidden style={{ color: 'var(--accent)' }} />
-                  Metas por pessoa (SDR e Closer)
+                  Repartição manual por squad
                 </h3>
                 <p style={{ fontSize: 12, color: 'var(--text2)', margin: '0 0 16px', lineHeight: 1.55 }}>
-                  Defina cotas por utilizador; a soma das colunas pode servir de referência para a meta global da empresa
-                  acima. Métricas que não fizerem sentido para o papel podem ficar em branco.
+                  Preencha as cotas de cada squad como quiser (não há soma automática nem validação face à meta global).
+                  Squads em{' '}
+                  <Link to="/config/squads" style={{ color: 'var(--accent)' }}>
+                    Configurações → Squads
+                  </Link>
+                  .
                 </p>
 
-                {sdrUsers.length === 0 &&
-                  closerUsers.length === 0 &&
-                  outrosMetaUsers.length === 0 &&
-                  unknownUidsComMetas.length === 0 && (
-                  <p style={{ fontSize: 13, color: 'var(--text2)' }}>
-                    Nenhum utilizador com cargo SDR ou Closer. Crie utilizadores em Configurações → Equipa.
-                  </p>
+                {squads.length === 0 && squadsOrfaos.length === 0 && (
+                  <p style={{ fontSize: 13, color: 'var(--text2)' }}>Nenhum squad criado.</p>
                 )}
 
-                {sdrUsers.length > 0 && (
-                  <div style={{ marginBottom: 22 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--text2)' }}>
-                      Squad SDR
-                    </div>
+                {squads.map((s) => (
+                  <div key={s.id} style={{ marginBottom: 22 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--text2)' }}>{s.nome}</div>
                     <div style={{ overflowX: 'auto' }}>
-                      <table className="config-metas-indiv-table" style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                      <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ textAlign: 'left', color: 'var(--text2)' }}>
-                            <th style={{ padding: '6px 8px', minWidth: 140 }}>Nome</th>
-                            {INDIV_COLS.map((c) => (
+                            {SQUAD_COLS.map((c) => (
                               <th key={c.key} style={{ padding: '6px 4px', minWidth: 72 }} title={c.lb}>
                                 {c.short}
                               </th>
@@ -427,31 +355,20 @@ export function ConfigMetasPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {sdrUsers.map((u) => (
-                            <tr key={u.id}>
-                              <td style={{ padding: '6px 8px', fontWeight: 600 }}>{u.nome}</td>
-                              {INDIV_COLS.map((c) => (
-                                <td key={c.key} style={{ padding: '4px' }}>
-                                  <input
-                                    type="text"
-                                    inputMode={c.money ? 'decimal' : 'numeric'}
-                                    className="di"
-                                    style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12 }}
-                                    value={indivForm[u.id]?.[c.key] ?? ''}
-                                    onChange={(e) => setIndivCell(u.id, c.key, e.target.value)}
-                                    disabled={!podeEditarMetas}
-                                    placeholder="—"
-                                    aria-label={`${c.lb} · ${u.nome}`}
-                                  />
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                          <tr style={{ fontWeight: 700, color: 'var(--text2)', borderTop: '1px solid var(--border)' }}>
-                            <td style={{ padding: '8px' }}>Soma SDR</td>
-                            {INDIV_COLS.map((c) => (
-                              <td key={c.key} style={{ padding: '8px 4px' }}>
-                                {fmtCmp(sumSdr[c.key])}
+                          <tr>
+                            {SQUAD_COLS.map((c) => (
+                              <td key={c.key} style={{ padding: '4px' }}>
+                                <input
+                                  type="text"
+                                  inputMode={c.money ? 'decimal' : 'numeric'}
+                                  className="di"
+                                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12 }}
+                                  value={squadForm[s.id]?.[c.key] ?? ''}
+                                  onChange={(e) => setSquadCell(s.id, c.key, e.target.value)}
+                                  disabled={!podeEditarMetas}
+                                  placeholder="—"
+                                  aria-label={`${c.lb} · ${s.nome}`}
+                                />
                               </td>
                             ))}
                           </tr>
@@ -459,19 +376,18 @@ export function ConfigMetasPage() {
                       </table>
                     </div>
                   </div>
-                )}
+                ))}
 
-                {closerUsers.length > 0 && (
-                  <div style={{ marginBottom: 22 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--text2)' }}>
-                      Squad Closer
+                {squadsOrfaos.map((sid) => (
+                  <div key={sid} style={{ marginBottom: 22 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--amber)' }}>
+                      Squad removido (id: {sid.slice(0, 8)}…)
                     </div>
                     <div style={{ overflowX: 'auto' }}>
-                      <table className="config-metas-indiv-table" style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                      <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ textAlign: 'left', color: 'var(--text2)' }}>
-                            <th style={{ padding: '6px 8px', minWidth: 140 }}>Nome</th>
-                            {INDIV_COLS.map((c) => (
+                            {SQUAD_COLS.map((c) => (
                               <th key={c.key} style={{ padding: '6px 4px', minWidth: 72 }} title={c.lb}>
                                 {c.short}
                               </th>
@@ -479,31 +395,19 @@ export function ConfigMetasPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {closerUsers.map((u) => (
-                            <tr key={u.id}>
-                              <td style={{ padding: '6px 8px', fontWeight: 600 }}>{u.nome}</td>
-                              {INDIV_COLS.map((c) => (
-                                <td key={c.key} style={{ padding: '4px' }}>
-                                  <input
-                                    type="text"
-                                    inputMode={c.money ? 'decimal' : 'numeric'}
-                                    className="di"
-                                    style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12 }}
-                                    value={indivForm[u.id]?.[c.key] ?? ''}
-                                    onChange={(e) => setIndivCell(u.id, c.key, e.target.value)}
-                                    disabled={!podeEditarMetas}
-                                    placeholder="—"
-                                    aria-label={`${c.lb} · ${u.nome}`}
-                                  />
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                          <tr style={{ fontWeight: 700, color: 'var(--text2)', borderTop: '1px solid var(--border)' }}>
-                            <td style={{ padding: '8px' }}>Soma Closer</td>
-                            {INDIV_COLS.map((c) => (
-                              <td key={c.key} style={{ padding: '8px 4px' }}>
-                                {fmtCmp(sumCloser[c.key])}
+                          <tr>
+                            {SQUAD_COLS.map((c) => (
+                              <td key={c.key} style={{ padding: '4px' }}>
+                                <input
+                                  type="text"
+                                  inputMode={c.money ? 'decimal' : 'numeric'}
+                                  className="di"
+                                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12 }}
+                                  value={squadForm[sid]?.[c.key] ?? ''}
+                                  onChange={(e) => setSquadCell(sid, c.key, e.target.value)}
+                                  disabled={!podeEditarMetas}
+                                  placeholder="—"
+                                />
                               </td>
                             ))}
                           </tr>
@@ -511,150 +415,7 @@ export function ConfigMetasPage() {
                       </table>
                     </div>
                   </div>
-                )}
-
-                {outrosMetaUsers.length > 0 && (
-                  <div style={{ marginBottom: 22 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--text2)' }}>
-                      Outros cargos com metas guardadas
-                    </div>
-                    <div style={{ overflowX: 'auto' }}>
-                      <table className="config-metas-indiv-table" style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ textAlign: 'left', color: 'var(--text2)' }}>
-                            <th style={{ padding: '6px 8px', minWidth: 140 }}>Nome</th>
-                            {INDIV_COLS.map((c) => (
-                              <th key={c.key} style={{ padding: '6px 4px', minWidth: 72 }} title={c.lb}>
-                                {c.short}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {outrosMetaUsers.map((u) => (
-                            <tr key={u.id}>
-                              <td style={{ padding: '6px 8px', fontWeight: 600 }}>
-                                {u.nome}
-                                <span style={{ fontWeight: 400, color: 'var(--text3)', marginLeft: 6 }}>({u.cargo})</span>
-                              </td>
-                              {INDIV_COLS.map((c) => (
-                                <td key={c.key} style={{ padding: '4px' }}>
-                                  <input
-                                    type="text"
-                                    inputMode={c.money ? 'decimal' : 'numeric'}
-                                    className="di"
-                                    style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12 }}
-                                    value={indivForm[u.id]?.[c.key] ?? ''}
-                                    onChange={(e) => setIndivCell(u.id, c.key, e.target.value)}
-                                    disabled={!podeEditarMetas}
-                                    placeholder="—"
-                                    aria-label={`${c.lb} · ${u.nome}`}
-                                  />
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {unknownUidsComMetas.length > 0 && (
-                  <div style={{ marginBottom: 22 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--text2)' }}>
-                      Utilizadores já removidos (apenas limpar ou migrar cotas)
-                    </div>
-                    <div style={{ overflowX: 'auto' }}>
-                      <table className="config-metas-indiv-table" style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ textAlign: 'left', color: 'var(--text2)' }}>
-                            <th style={{ padding: '6px 8px', minWidth: 140 }}>ID</th>
-                            {INDIV_COLS.map((c) => (
-                              <th key={c.key} style={{ padding: '6px 4px', minWidth: 72 }} title={c.lb}>
-                                {c.short}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {unknownUidsComMetas.map((uid) => (
-                            <tr key={uid}>
-                              <td style={{ padding: '6px 8px', fontWeight: 600, fontSize: 11, wordBreak: 'break-all' }}>
-                                {uid}
-                              </td>
-                              {INDIV_COLS.map((c) => (
-                                <td key={c.key} style={{ padding: '4px' }}>
-                                  <input
-                                    type="text"
-                                    inputMode={c.money ? 'decimal' : 'numeric'}
-                                    className="di"
-                                    style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12 }}
-                                    value={indivForm[uid]?.[c.key] ?? ''}
-                                    onChange={(e) => setIndivCell(uid, c.key, e.target.value)}
-                                    disabled={!podeEditarMetas}
-                                    placeholder="—"
-                                  />
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {(sdrUsers.length > 0 ||
-                  closerUsers.length > 0 ||
-                  outrosMetaUsers.length > 0 ||
-                  unknownUidsComMetas.length > 0) && (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      padding: 12,
-                      borderRadius: 8,
-                      background: 'var(--surface2)',
-                      fontSize: 12,
-                      lineHeight: 1.6
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Composição vs meta global (valores do formulário)</div>
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ textAlign: 'left', color: 'var(--text2)' }}>
-                            <th style={{ padding: '4px 8px' }}>Indicador</th>
-                            <th style={{ padding: '4px 8px' }}>Soma individual</th>
-                            <th style={{ padding: '4px 8px' }}>Meta global</th>
-                            <th style={{ padding: '4px 8px' }}>Diferença</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {INDIV_COLS.map((c) => {
-                            const g = globalDraft[c.key]
-                            const s = sumTodos[c.key]
-                            const hasG = g != null && Number.isFinite(g)
-                            const hasS = s != null && Number.isFinite(s)
-                            let diffLabel = '—'
-                            if (hasG && hasS) {
-                              const d = s! - g!
-                              diffLabel = d === 0 ? '0' : d > 0 ? `+${fmtCmp(d)}` : fmtCmp(d)
-                            }
-                            return (
-                              <tr key={c.key}>
-                                <td style={{ padding: '6px 8px' }}>{c.lb}</td>
-                                <td style={{ padding: '6px 8px' }}>{fmtCmp(s)}</td>
-                                <td style={{ padding: '6px 8px' }}>{fmtCmp(g)}</td>
-                                <td style={{ padding: '6px 8px', fontWeight: 600 }}>{diffLabel}</td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+                ))}
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14, alignItems: 'center' }}>

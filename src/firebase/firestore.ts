@@ -223,19 +223,25 @@ export const METAS_CONFIG_KEYS: (keyof MetasConfig)[] = [
   'meta_cash'
 ]
 
-/** Metas por usuário (userId Firestore → parcial das mesmas métricas). */
+/** Metas por utilizador (userId → parcial). Legado; a configuração atual usa `MetasPorSquad`. */
 export type MetasPorUsuario = Record<string, Partial<MetasConfig>>
 
-/** Bloco de um mês em `metasPorMes`: metas globais da empresa + opcionalmente metas individuais. */
+/** Metas por squad (id do squad em `squads` → parcial), definidas manualmente em relação à meta global. */
+export type MetasPorSquad = Record<string, Partial<MetasConfig>>
+
+/** Bloco de um mês em `metasPorMes`. */
 export type MetasMesBlock = Partial<MetasConfig> & {
   metasPorUsuario?: MetasPorUsuario
+  metasPorSquad?: MetasPorSquad
 }
 
 /** Documento em `config/metas`: chaves na raiz = metas do mês calendário atual; `metasPorMes` = planejamento de outros meses. */
 export type MetasFirestoreDoc = MetasConfig & {
   metasPorMes?: Record<string, MetasMesBlock>
-  /** Metas individuais do mês calendário atual (espelha a raiz). */
+  /** Legado. */
   metasPorUsuario?: MetasPorUsuario
+  /** Repartição manual da meta comercial por squad (mês atual na raiz). */
+  metasPorSquad?: MetasPorSquad
 }
 
 export function currentMetasMonthYm(d = new Date()): string {
@@ -277,13 +283,19 @@ function parseMetasPorUsuarioRaw(raw: unknown): MetasPorUsuario | undefined {
   return Object.keys(out).length > 0 ? out : undefined
 }
 
+function parseMetasPorSquadRaw(raw: unknown): MetasPorSquad | undefined {
+  return parseMetasPorUsuarioRaw(raw) as MetasPorSquad | undefined
+}
+
 function monthBlockFromRaw(block: unknown): MetasMesBlock {
   if (!block || typeof block !== 'object' || Array.isArray(block)) return {}
   const row = block as Record<string, unknown>
   const partial = parsePartialMetasFromRow(row)
   const metasPorUsuario = parseMetasPorUsuarioRaw(row.metasPorUsuario)
+  const metasPorSquad = parseMetasPorSquadRaw(row.metasPorSquad)
   const out: MetasMesBlock = { ...partial }
   if (metasPorUsuario && Object.keys(metasPorUsuario).length > 0) out.metasPorUsuario = metasPorUsuario
+  if (metasPorSquad && Object.keys(metasPorSquad).length > 0) out.metasPorSquad = metasPorSquad
   return out
 }
 
@@ -295,7 +307,8 @@ function parseMetasPorMesRaw(raw: unknown): Record<string, MetasMesBlock> | unde
     const mb = monthBlockFromRaw(block)
     const temGlobal = METAS_CONFIG_KEYS.some((k) => mb[k] != null)
     const temInd = mb.metasPorUsuario && Object.keys(mb.metasPorUsuario).length > 0
-    if (temGlobal || temInd) out[ym] = mb
+    const temSq = mb.metasPorSquad && Object.keys(mb.metasPorSquad).length > 0
+    if (temGlobal || temInd || temSq) out[ym] = mb
   }
   return Object.keys(out).length > 0 ? out : undefined
 }
@@ -318,6 +331,18 @@ function metasMesBlockToFirestore(block: MetasMesBlock): Record<string, unknown>
     }
     if (Object.keys(inner).length > 0) o.metasPorUsuario = inner
   }
+  if (block.metasPorSquad && Object.keys(block.metasPorSquad).length > 0) {
+    const inner: Record<string, unknown> = {}
+    for (const [sid, partial] of Object.entries(block.metasPorSquad)) {
+      const sub: Record<string, number> = {}
+      for (const k of METAS_CONFIG_KEYS) {
+        const v = partial[k]
+        if (typeof v === 'number' && Number.isFinite(v)) sub[k as string] = v
+      }
+      if (Object.keys(sub).length > 0) inner[sid] = sub
+    }
+    if (Object.keys(inner).length > 0) o.metasPorSquad = inner
+  }
   return o
 }
 
@@ -328,7 +353,8 @@ export async function getMetasFirestoreDoc(): Promise<MetasFirestoreDoc> {
   const root = pickRootMetasFromRaw(raw)
   const metasPorMes = parseMetasPorMesRaw(raw.metasPorMes)
   const metasPorUsuario = parseMetasPorUsuarioRaw(raw.metasPorUsuario)
-  return { ...root, metasPorMes, metasPorUsuario }
+  const metasPorSquad = parseMetasPorSquadRaw(raw.metasPorSquad)
+  return { ...root, metasPorMes, metasPorUsuario, metasPorSquad }
 }
 
 function rootOnlyFromDoc(docRow: MetasFirestoreDoc): MetasConfig {
@@ -363,6 +389,19 @@ export function resolveMetasIndividuaisParaMes(ym: string, docRow: MetasFirestor
   if (ym === currentMetasMonthYm()) return docRow.metasPorUsuario ? { ...docRow.metasPorUsuario } : {}
   const mu = docRow.metasPorMes?.[ym]?.metasPorUsuario
   return mu ? { ...mu } : {}
+}
+
+/** Metas por squad efetivas para o mês (definição manual). */
+export function resolveMetasSquadsParaMes(ym: string, docRow: MetasFirestoreDoc): MetasPorSquad {
+  if (ym === currentMetasMonthYm()) return docRow.metasPorSquad ? { ...docRow.metasPorSquad } : {}
+  const ms = docRow.metasPorMes?.[ym]?.metasPorSquad
+  return ms ? { ...ms } : {}
+}
+
+export function resolveMetasSquadParaMes(ym: string, squadId: string, docRow: MetasFirestoreDoc): Partial<MetasConfig> {
+  const m = resolveMetasSquadsParaMes(ym, docRow)
+  const p = m[squadId]
+  return p ? { ...p } : {}
 }
 
 /** Soma todas as metas individuais (por chave numérica). */
@@ -415,15 +454,31 @@ export async function setMetasPorUsuarioRoot(map: MetasPorUsuario): Promise<void
   await setDoc(ref, { metasPorUsuario: Object.keys(inner).length > 0 ? inner : {} }, { merge: true })
 }
 
+/** Metas por squad do mês calendário atual (substitui o mapa inteiro). */
+export async function setMetasPorSquadRoot(map: MetasPorSquad): Promise<void> {
+  const ref = doc(db, 'config', 'metas')
+  const inner: Record<string, unknown> = {}
+  for (const [sid, partial] of Object.entries(map)) {
+    const sub: Record<string, number> = {}
+    for (const k of METAS_CONFIG_KEYS) {
+      const v = partial[k]
+      if (typeof v === 'number' && Number.isFinite(v)) sub[k as string] = v
+    }
+    if (Object.keys(sub).length > 0) inner[sid] = sub
+  }
+  await setDoc(ref, { metasPorSquad: Object.keys(inner).length > 0 ? inner : {} }, { merge: true })
+}
+
 /**
  * Grava planejamento de um mês futuro/passado (não pode ser o mês calendário atual — use `setMetasConfig`).
  * Valores `undefined` removem a sobrescrita daquele indicador (volta a herdar da raiz na resolução).
- * `metasPorUsuario`: se omitido, mantém o mapa individual já salvo para esse mês; se passado (incl. `{}`), substitui.
+ * `metasPorUsuario` / `metasPorSquad`: se omitido, mantém o já salvo; se passado (incl. `{}`), substitui.
  */
 export async function setMetasPorMes(
   ym: string,
   params: Partial<MetasConfig>,
-  metasPorUsuario?: MetasPorUsuario
+  metasPorUsuario?: MetasPorUsuario,
+  metasPorSquad?: MetasPorSquad
 ): Promise<void> {
   if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('Mês inválido (use YYYY-MM)')
   if (ym === currentMetasMonthYm()) {
@@ -460,9 +515,17 @@ export async function setMetasPorMes(
         nextBlock.metasPorUsuario = { ...metasPorUsuario }
       }
     }
+    if (metasPorSquad !== undefined) {
+      if (Object.keys(metasPorSquad).length === 0) {
+        delete nextBlock.metasPorSquad
+      } else {
+        nextBlock.metasPorSquad = { ...metasPorSquad }
+      }
+    }
     const temGlobal = METAS_CONFIG_KEYS.some((k) => nextBlock[k] != null)
     const temInd = nextBlock.metasPorUsuario && Object.keys(nextBlock.metasPorUsuario).length > 0
-    if (!temGlobal && !temInd) {
+    const temSq = nextBlock.metasPorSquad && Object.keys(nextBlock.metasPorSquad).length > 0
+    if (!temGlobal && !temInd && !temSq) {
       delete map[ym]
     } else {
       map[ym] = nextBlock
