@@ -9,6 +9,7 @@ import { useAppStore } from '../../store/useAppStore'
 export function ProfileModal() {
   const { closeModal, showToast, currentUser, setCurrentUser } = useAppStore()
   const [nome, setNome] = useState('')
+  const [photoUrl, setPhotoUrl] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -19,6 +20,7 @@ export function ProfileModal() {
   useEffect(() => {
     if (currentUser) {
       setNome(currentUser.nome)
+      setPhotoUrl((currentUser.photoUrl ?? '').trim())
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
@@ -64,13 +66,20 @@ export function ProfileModal() {
         await updatePassword(auth.currentUser, newPassword)
         nextHasPassword = true
       }
+      const pic = photoUrl.trim()
       await updateUser(currentUser.id, {
         nome: n,
         email: currentUser.email,
         cargo: currentUser.cargo,
-        hasPassword: nextHasPassword
+        hasPassword: nextHasPassword,
+        photoUrl: pic
       })
-      setCurrentUser({ ...currentUser, nome: n, hasPassword: nextHasPassword })
+      setCurrentUser({
+        ...currentUser,
+        nome: n,
+        hasPassword: nextHasPassword,
+        ...(pic ? { photoUrl: pic } : { photoUrl: undefined })
+      })
       showToast('Perfil atualizado')
       closeModal()
     } catch (err) {
@@ -101,6 +110,19 @@ export function ProfileModal() {
         <div className="fg">
           <label>E-mail</label>
           <input type="text" value={currentUser.email} readOnly disabled style={{ opacity: 0.8, cursor: 'not-allowed' }} />
+        </div>
+        <div className="fg">
+          <label htmlFor="p-foto">URL da foto (opcional)</label>
+          <input
+            id="p-foto"
+            type="url"
+            value={photoUrl}
+            onChange={(e) => setPhotoUrl(e.target.value)}
+            placeholder="https://..."
+          />
+          <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6, marginBottom: 0 }}>
+            Link direto para a imagem, como nos squads.
+          </p>
         </div>
         <div style={{ marginTop: 16, marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>Alterar senha</div>
         {hasPasswordAlready && (

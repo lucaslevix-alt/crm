@@ -18,6 +18,7 @@ import {
   RankingSquadsPage,
   RankingMetasPage,
   RankingSDRPage,
+  RankingTVPage,
   RankingsPage,
   SquadsPage,
   RegistrosPage,
@@ -107,6 +108,7 @@ export default function App() {
                 <Route path="sdr" element={<RankingSDRPage />} />
                 <Route path="closer" element={<RankingCloserPage />} />
                 <Route path="squads" element={<RankingSquadsPage />} />
+                <Route path="tv" element={<RankingTVPage />} />
                 <Route path="metas" element={<RankingMetasPage />} />
               </Route>
               <Route path="ranking-sdr" element={<Navigate to="/rankings/sdr" replace />} />

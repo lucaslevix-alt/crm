@@ -10,6 +10,7 @@ export function UserFormModal() {
   const { closeModal, showToast, editingUser, setEditingUser, currentUser } = useAppStore()
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
+  const [photoUrl, setPhotoUrl] = useState('')
   const [cargo, setCargo] = useState<string>('sdr')
   const [password, setPassword] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
@@ -28,6 +29,7 @@ export function UserFormModal() {
     if (editingUser) {
       setNome(editingUser.nome)
       setEmail(editingUser.email)
+      setPhotoUrl((editingUser.photoUrl ?? '').trim())
       setCargo(editingUser.cargo)
       setPassword('')
       setCurrentPassword('')
@@ -36,6 +38,7 @@ export function UserFormModal() {
     } else {
       setNome('')
       setEmail('')
+      setPhotoUrl('')
       setCargo('sdr')
       setPassword('')
       setCurrentPassword('')
@@ -99,7 +102,8 @@ export function UserFormModal() {
           nome: n,
           email: email.trim().toLowerCase(),
           cargo,
-          hasPassword: nextHasPassword
+          hasPassword: nextHasPassword,
+          photoUrl: photoUrl.trim()
         })
         if (canEditPassword && newPassword && isAdmin && !isEditingSelf) {
           showToast(
@@ -109,7 +113,13 @@ export function UserFormModal() {
           showToast(`${n} atualizado`)
         }
       } else {
-        await addUser({ nome: n, email: email.trim().toLowerCase(), cargo, hasPassword: true })
+        await addUser({
+          nome: n,
+          email: email.trim().toLowerCase(),
+          cargo,
+          hasPassword: true,
+          photoUrl: photoUrl.trim()
+        })
         showToast(`${n} cadastrado. Se ainda não existir, crie o mesmo e-mail em Authentication.`)
       }
       setEditingUser(null)
@@ -146,6 +156,19 @@ export function UserFormModal() {
         <div className="fg">
           <label htmlFor="u-email">E-mail</label>
           <input id="u-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="joao@empresa.com" />
+        </div>
+        <div className="fg">
+          <label htmlFor="u-foto">URL da foto (opcional)</label>
+          <input
+            id="u-foto"
+            type="url"
+            value={photoUrl}
+            onChange={(e) => setPhotoUrl(e.target.value)}
+            placeholder="https://..."
+          />
+          <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6, marginBottom: 0 }}>
+            Mesmo formato que em Squads: link direto para a imagem (ex. hospedagem ou CDN).
+          </p>
         </div>
         {!isEdit && (
           <div className="fg">

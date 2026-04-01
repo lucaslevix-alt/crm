@@ -139,13 +139,14 @@ export async function findUserByEmail(params: {
   if (!found) return null
 
   const data = found.data() as Record<string, unknown>
+  const pic = String((data.photoUrl as string | undefined) ?? (data.fotoUrl as string | undefined) ?? '').trim()
   return {
     id: found.id,
     nome: String(data.nome ?? ''),
     email: String(data.email ?? ''),
     cargo: String(data.cargo ?? ''),
     hasPassword: Boolean(data.hasPassword),
-    photoUrl: String((data.photoUrl as string | undefined) ?? (data.fotoUrl as string | undefined) ?? '')
+    ...(pic ? { photoUrl: pic } : {})
   }
 }
 
@@ -155,12 +156,14 @@ export async function listUsers(): Promise<CrmUser[]> {
   )
   return snapshot.docs.map((d) => {
     const data = d.data() as Record<string, unknown>
+    const pic = String((data.photoUrl as string | undefined) ?? (data.fotoUrl as string | undefined) ?? '').trim()
     return {
       id: d.id,
       nome: String(data.nome ?? ''),
       email: String(data.email ?? ''),
       cargo: String(data.cargo ?? ''),
-      photoUrl: String((data.photoUrl as string | undefined) ?? (data.fotoUrl as string | undefined) ?? '')
+      hasPassword: Boolean(data.hasPassword),
+      ...(pic ? { photoUrl: pic } : {})
     }
   })
 }
@@ -728,12 +731,20 @@ export async function getLeadsSdrByRange(start: string, end: string): Promise<Le
   return b.byUser
 }
 
-export async function addUser(params: { nome: string; email: string; cargo: string; hasPassword?: boolean }): Promise<string> {
+export async function addUser(params: {
+  nome: string
+  email: string
+  cargo: string
+  hasPassword?: boolean
+  photoUrl?: string
+}): Promise<string> {
+  const photoUrl = (params.photoUrl ?? '').trim()
   const ref = await addDoc(collection(db, 'usuarios'), {
     nome: params.nome,
     email: params.email.trim().toLowerCase(),
     cargo: params.cargo,
     hasPassword: params.hasPassword ?? false,
+    ...(photoUrl ? { photoUrl } : {}),
     criadoEm: serverTimestamp()
   })
   return ref.id
@@ -741,13 +752,15 @@ export async function addUser(params: { nome: string; email: string; cargo: stri
 
 export async function updateUser(
   id: string,
-  params: { nome: string; email: string; cargo: string; hasPassword?: boolean }
+  params: { nome: string; email: string; cargo: string; hasPassword?: boolean; photoUrl?: string }
 ): Promise<void> {
+  const photoUrl = params.photoUrl !== undefined ? params.photoUrl.trim() : undefined
   await updateDoc(doc(db, 'usuarios', id), {
     nome: params.nome,
     email: params.email.trim().toLowerCase(),
     cargo: params.cargo,
-    ...(params.hasPassword !== undefined ? { hasPassword: params.hasPassword } : {})
+    ...(params.hasPassword !== undefined ? { hasPassword: params.hasPassword } : {}),
+    ...(photoUrl !== undefined ? { photoUrl: photoUrl || '' } : {})
   })
 }
 

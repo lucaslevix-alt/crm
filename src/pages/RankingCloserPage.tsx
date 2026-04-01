@@ -54,13 +54,17 @@ function RankingItem({
   )
 }
 
-export function RankingCloserPage() {
+export function RankingCloserPage({ tvMode }: { tvMode?: boolean } = {}) {
   const [period, setPeriod] = useState<RpPeriod>('mes')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [list, setList] = useState<CloserStat[]>([])
   const [ticketMedio, setTicketMedio] = useState(0)
-  const [view, setView] = useState<'lista' | 'podio'>('lista')
+  const [view, setView] = useState<'lista' | 'podio'>(() => (tvMode ? 'podio' : 'lista'))
+
+  useEffect(() => {
+    if (tvMode) setView('podio')
+  }, [tvMode])
 
   const loadRanking = useCallback(async () => {
     setLoading(true)
@@ -110,52 +114,54 @@ export function RankingCloserPage() {
 
   return (
     <>
-      <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-        <span className="ctrl-label">Período:</span>
-        {(['mes', 'semana', 'hoje'] as const).map((p) => (
-          <button
-            key={p}
-            type="button"
-            className={`prd-btn ${period === p ? 'active' : ''}`}
-            onClick={() => setPeriod(p)}
-          >
-            {p === 'mes' ? 'Este mês' : p === 'semana' ? 'Esta semana' : 'Hoje'}
-          </button>
-        ))}
-        <span style={{ flex: 1 }} />
-        <div style={{ display: 'inline-flex', borderRadius: 999, border: '1px solid var(--border2)', overflow: 'hidden' }}>
-          <button
-            type="button"
-            className="prd-btn"
-            style={{
-              borderRadius: 0,
-              border: 'none',
-              background: view === 'lista' ? 'var(--btn-bg)' : 'transparent',
-              color: view === 'lista' ? 'var(--btn-fg)' : 'var(--text2)',
-              padding: '4px 12px',
-              fontSize: 12
-            }}
-            onClick={() => setView('lista')}
-          >
-            Lista
-          </button>
-          <button
-            type="button"
-            className="prd-btn"
-            style={{
-              borderRadius: 0,
-              border: 'none',
-              background: view === 'podio' ? 'var(--btn-bg)' : 'transparent',
-              color: view === 'podio' ? 'var(--btn-fg)' : 'var(--text2)',
-              padding: '4px 12px',
-              fontSize: 12
-            }}
-            onClick={() => setView('podio')}
-          >
-            Pódio
-          </button>
+      {!tvMode && (
+        <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <span className="ctrl-label">Período:</span>
+          {(['mes', 'semana', 'hoje'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`prd-btn ${period === p ? 'active' : ''}`}
+              onClick={() => setPeriod(p)}
+            >
+              {p === 'mes' ? 'Este mês' : p === 'semana' ? 'Esta semana' : 'Hoje'}
+            </button>
+          ))}
+          <span style={{ flex: 1 }} />
+          <div style={{ display: 'inline-flex', borderRadius: 999, border: '1px solid var(--border2)', overflow: 'hidden' }}>
+            <button
+              type="button"
+              className="prd-btn"
+              style={{
+                borderRadius: 0,
+                border: 'none',
+                background: view === 'lista' ? 'var(--btn-bg)' : 'transparent',
+                color: view === 'lista' ? 'var(--btn-fg)' : 'var(--text2)',
+                padding: '4px 12px',
+                fontSize: 12
+              }}
+              onClick={() => setView('lista')}
+            >
+              Lista
+            </button>
+            <button
+              type="button"
+              className="prd-btn"
+              style={{
+                borderRadius: 0,
+                border: 'none',
+                background: view === 'podio' ? 'var(--btn-bg)' : 'transparent',
+                color: view === 'podio' ? 'var(--btn-fg)' : 'var(--text2)',
+                padding: '4px 12px',
+                fontSize: 12
+              }}
+              onClick={() => setView('podio')}
+            >
+              Pódio
+            </button>
+          </div>
         </div>
-      </div>
+      )}
       {error && (
         <div className="empty">
           <p>{error}</p>

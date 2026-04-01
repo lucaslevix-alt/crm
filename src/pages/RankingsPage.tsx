@@ -5,6 +5,7 @@ const TABS = [
   { to: '/rankings/sdr', label: 'SDR' },
   { to: '/rankings/closer', label: 'Closer' },
   { to: '/rankings/squads', label: 'Squads' },
+  { to: '/rankings/tv', label: 'TV' },
   { to: '/rankings/metas', label: 'Metas' }
 ] as const
 
@@ -18,7 +19,7 @@ export function RankingsPage() {
             Rankings
           </h2>
           <p style={{ color: 'var(--text2)', marginBottom: 0 }}>
-            SDR, Closer, Squads e acompanhamento das metas por squad
+            SDR, Closer, Squads, modo TV (pódios em rotação) e metas por squad
           </p>
         </div>
         <nav className="rankings-tabs" aria-label="Tipo de ranking">

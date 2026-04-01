@@ -228,6 +228,7 @@ export function UsuariosPage() {
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 52 }} aria-label="Foto" />
                   <th>Nome</th>
                   <th>E-mail</th>
                   <th>Cargo</th>
@@ -237,6 +238,28 @@ export function UsuariosPage() {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id}>
+                    <td>
+                      <span
+                        title={u.nome}
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 13,
+                          fontWeight: 800,
+                          color: 'var(--text3)',
+                          flexShrink: 0,
+                          border: '1px solid var(--border2)',
+                          background: u.photoUrl ? `url(${u.photoUrl}) center/cover` : 'var(--bg3)',
+                          verticalAlign: 'middle'
+                        }}
+                      >
+                        {!u.photoUrl && (u.nome || '?').charAt(0).toUpperCase()}
+                      </span>
+                    </td>
                     <td><strong>{u.nome}</strong></td>
                     <td style={{ color: 'var(--text2)' }}>{u.email || '—'}</td>
                     <td>
