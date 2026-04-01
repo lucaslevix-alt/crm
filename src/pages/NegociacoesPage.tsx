@@ -4,7 +4,6 @@ import {
   Banknote,
   ChevronLeft,
   CreditCard,
-  FileText,
   Handshake,
   Package,
   Plus,
@@ -13,10 +12,8 @@ import {
 } from 'lucide-react'
 import {
   getProdutos,
-  produtoParcelasBoletoEfetivo,
   produtoParcelasCartaoEfetivo,
   produtoValorAVistaEfetivo,
-  produtoValorBoletoEfetivo,
   produtoValorCartaoEfetivo,
   type ProdutoRow
 } from '../firebase/firestore'
@@ -38,27 +35,18 @@ function valorParcela(valor: number | null, parcelas: number | null): number | n
   return valor / parcelas
 }
 
-function textoParcelasNegocio(
-  linhas: Array<{ produto: ProdutoRow }>,
-  modo: 'cartao' | 'boleto',
-  meses: 3 | 6
-): string | null {
+function textoParcelasCartaoNegocio(linhas: Array<{ produto: ProdutoRow }>, meses: 3 | 6): string | null {
   const vals = linhas
     .map((l) => {
       const p = l.produto
-      if (modo === 'cartao') {
-        const v = produtoValorCartaoEfetivo(p, meses)
-        const n = produtoParcelasCartaoEfetivo(p, meses)
-        return v != null && v > 0 && n != null && n > 0 ? n : null
-      }
-      const v = produtoValorBoletoEfetivo(p, meses)
-      const n = produtoParcelasBoletoEfetivo(p, meses)
+      const v = produtoValorCartaoEfetivo(p, meses)
+      const n = produtoParcelasCartaoEfetivo(p, meses)
       return v != null && v > 0 && n != null && n > 0 ? n : null
     })
     .filter((x): x is number => x != null)
   if (!vals.length) return null
   const sorted = [...new Set(vals)].sort((a, b) => a - b)
-  const suffix = modo === 'cartao' ? ' sem juros' : ''
+  const suffix = ' sem juros'
   if (sorted.length === 1) return `${sorted[0]}x${suffix}`
   return `${sorted[0]}x a ${sorted[sorted.length - 1]}x${suffix}`
 }
@@ -79,29 +67,6 @@ function CatalogCartaoCell({
       <div className="neg-td-stack">
         <span className="neg-num">{fmt(parcCartao)}</span>
         <span className="neg-cell-meta">{n}x sem juros</span>
-        <span className="neg-cell-meta neg-cell-meta--muted">Total {fmt(vTot)}</span>
-      </div>
-    )
-  }
-  return <span className="neg-num">{fmt(vTot)}</span>
-}
-
-function CatalogBoletoCell({
-  p,
-  parcBoleto,
-  meses
-}: {
-  p: ProdutoRow
-  parcBoleto: number | null
-  meses: 3 | 6
-}) {
-  const vTot = produtoValorBoletoEfetivo(p, meses)
-  const n = produtoParcelasBoletoEfetivo(p, meses) ?? 0
-  if (n > 0 && parcBoleto != null && vTot != null) {
-    return (
-      <div className="neg-td-stack">
-        <span className="neg-num">{fmt(parcBoleto)}</span>
-        <span className="neg-cell-meta">{n}x</span>
         <span className="neg-cell-meta neg-cell-meta--muted">Total {fmt(vTot)}</span>
       </div>
     )
@@ -179,16 +144,8 @@ export function NegociacoesPage() {
     (s, l) => s + (produtoValorCartaoEfetivo(l.produto, m) ?? 0) * l.quantidade,
     0
   )
-  const totalValorBoleto = linhasComDetalhes.reduce(
-    (s, l) => s + (produtoValorBoletoEfetivo(l.produto, m) ?? 0) * l.quantidade,
-    0
-  )
   const totalParcelaCartao = linhasComDetalhes.reduce((s, l) => {
     const vp = valorParcela(produtoValorCartaoEfetivo(l.produto, m), produtoParcelasCartaoEfetivo(l.produto, m))
-    return s + (vp ?? 0) * l.quantidade
-  }, 0)
-  const totalParcelaBoleto = linhasComDetalhes.reduce((s, l) => {
-    const vp = valorParcela(produtoValorBoletoEfetivo(l.produto, m), produtoParcelasBoletoEfetivo(l.produto, m))
     return s + (vp ?? 0) * l.quantidade
   }, 0)
   const totalAVista = linhasComDetalhes.reduce(
@@ -196,8 +153,7 @@ export function NegociacoesPage() {
     0
   )
 
-  const resumoParcelasCartaoTxt = textoParcelasNegocio(linhasComDetalhes, 'cartao', m)
-  const resumoParcelasBoletoTxt = textoParcelasNegocio(linhasComDetalhes, 'boleto', m)
+  const resumoParcelasCartaoTxt = textoParcelasCartaoNegocio(linhasComDetalhes, m)
 
   return (
     <div className="content">
@@ -209,8 +165,8 @@ export function NegociacoesPage() {
           </h2>
           <p className="neg-subtitle">
             {painel === 'catalogo'
-              ? 'Inclua produtos no catálogo e abra o carrinho para montar a negociação com o cliente'
-              : 'Quantidades e condições de pagamento por linha · totais abaixo'}
+              ? 'À vista ou cartão (cadastro) · inclua produtos e abra o carrinho'
+              : 'À vista e cartão por linha · totais abaixo'}
           </p>
         </div>
         <div className="neg-header-actions">
@@ -286,7 +242,7 @@ export function NegociacoesPage() {
                 <div>
                   <h3 className="card-title">Catálogo</h3>
                   <p className="neg-card-desc">
-                    Preços do contrato escolhido (3 ou 6 meses) · use + para incluir · depois abra o carrinho
+                    Contrato 3 ou 6 meses · à vista e cartão sem juros · use + para incluir no carrinho
                   </p>
                 </div>
                 <div className="neg-periodo-toggle" role="group" aria-label="Período do contrato no simulador">
@@ -315,7 +271,6 @@ export function NegociacoesPage() {
                       <th scope="col">Produto</th>
                       <th scope="col">À vista</th>
                       <th scope="col">Cartão</th>
-                      <th scope="col">Boleto</th>
                       <th scope="col" className="neg-th-action" title="Incluir na negociação">
                         +
                       </th>
@@ -327,10 +282,6 @@ export function NegociacoesPage() {
                         produtoValorCartaoEfetivo(p, m),
                         produtoParcelasCartaoEfetivo(p, m)
                       )
-                      const parcBoleto = valorParcela(
-                        produtoValorBoletoEfetivo(p, m),
-                        produtoParcelasBoletoEfetivo(p, m)
-                      )
                       return (
                         <tr key={p.id}>
                           <td data-label="Produto" className="neg-td-prod">
@@ -341,9 +292,6 @@ export function NegociacoesPage() {
                           </td>
                           <td data-label="Cartão">
                             <CatalogCartaoCell p={p} parcCartao={parcCartao} meses={m} />
-                          </td>
-                          <td data-label="Boleto">
-                            <CatalogBoletoCell p={p} parcBoleto={parcBoleto} meses={m} />
                           </td>
                           <td className="neg-td-action" data-label="">
                             <button
@@ -430,12 +378,6 @@ export function NegociacoesPage() {
                         produtoParcelasCartaoEfetivo(p, m)
                       )
                       const linhaParcCartao = (parcCartao ?? 0) * l.quantidade
-                      const vBoleto = (produtoValorBoletoEfetivo(p, m) ?? 0) * l.quantidade
-                      const parcBoleto = valorParcela(
-                        produtoValorBoletoEfetivo(p, m),
-                        produtoParcelasBoletoEfetivo(p, m)
-                      )
-                      const linhaParcBoleto = (parcBoleto ?? 0) * l.quantidade
                       const av = (produtoValorAVistaEfetivo(p, m) ?? 0) * l.quantidade
                       return (
                         <div key={l.uid} className="neg-item">
@@ -480,11 +422,6 @@ export function NegociacoesPage() {
                               <span className="neg-num neg-num--emph">{fmt(linhaParcCartao)}</span>
                               <span className="neg-pay-foot">parcela · total {fmt(vCartao)}</span>
                             </div>
-                            <div className="neg-pay-cell">
-                              <span className="neg-pay-label">Boleto</span>
-                              <span className="neg-num neg-num--emph">{fmt(linhaParcBoleto)}</span>
-                              <span className="neg-pay-foot">parcela · total {fmt(vBoleto)}</span>
-                            </div>
                           </div>
                         </div>
                       )
@@ -514,17 +451,6 @@ export function NegociacoesPage() {
                       <span className="neg-num neg-num--total-sm">{fmt(totalParcelaCartao)}</span>
                       <span className="neg-total-sub">por parcela</span>
                       <span className="neg-total-foot neg-num">{fmt(totalValorCartao)}</span>
-                      <span className="neg-total-sub">total geral</span>
-                    </div>
-                    <div className="neg-total-block">
-                      <span className="neg-total-label">
-                        <FileText size={14} strokeWidth={1.5} aria-hidden />
-                        Boleto
-                      </span>
-                      <span className="neg-total-meta">{resumoParcelasBoletoTxt ?? '—'}</span>
-                      <span className="neg-num neg-num--total-sm">{fmt(totalParcelaBoleto)}</span>
-                      <span className="neg-total-sub">por parcela</span>
-                      <span className="neg-total-foot neg-num">{fmt(totalValorBoleto)}</span>
                       <span className="neg-total-sub">total geral</span>
                     </div>
                   </div>

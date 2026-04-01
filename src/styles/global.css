@@ -1638,7 +1638,7 @@ select[multiple] option:checked {
 
 @media (min-width: 640px) {
     .neg-pay-grid {
-        grid-template-columns: repeat(3, 1fr)
+        grid-template-columns: repeat(2, 1fr)
     }
 }
 
@@ -1717,7 +1717,7 @@ select[multiple] option:checked {
 
 @media (min-width: 768px) {
     .neg-totals-grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: 0;
         border: 1px solid var(--border2);
         border-radius: var(--radius-md);
@@ -4497,7 +4497,9 @@ tr:hover td {
 .rpodium-table {
     margin-top: 20px;
     border-top: 1px solid var(--border);
-    padding-top: 14px
+    padding-top: 14px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch
 }
 
 .rpodium-table-head,

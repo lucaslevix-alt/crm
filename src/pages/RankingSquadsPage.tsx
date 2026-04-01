@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getRegistrosByRange, listSquads, type SquadRow } from '../firebase/firestore'
+import { getRegistrosByRange, listSquads, type RegistroRow, type SquadRow } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { today, mRange, wRange } from '../lib/dates'
 import { Trophy } from 'lucide-react'
@@ -18,6 +18,15 @@ function fmt(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
 }
 
+function fmtTaxaConv(pct: number | null): string {
+  if (pct == null || !Number.isFinite(pct)) return '—'
+  return `${pct.toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%`
+}
+
+/** Colunas: # | Squad | Faturamento | Vendas | Reuniões realiz. | Taxa conv. | Ticket médio */
+const R_SQUAD_PODIUM_GRID =
+  '32px minmax(96px, 1.25fr) minmax(80px, 1fr) minmax(48px, 0.65fr) minmax(72px, 0.95fr) minmax(64px, 0.85fr) minmax(80px, 1fr)'
+
 interface SquadStat {
   id: string
   nome: string
@@ -25,12 +34,11 @@ interface SquadStat {
   vn: number
   ft: number
   cc: number
+  /** Reuniões realizadas (SDR do squad) */
+  re: number
 }
 
-function aggregateSquadsByVendas(
-  vendas: { userId: string; valor: number; cashCollected: number }[],
-  squads: SquadRow[]
-): SquadStat[] {
+function aggregateSquadsFromRecs(recs: RegistroRow[], squads: SquadRow[]): SquadStat[] {
   const userIdToSquadId = new Map<string, string>()
   squads.forEach((s) => {
     s.memberIds.forEach((uid) => {
@@ -40,17 +48,21 @@ function aggregateSquadsByVendas(
 
   const bySquad = new Map<string, SquadStat>()
   squads.forEach((s) => {
-    bySquad.set(s.id, { id: s.id, nome: s.nome, fotoUrl: s.fotoUrl, vn: 0, ft: 0, cc: 0 })
+    bySquad.set(s.id, { id: s.id, nome: s.nome, fotoUrl: s.fotoUrl, vn: 0, ft: 0, cc: 0, re: 0 })
   })
 
-  for (const v of vendas) {
-    const sid = userIdToSquadId.get(v.userId)
+  for (const r of recs) {
+    const sid = userIdToSquadId.get(r.userId)
     if (!sid) continue
     const st = bySquad.get(sid)
     if (!st) continue
-    st.vn++
-    st.ft += v.valor || 0
-    st.cc += v.cashCollected || 0
+    if (r.tipo === 'venda') {
+      st.vn++
+      st.ft += r.valor || 0
+      st.cc += r.cashCollected || 0
+    } else if (r.tipo === 'reuniao_realizada') {
+      st.re++
+    }
   }
 
   return Array.from(bySquad.values()).sort((a, b) => b.ft - a.ft || a.nome.localeCompare(b.nome))
@@ -95,10 +107,7 @@ export function RankingSquadsPage() {
     const { start, end } = getRange(period)
     try {
       const [recs, squads] = await Promise.all([getRegistrosByRange(start, end), listSquads()])
-      const vendas = recs
-        .filter((r) => r.tipo === 'venda')
-        .map((r) => ({ userId: r.userId, valor: r.valor || 0, cashCollected: r.cashCollected || 0 }))
-      const stats = aggregateSquadsByVendas(vendas, squads)
+      const stats = aggregateSquadsFromRecs(recs, squads)
       setList(stats)
       const withSales = stats.filter((s) => s.vn > 0)
       const totalVn = withSales.reduce((sum, x) => sum + x.vn, 0)
@@ -273,56 +282,74 @@ export function RankingSquadsPage() {
                     )
                   })()}
                   <div className="rpodium-table">
-                    <div className="rpodium-table-head" style={{ gridTemplateColumns: '32px 1.2fr repeat(2, minmax(0, 0.85fr))' }}>
+                    <div className="rpodium-table-head" style={{ gridTemplateColumns: R_SQUAD_PODIUM_GRID }}>
                       <span className="rpodium-medal-col">#</span>
                       <span>Squad</span>
+                      <span style={{ textAlign: 'right' }} title="Faturamento no período">
+                        Faturamento
+                      </span>
                       <span style={{ textAlign: 'right' }}>Vendas</span>
-                      <span style={{ textAlign: 'right' }}>Faturamento</span>
+                      <span style={{ textAlign: 'right' }} title="Reuniões realizadas pelos membros do squad">
+                        Reuniões realiz.
+                      </span>
+                      <span style={{ textAlign: 'right' }} title="Vendas ÷ reuniões realizadas">
+                        Taxa conv. vendas
+                      </span>
+                      <span style={{ textAlign: 'right' }} title="Faturamento ÷ vendas">
+                        Ticket médio
+                      </span>
                     </div>
-                    {listDisplay.map((s, idx) => (
-                      <div
-                        key={s.id}
-                        className={`rpodium-table-row ${idx === 0 && s.vn > 0 ? 'rpodium-table-row--first' : ''}`}
-                        style={{ gridTemplateColumns: '32px 1.2fr repeat(2, minmax(0, 0.85fr))' }}
-                      >
-                        <span className="rpodium-medal-col">
-                          <RankMarker index={idx} />
-                        </span>
-                        <span style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    {listDisplay.map((s, idx) => {
+                      const ticket = s.vn > 0 ? s.ft / s.vn : null
+                      const taxaConv = s.re > 0 ? (s.vn / s.re) * 100 : null
+                      return (
+                        <div
+                          key={s.id}
+                          className={`rpodium-table-row ${idx === 0 && s.vn > 0 ? 'rpodium-table-row--first' : ''}`}
+                          style={{ gridTemplateColumns: R_SQUAD_PODIUM_GRID }}
+                        >
+                          <span className="rpodium-medal-col">
+                            <RankMarker index={idx} />
+                          </span>
+                          <span style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <span
+                              style={{
+                                width: 26,
+                                height: 26,
+                                borderRadius: 8,
+                                background: s.fotoUrl ? `url(${s.fotoUrl}) center/cover` : 'var(--bg3)',
+                                border: '1px solid var(--border2)',
+                                flexShrink: 0,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: 'var(--text3)'
+                              }}
+                            >
+                              {!s.fotoUrl && s.nome.charAt(0).toUpperCase()}
+                            </span>
+                            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {s.nome}
+                            </span>
+                          </span>
                           <span
                             style={{
-                              width: 26,
-                              height: 26,
-                              borderRadius: 8,
-                              background: s.fotoUrl ? `url(${s.fotoUrl}) center/cover` : 'var(--bg3)',
-                              border: '1px solid var(--border2)',
-                              flexShrink: 0,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 10,
-                              fontWeight: 800,
-                              color: 'var(--text3)'
+                              textAlign: 'right',
+                              fontWeight: idx === 0 && s.vn > 0 ? 800 : 600,
+                              color: idx === 0 && s.vn > 0 ? 'var(--green)' : undefined
                             }}
                           >
-                            {!s.fotoUrl && s.nome.charAt(0).toUpperCase()}
+                            {fmt(s.ft)}
                           </span>
-                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {s.nome}
-                          </span>
-                        </span>
-                        <span style={{ textAlign: 'right' }}>{s.vn}</span>
-                        <span
-                          style={{
-                            textAlign: 'right',
-                            fontWeight: idx === 0 && s.vn > 0 ? 800 : 600,
-                            color: idx === 0 && s.vn > 0 ? 'var(--green)' : undefined
-                          }}
-                        >
-                          {fmt(s.ft)}
-                        </span>
-                      </div>
-                    ))}
+                          <span style={{ textAlign: 'right' }}>{s.vn}</span>
+                          <span style={{ textAlign: 'right' }}>{s.re}</span>
+                          <span style={{ textAlign: 'right' }}>{fmtTaxaConv(taxaConv)}</span>
+                          <span style={{ textAlign: 'right' }}>{ticket != null ? fmt(ticket) : '—'}</span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </>
               )}
