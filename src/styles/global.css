@@ -5512,6 +5512,84 @@ input.di:-webkit-autofill:focus {
     background: rgba(16, 24, 40, 0.05)
 }
 
+/* Rankings — modo TV (tela cheia no app, sem chrome lateral) */
+.app-shell--rankings-tv {
+    min-height: 100vh;
+    min-height: 100dvh
+}
+
+.app-shell--rankings-tv .main {
+    flex: 1;
+    min-height: 100vh;
+    min-height: 100dvh
+}
+
+.rankings-tv-root {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    box-sizing: border-box
+}
+
+.rankings-tv-inner {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: clamp(16px, 2.5vw, 32px);
+    box-sizing: border-box
+}
+
+.rankings-tv-stage {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column
+}
+
+.rankings-tv-slide-layer:not([hidden]) {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch
+}
+
+.rankings-tv-exit-hint {
+    margin: 12px 0 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text3);
+    opacity: .45;
+    transition: opacity .2s ease
+}
+
+.rankings-tv-exit-hint:hover {
+    opacity: .95
+}
+
+.rankings-tv-exit-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--text2);
+    text-decoration: underline;
+    cursor: pointer
+}
+
+.rankings-tv-exit-link:hover {
+    color: var(--accent2)
+}
+
+.rankings-tv-exit-kbd {
+    font-variant-numeric: tabular-nums
+}
+
 /* META ADS */
 .meta-funil-step {
     display: flex;

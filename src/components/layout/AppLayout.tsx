@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { AnimatedOutlet } from './AnimatedOutlet'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
@@ -6,6 +7,8 @@ import { QuickRegBar } from './QuickRegBar'
 import { useAppStore } from '../../store/useAppStore'
 
 export function AppLayout() {
+  const { pathname } = useLocation()
+  const rankingsTvMode = pathname === '/rankings/tv'
   const { activeModalId, closeModal, openModal } = useAppStore()
 
   useEffect(() => {
@@ -25,13 +28,13 @@ export function AppLayout() {
   }, [activeModalId, closeModal, openModal])
 
   return (
-    <div id="app" className="app-shell">
-      <Sidebar />
+    <div id="app" className={`app-shell${rankingsTvMode ? ' app-shell--rankings-tv' : ''}`}>
+      {!rankingsTvMode && <Sidebar />}
       <main className="main">
-        <Topbar />
+        {!rankingsTvMode && <Topbar />}
         <AnimatedOutlet />
       </main>
-      <QuickRegBar />
+      {!rankingsTvMode && <QuickRegBar />}
     </div>
   )
 }

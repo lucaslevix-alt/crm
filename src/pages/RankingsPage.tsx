@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Trophy } from 'lucide-react'
 
 const TABS = [
@@ -10,6 +10,15 @@ const TABS = [
 ] as const
 
 export function RankingsPage() {
+  const { pathname } = useLocation()
+  if (pathname === '/rankings/tv') {
+    return (
+      <div className="rankings-tv-root">
+        <Outlet />
+      </div>
+    )
+  }
+
   return (
     <div className="content">
       <div className="rankings-shell-head">
