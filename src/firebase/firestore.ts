@@ -223,9 +223,19 @@ export const METAS_CONFIG_KEYS: (keyof MetasConfig)[] = [
   'meta_cash'
 ]
 
+/** Metas por usuário (userId Firestore → parcial das mesmas métricas). */
+export type MetasPorUsuario = Record<string, Partial<MetasConfig>>
+
+/** Bloco de um mês em `metasPorMes`: metas globais da empresa + opcionalmente metas individuais. */
+export type MetasMesBlock = Partial<MetasConfig> & {
+  metasPorUsuario?: MetasPorUsuario
+}
+
 /** Documento em `config/metas`: chaves na raiz = metas do mês calendário atual; `metasPorMes` = planejamento de outros meses. */
 export type MetasFirestoreDoc = MetasConfig & {
-  metasPorMes?: Record<string, Partial<MetasConfig>>
+  metasPorMes?: Record<string, MetasMesBlock>
+  /** Metas individuais do mês calendário atual (espelha a raiz). */
+  metasPorUsuario?: MetasPorUsuario
 }
 
 export function currentMetasMonthYm(d = new Date()): string {
@@ -247,21 +257,68 @@ function pickRootMetasFromRaw(raw: Record<string, unknown>): MetasConfig {
   return o
 }
 
-function parseMetasPorMesRaw(raw: unknown): Record<string, Partial<MetasConfig>> | undefined {
+function parsePartialMetasFromRow(row: Record<string, unknown>): Partial<MetasConfig> {
+  const partial: Partial<MetasConfig> = {}
+  for (const k of METAS_CONFIG_KEYS) {
+    const n = parseMetaNumber(row[k as string])
+    if (n != null) partial[k] = n
+  }
+  return partial
+}
+
+function parseMetasPorUsuarioRaw(raw: unknown): MetasPorUsuario | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
-  const out: Record<string, Partial<MetasConfig>> = {}
-  for (const [ym, block] of Object.entries(raw as Record<string, unknown>)) {
-    if (!/^\d{4}-\d{2}$/.test(ym)) continue
-    if (!block || typeof block !== 'object' || Array.isArray(block)) continue
-    const row = block as Record<string, unknown>
-    const partial: Partial<MetasConfig> = {}
-    for (const k of METAS_CONFIG_KEYS) {
-      const n = parseMetaNumber(row[k as string])
-      if (n != null) partial[k] = n
-    }
-    if (Object.keys(partial).length > 0) out[ym] = partial
+  const out: MetasPorUsuario = {}
+  for (const [uid, block] of Object.entries(raw as Record<string, unknown>)) {
+    if (!uid.trim() || typeof block !== 'object' || block === null || Array.isArray(block)) continue
+    const partial = parsePartialMetasFromRow(block as Record<string, unknown>)
+    if (Object.keys(partial).length > 0) out[uid] = partial
   }
   return Object.keys(out).length > 0 ? out : undefined
+}
+
+function monthBlockFromRaw(block: unknown): MetasMesBlock {
+  if (!block || typeof block !== 'object' || Array.isArray(block)) return {}
+  const row = block as Record<string, unknown>
+  const partial = parsePartialMetasFromRow(row)
+  const metasPorUsuario = parseMetasPorUsuarioRaw(row.metasPorUsuario)
+  const out: MetasMesBlock = { ...partial }
+  if (metasPorUsuario && Object.keys(metasPorUsuario).length > 0) out.metasPorUsuario = metasPorUsuario
+  return out
+}
+
+function parseMetasPorMesRaw(raw: unknown): Record<string, MetasMesBlock> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: Record<string, MetasMesBlock> = {}
+  for (const [ym, block] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^\d{4}-\d{2}$/.test(ym)) continue
+    const mb = monthBlockFromRaw(block)
+    const temGlobal = METAS_CONFIG_KEYS.some((k) => mb[k] != null)
+    const temInd = mb.metasPorUsuario && Object.keys(mb.metasPorUsuario).length > 0
+    if (temGlobal || temInd) out[ym] = mb
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function metasMesBlockToFirestore(block: MetasMesBlock): Record<string, unknown> {
+  const o: Record<string, unknown> = {}
+  for (const k of METAS_CONFIG_KEYS) {
+    const v = block[k]
+    if (typeof v === 'number' && Number.isFinite(v)) o[k as string] = v
+  }
+  if (block.metasPorUsuario && Object.keys(block.metasPorUsuario).length > 0) {
+    const inner: Record<string, unknown> = {}
+    for (const [uid, partial] of Object.entries(block.metasPorUsuario)) {
+      const sub: Record<string, number> = {}
+      for (const k of METAS_CONFIG_KEYS) {
+        const v = partial[k]
+        if (typeof v === 'number' && Number.isFinite(v)) sub[k as string] = v
+      }
+      if (Object.keys(sub).length > 0) inner[uid] = sub
+    }
+    if (Object.keys(inner).length > 0) o.metasPorUsuario = inner
+  }
+  return o
 }
 
 export async function getMetasFirestoreDoc(): Promise<MetasFirestoreDoc> {
@@ -270,7 +327,8 @@ export async function getMetasFirestoreDoc(): Promise<MetasFirestoreDoc> {
   const raw = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
   const root = pickRootMetasFromRaw(raw)
   const metasPorMes = parseMetasPorMesRaw(raw.metasPorMes)
-  return { ...root, metasPorMes }
+  const metasPorUsuario = parseMetasPorUsuarioRaw(raw.metasPorUsuario)
+  return { ...root, metasPorMes, metasPorUsuario }
 }
 
 function rootOnlyFromDoc(docRow: MetasFirestoreDoc): MetasConfig {
@@ -292,7 +350,38 @@ export function resolveMetasParaMes(ym: string, docRow: MetasFirestoreDoc): Meta
   if (ym === currentMetasMonthYm()) return { ...root }
   const ov = docRow.metasPorMes?.[ym]
   if (!ov) return { ...root }
-  return { ...root, ...ov }
+  const merged: MetasConfig = { ...root }
+  for (const k of METAS_CONFIG_KEYS) {
+    const v = ov[k]
+    if (typeof v === 'number' && Number.isFinite(v)) merged[k] = v
+  }
+  return merged
+}
+
+/** Metas individuais efetivas para o mês (raiz se mês atual; bloco do mês se planejado). */
+export function resolveMetasIndividuaisParaMes(ym: string, docRow: MetasFirestoreDoc): MetasPorUsuario {
+  if (ym === currentMetasMonthYm()) return docRow.metasPorUsuario ? { ...docRow.metasPorUsuario } : {}
+  const mu = docRow.metasPorMes?.[ym]?.metasPorUsuario
+  return mu ? { ...mu } : {}
+}
+
+/** Soma todas as metas individuais (por chave numérica). */
+export function sumMetasPorUsuarioMap(map: MetasPorUsuario): MetasConfig {
+  const list = Object.values(map)
+  const o: MetasConfig = {}
+  for (const k of METAS_CONFIG_KEYS) {
+    let s = 0
+    let any = false
+    for (const p of list) {
+      const v = p[k]
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        s += v
+        any = true
+      }
+    }
+    if (any) o[k] = s
+  }
+  return o
 }
 
 /** Só a raiz (metas do mês atual), compatível com leituras antigas. */
@@ -311,11 +400,31 @@ export async function setMetasConfig(params: MetasConfig): Promise<void> {
   await setDoc(ref, body, { merge: true })
 }
 
+/** Metas individuais do mês calendário atual (substitui o mapa inteiro). */
+export async function setMetasPorUsuarioRoot(map: MetasPorUsuario): Promise<void> {
+  const ref = doc(db, 'config', 'metas')
+  const inner: Record<string, unknown> = {}
+  for (const [uid, partial] of Object.entries(map)) {
+    const sub: Record<string, number> = {}
+    for (const k of METAS_CONFIG_KEYS) {
+      const v = partial[k]
+      if (typeof v === 'number' && Number.isFinite(v)) sub[k as string] = v
+    }
+    if (Object.keys(sub).length > 0) inner[uid] = sub
+  }
+  await setDoc(ref, { metasPorUsuario: Object.keys(inner).length > 0 ? inner : {} }, { merge: true })
+}
+
 /**
  * Grava planejamento de um mês futuro/passado (não pode ser o mês calendário atual — use `setMetasConfig`).
  * Valores `undefined` removem a sobrescrita daquele indicador (volta a herdar da raiz na resolução).
+ * `metasPorUsuario`: se omitido, mantém o mapa individual já salvo para esse mês; se passado (incl. `{}`), substitui.
  */
-export async function setMetasPorMes(ym: string, params: Partial<MetasConfig>): Promise<void> {
+export async function setMetasPorMes(
+  ym: string,
+  params: Partial<MetasConfig>,
+  metasPorUsuario?: MetasPorUsuario
+): Promise<void> {
   if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('Mês inválido (use YYYY-MM)')
   if (ym === currentMetasMonthYm()) {
     throw new Error('Use "Salvar metas do mês atual" para o mês corrente')
@@ -324,37 +433,45 @@ export async function setMetasPorMes(ym: string, params: Partial<MetasConfig>): 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref)
     const raw = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
-    const map: Record<string, Record<string, number>> = {}
+    const map: Record<string, MetasMesBlock> = {}
     const prevPm = raw.metasPorMes
     if (prevPm && typeof prevPm === 'object' && !Array.isArray(prevPm)) {
       for (const [k, v] of Object.entries(prevPm as Record<string, unknown>)) {
         if (!/^\d{4}-\d{2}$/.test(k)) continue
-        if (!v || typeof v !== 'object' || Array.isArray(v)) continue
-        const inner: Record<string, number> = {}
-        for (const mk of METAS_CONFIG_KEYS) {
-          const n = parseMetaNumber((v as Record<string, unknown>)[mk as string])
-          if (n != null) inner[mk as string] = n
-        }
-        if (Object.keys(inner).length > 0) map[k] = inner
+        map[k] = monthBlockFromRaw(v)
       }
     }
-    const monthRow = { ...(map[ym] ?? {}) }
+    const prevBlock: MetasMesBlock = { ...(map[ym] ?? {}) }
+    const nextBlock: MetasMesBlock = { ...prevBlock }
     for (const k of METAS_CONFIG_KEYS) {
       const v = params[k]
       if (v === undefined) {
-        delete monthRow[k as string]
+        delete nextBlock[k]
       } else if (v === null) {
-        delete monthRow[k as string]
+        delete nextBlock[k]
       } else {
-        monthRow[k as string] = v
+        nextBlock[k] = v
       }
     }
-    if (Object.keys(monthRow).length === 0) {
+    if (metasPorUsuario !== undefined) {
+      if (Object.keys(metasPorUsuario).length === 0) {
+        delete nextBlock.metasPorUsuario
+      } else {
+        nextBlock.metasPorUsuario = { ...metasPorUsuario }
+      }
+    }
+    const temGlobal = METAS_CONFIG_KEYS.some((k) => nextBlock[k] != null)
+    const temInd = nextBlock.metasPorUsuario && Object.keys(nextBlock.metasPorUsuario).length > 0
+    if (!temGlobal && !temInd) {
       delete map[ym]
     } else {
-      map[ym] = monthRow
+      map[ym] = nextBlock
     }
-    tx.set(ref, { metasPorMes: map }, { merge: true })
+    const firestoreMap: Record<string, unknown> = {}
+    for (const [k, block] of Object.entries(map)) {
+      firestoreMap[k] = metasMesBlockToFirestore(block)
+    }
+    tx.set(ref, { metasPorMes: firestoreMap }, { merge: true })
   })
 }
 
@@ -365,22 +482,20 @@ export async function clearMetasPorMes(ym: string): Promise<void> {
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref)
     const raw = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
-    const map: Record<string, Record<string, number>> = {}
+    const map: Record<string, MetasMesBlock> = {}
     const prevPm = raw.metasPorMes
     if (prevPm && typeof prevPm === 'object' && !Array.isArray(prevPm)) {
       for (const [k, v] of Object.entries(prevPm as Record<string, unknown>)) {
         if (k === ym) continue
         if (!/^\d{4}-\d{2}$/.test(k)) continue
-        if (!v || typeof v !== 'object' || Array.isArray(v)) continue
-        const inner: Record<string, number> = {}
-        for (const mk of METAS_CONFIG_KEYS) {
-          const n = parseMetaNumber((v as Record<string, unknown>)[mk as string])
-          if (n != null) inner[mk as string] = n
-        }
-        if (Object.keys(inner).length > 0) map[k] = inner
+        map[k] = monthBlockFromRaw(v)
       }
     }
-    tx.set(ref, { metasPorMes: map }, { merge: true })
+    const firestoreMap: Record<string, unknown> = {}
+    for (const [k, block] of Object.entries(map)) {
+      firestoreMap[k] = metasMesBlockToFirestore(block)
+    }
+    tx.set(ref, { metasPorMes: firestoreMap }, { merge: true })
   })
 }
 
