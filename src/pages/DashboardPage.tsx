@@ -20,12 +20,13 @@ import {
 } from 'lucide-react'
 import {
   getRegistrosByRange,
-  getMetasConfig,
+  getMetasFirestoreDoc,
+  resolveMetasParaMes,
   getProdutos,
   getLeadsSdrRangeBundle,
   listUsers
 } from '../firebase/firestore'
-import type { RegistroRow, MetasConfig, ProdutoRow } from '../firebase/firestore'
+import type { MetasConfig, MetasFirestoreDoc, RegistroRow, ProdutoRow } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { UnifiedProjectionsChart, buildProjectionSeries } from '../components/dashboard/UnifiedProjectionsChart'
 import { DailyActivitySplineChart } from '../components/dashboard/DailyActivitySplineChart'
@@ -344,7 +345,7 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [recs, setRecs] = useState<RegistroRow[]>([])
-  const [metas, setMetas] = useState<MetasConfig>({})
+  const [metasDoc, setMetasDoc] = useState<MetasFirestoreDoc>({})
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
@@ -371,9 +372,9 @@ export function DashboardPage() {
       const { start, end } = dpRange(dp, customStart, customEnd)
       setPeriodStart(start)
       setPeriodEnd(end)
-      const [rows, mt, prods, users] = await Promise.all([
+      const [rows, mtDoc, prods, users] = await Promise.all([
         getRegistrosByRange(start, end),
-        getMetasConfig(),
+        getMetasFirestoreDoc(),
         getProdutos(),
         listUsers()
       ])
@@ -382,7 +383,7 @@ export function DashboardPage() {
         onlyUserIds: funnelIds.size > 0 ? funnelIds : undefined
       })
       setRecs(rows)
-      setMetas(mt ?? {})
+      setMetasDoc(mtDoc)
       setProdutos(prods)
       setSdrFunnelUserIds(funnelIds)
       setLeadsTotal(leadsBundle.byUser.reduce((s, r) => s + r.quantidade, 0))
@@ -397,6 +398,11 @@ export function DashboardPage() {
   useEffect(() => {
     load()
   }, [dp, customStart, customEnd])
+
+  const metas = useMemo(
+    () => (periodStart ? resolveMetasParaMes(periodStart.slice(0, 7), metasDoc) : {}),
+    [periodStart, metasDoc]
+  )
 
   const t = totals(recs)
   const metaKeys: (keyof MetasConfig)[] = [

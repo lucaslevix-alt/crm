@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CalendarDays } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { getRegistrosByRange, getMetasConfig } from '../firebase/firestore'
+import { getRegistrosByRange, getMetasFirestoreDoc, resolveMetasParaMes } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import type { RegistroRow, MetasConfig } from '../firebase/firestore'
 import { metaPctParts } from '../utils/metaProgress'
@@ -52,10 +52,10 @@ export function MetasPage() {
     setLoading(true)
     setError(null)
     const { start, end } = mRange(metaMonth)
-    Promise.all([getMetasConfig(), getRegistrosByRange(start, end)])
-      .then(([mt, rows]) => {
+    Promise.all([getMetasFirestoreDoc(), getRegistrosByRange(start, end)])
+      .then(([doc, rows]) => {
         if (!cancelled) {
-          setMetas(mt ?? {})
+          setMetas(resolveMetasParaMes(metaMonth, doc))
           setRecs(rows)
         }
       })

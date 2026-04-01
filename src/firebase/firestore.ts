@@ -8,6 +8,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  runTransaction,
   query,
   where,
   orderBy,
@@ -213,28 +214,174 @@ export interface MetasConfig {
   meta_cash?: number
 }
 
-export async function getMetasConfig(): Promise<MetasConfig> {
+export const METAS_CONFIG_KEYS: (keyof MetasConfig)[] = [
+  'meta_reunioes_agendadas',
+  'meta_reunioes_realizadas',
+  'meta_reunioes_closer',
+  'meta_vendas',
+  'meta_faturamento',
+  'meta_cash'
+]
+
+/** Documento em `config/metas`: chaves na raiz = metas do mês calendário atual; `metasPorMes` = planejamento de outros meses. */
+export type MetasFirestoreDoc = MetasConfig & {
+  metasPorMes?: Record<string, Partial<MetasConfig>>
+}
+
+export function currentMetasMonthYm(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function parseMetaNumber(v: unknown): number | undefined {
+  if (v == null || v === '') return undefined
+  const n = Number(v)
+  return Number.isFinite(n) ? n : undefined
+}
+
+function pickRootMetasFromRaw(raw: Record<string, unknown>): MetasConfig {
+  const o: MetasConfig = {}
+  for (const k of METAS_CONFIG_KEYS) {
+    const n = parseMetaNumber(raw[k as string])
+    if (n != null) o[k] = n
+  }
+  return o
+}
+
+function parseMetasPorMesRaw(raw: unknown): Record<string, Partial<MetasConfig>> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: Record<string, Partial<MetasConfig>> = {}
+  for (const [ym, block] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^\d{4}-\d{2}$/.test(ym)) continue
+    if (!block || typeof block !== 'object' || Array.isArray(block)) continue
+    const row = block as Record<string, unknown>
+    const partial: Partial<MetasConfig> = {}
+    for (const k of METAS_CONFIG_KEYS) {
+      const n = parseMetaNumber(row[k as string])
+      if (n != null) partial[k] = n
+    }
+    if (Object.keys(partial).length > 0) out[ym] = partial
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+export async function getMetasFirestoreDoc(): Promise<MetasFirestoreDoc> {
   const ref = doc(db, 'config', 'metas')
   const snap = await getDoc(ref)
-  return snap.exists() ? (snap.data() as MetasConfig) : {}
+  const raw = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
+  const root = pickRootMetasFromRaw(raw)
+  const metasPorMes = parseMetasPorMesRaw(raw.metasPorMes)
+  return { ...root, metasPorMes }
+}
+
+function rootOnlyFromDoc(docRow: MetasFirestoreDoc): MetasConfig {
+  const o: MetasConfig = {}
+  for (const k of METAS_CONFIG_KEYS) {
+    const v = docRow[k]
+    if (typeof v === 'number' && Number.isFinite(v)) o[k] = v
+  }
+  return o
+}
+
+/**
+ * Metas efetivas para um mês YYYY-MM.
+ * - Mês calendário atual: sempre as chaves na raiz do documento (não mistura com `metasPorMes` do mesmo mês).
+ * - Outros meses: base na raiz + sobrescritas em `metasPorMes[ym]` (campos vazios no planejamento herdam a raiz).
+ */
+export function resolveMetasParaMes(ym: string, docRow: MetasFirestoreDoc): MetasConfig {
+  const root = rootOnlyFromDoc(docRow)
+  if (ym === currentMetasMonthYm()) return { ...root }
+  const ov = docRow.metasPorMes?.[ym]
+  if (!ov) return { ...root }
+  return { ...root, ...ov }
+}
+
+/** Só a raiz (metas do mês atual), compatível com leituras antigas. */
+export async function getMetasConfig(): Promise<MetasConfig> {
+  const d = await getMetasFirestoreDoc()
+  return rootOnlyFromDoc(d)
 }
 
 export async function setMetasConfig(params: MetasConfig): Promise<void> {
   const ref = doc(db, 'config', 'metas')
-  const body: Record<string, number | null> = {}
-  const keys: (keyof MetasConfig)[] = [
-    'meta_reunioes_agendadas',
-    'meta_reunioes_realizadas',
-    'meta_reunioes_closer',
-    'meta_vendas',
-    'meta_faturamento',
-    'meta_cash'
-  ]
-  keys.forEach((k) => {
+  const body: Record<string, number> = {}
+  METAS_CONFIG_KEYS.forEach((k) => {
     const v = params[k]
-    if (v != null) body[k] = v
+    if (v != null) body[k as string] = v
   })
   await setDoc(ref, body, { merge: true })
+}
+
+/**
+ * Grava planejamento de um mês futuro/passado (não pode ser o mês calendário atual — use `setMetasConfig`).
+ * Valores `undefined` removem a sobrescrita daquele indicador (volta a herdar da raiz na resolução).
+ */
+export async function setMetasPorMes(ym: string, params: Partial<MetasConfig>): Promise<void> {
+  if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('Mês inválido (use YYYY-MM)')
+  if (ym === currentMetasMonthYm()) {
+    throw new Error('Use "Salvar metas do mês atual" para o mês corrente')
+  }
+  const ref = doc(db, 'config', 'metas')
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    const raw = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
+    const map: Record<string, Record<string, number>> = {}
+    const prevPm = raw.metasPorMes
+    if (prevPm && typeof prevPm === 'object' && !Array.isArray(prevPm)) {
+      for (const [k, v] of Object.entries(prevPm as Record<string, unknown>)) {
+        if (!/^\d{4}-\d{2}$/.test(k)) continue
+        if (!v || typeof v !== 'object' || Array.isArray(v)) continue
+        const inner: Record<string, number> = {}
+        for (const mk of METAS_CONFIG_KEYS) {
+          const n = parseMetaNumber((v as Record<string, unknown>)[mk as string])
+          if (n != null) inner[mk as string] = n
+        }
+        if (Object.keys(inner).length > 0) map[k] = inner
+      }
+    }
+    const monthRow = { ...(map[ym] ?? {}) }
+    for (const k of METAS_CONFIG_KEYS) {
+      const v = params[k]
+      if (v === undefined) {
+        delete monthRow[k as string]
+      } else if (v === null) {
+        delete monthRow[k as string]
+      } else {
+        monthRow[k as string] = v
+      }
+    }
+    if (Object.keys(monthRow).length === 0) {
+      delete map[ym]
+    } else {
+      map[ym] = monthRow
+    }
+    tx.set(ref, { metasPorMes: map }, { merge: true })
+  })
+}
+
+/** Remove todo planejamento salvo para um mês (volta a herdar só a raiz). */
+export async function clearMetasPorMes(ym: string): Promise<void> {
+  if (!/^\d{4}-\d{2}$/.test(ym)) return
+  const ref = doc(db, 'config', 'metas')
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    const raw = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
+    const map: Record<string, Record<string, number>> = {}
+    const prevPm = raw.metasPorMes
+    if (prevPm && typeof prevPm === 'object' && !Array.isArray(prevPm)) {
+      for (const [k, v] of Object.entries(prevPm as Record<string, unknown>)) {
+        if (k === ym) continue
+        if (!/^\d{4}-\d{2}$/.test(k)) continue
+        if (!v || typeof v !== 'object' || Array.isArray(v)) continue
+        const inner: Record<string, number> = {}
+        for (const mk of METAS_CONFIG_KEYS) {
+          const n = parseMetaNumber((v as Record<string, unknown>)[mk as string])
+          if (n != null) inner[mk as string] = n
+        }
+        if (Object.keys(inner).length > 0) map[k] = inner
+      }
+    }
+    tx.set(ref, { metasPorMes: map }, { merge: true })
+  })
 }
 
 export async function addRegistro(params: {
