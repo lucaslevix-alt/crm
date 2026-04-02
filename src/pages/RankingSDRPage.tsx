@@ -51,7 +51,10 @@ function RankingItem({
   )
 }
 
-export function RankingSDRPage({ tvMode }: { tvMode?: boolean } = {}) {
+export function RankingSDRPage({
+  tvMode,
+  tvRefreshKey
+}: { tvMode?: boolean; tvRefreshKey?: number } = {}) {
   const { openModal } = useAppStore()
   const [period, setPeriod] = useState<RpPeriod>('mes')
   const [loading, setLoading] = useState(true)
@@ -65,8 +68,9 @@ export function RankingSDRPage({ tvMode }: { tvMode?: boolean } = {}) {
     if (tvMode) setView('podio')
   }, [tvMode])
 
-  const loadRanking = useCallback(async () => {
-    setLoading(true)
+  const loadRanking = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true
+    if (!silent) setLoading(true)
     setError(null)
     const { start, end } = getRange(period)
     try {
@@ -134,13 +138,14 @@ export function RankingSDRPage({ tvMode }: { tvMode?: boolean } = {}) {
       setByRe([])
       setByLeads([])
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [period])
 
   useEffect(() => {
-    loadRanking()
-  }, [loadRanking])
+    const silent = tvMode && tvRefreshKey !== undefined && tvRefreshKey > 0
+    loadRanking(silent ? { silent: true } : undefined)
+  }, [loadRanking, tvRefreshKey, tvMode])
 
   function noShowBadge(ag: number, nsCount: number): React.ReactNode {
     const ns = ag > 0 ? Math.round((nsCount / ag) * 100) : null

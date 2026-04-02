@@ -6,6 +6,7 @@ import { RankingCloserPage } from './RankingCloserPage'
 import { RankingSquadsPage } from './RankingSquadsPage'
 
 const ROTATE_MS = 30_000
+const REFRESH_MS = 60_000
 
 const SLIDES = [
   { key: 'sdr', Component: RankingSDRPage },
@@ -16,11 +17,19 @@ const SLIDES = [
 export function RankingTVPage() {
   const navigate = useNavigate()
   const [slide, setSlide] = useState(0)
+  const [refreshTick, setRefreshTick] = useState(0)
 
   useEffect(() => {
     const id = window.setInterval(() => {
       setSlide((sl) => (sl + 1) % SLIDES.length)
     }, ROTATE_MS)
+    return () => window.clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setRefreshTick((t) => t + 1)
+    }, REFRESH_MS)
     return () => window.clearInterval(id)
   }, [])
 
@@ -46,7 +55,7 @@ export function RankingTVPage() {
               hidden={i !== slide}
               aria-hidden={i !== slide}
             >
-              <Cmp tvMode />
+              <Cmp tvMode tvRefreshKey={refreshTick} />
             </div>
           )
         })}
