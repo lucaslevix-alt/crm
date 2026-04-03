@@ -18,6 +18,8 @@ import {
 } from 'firebase/firestore'
 import { initFirebaseApp } from './config'
 import type { CrmUser } from '../store/useAppStore'
+import type { LeadBudgetOp, QualificacaoSdr } from '../lib/qualificacaoSdr'
+import { calcularQualificacaoSdr, parseLeadBudget, parseQualificacaoSdr } from '../lib/qualificacaoSdr'
 
 /** Uma linha “ideal” por produto; as demais são “com desconto” em relação a ela */
 export type LinhaPrecoRole = 'ideal' | 'desconto'
@@ -72,6 +74,14 @@ export interface RegistroRow {
   /** Soma (linha ideal − linha fechada) × qtd por item na venda */
   descontoCloser?: number
   criadoEm?: { seconds: number }
+  /** Admin: exclui de comissões / rankings / metas agregadas quando true */
+  invalidoComissao?: boolean
+  /** Reunião realizada (Agenda): orçamento declarado pelo closer */
+  leadBudget?: LeadBudgetOp | null
+  /** Link https da gravação */
+  callRecordingUrl?: string | null
+  /** Comissão SDR: qualificada | pendente | nao_qualificada */
+  qualificacaoSdr?: QualificacaoSdr | null
 }
 
 export interface RegistroProdutoItem {
@@ -122,7 +132,14 @@ function docToRegistro(d: { id: string; data: () => Record<string, unknown> }): 
       x.valorReferenciaVenda != null && String(x.tipo) === 'venda' ? Number(x.valorReferenciaVenda) : undefined,
     descontoCloser:
       x.descontoCloser != null && String(x.tipo) === 'venda' ? Number(x.descontoCloser) : undefined,
-    criadoEm: ts ? { seconds: ts.seconds } : undefined
+    criadoEm: ts ? { seconds: ts.seconds } : undefined,
+    invalidoComissao: x.invalidoComissao === true,
+    leadBudget: parseLeadBudget(x.leadBudget),
+    callRecordingUrl:
+      x.callRecordingUrl != null && String(x.callRecordingUrl).trim() !== ''
+        ? String(x.callRecordingUrl).trim()
+        : null,
+    qualificacaoSdr: parseQualificacaoSdr(x.qualificacaoSdr)
   }
 }
 
@@ -582,6 +599,9 @@ export async function addRegistro(params: {
   valorReferenciaVenda?: number
   descontoCloser?: number
   nomeCliente?: string | null
+  leadBudget?: LeadBudgetOp | null
+  callRecordingUrl?: string | null
+  qualificacaoSdr?: QualificacaoSdr | null
 }): Promise<string> {
   const ref = await addDoc(collection(db, 'registros'), {
     data: params.data,
@@ -611,6 +631,13 @@ export async function addRegistro(params: {
           valorReferenciaVenda: null,
           descontoCloser: null
         }),
+    invalidoComissao: false,
+    leadBudget: params.leadBudget ?? null,
+    callRecordingUrl:
+      params.callRecordingUrl != null && String(params.callRecordingUrl).trim() !== ''
+        ? String(params.callRecordingUrl).trim()
+        : null,
+    qualificacaoSdr: params.qualificacaoSdr ?? null,
     criadoEm: serverTimestamp()
   })
   return ref.id
@@ -635,6 +662,9 @@ export async function updateRegistro(
   valorReferenciaVenda?: number
   descontoCloser?: number
   nomeCliente?: string | null
+  leadBudget?: LeadBudgetOp | null
+  callRecordingUrl?: string | null
+  qualificacaoSdr?: QualificacaoSdr | null
   }
 ): Promise<void> {
   const ref = doc(db, 'registros', id)
@@ -665,12 +695,74 @@ export async function updateRegistro(
       : {
           valorReferenciaVenda: null,
           descontoCloser: null
+        }),
+    ...(params.tipo === 'reuniao_realizada'
+      ? {
+          leadBudget: params.leadBudget ?? null,
+          callRecordingUrl:
+            params.callRecordingUrl != null && String(params.callRecordingUrl).trim() !== ''
+              ? String(params.callRecordingUrl).trim()
+              : null,
+          qualificacaoSdr: params.qualificacaoSdr ?? null
+        }
+      : {
+          leadBudget: null,
+          callRecordingUrl: null,
+          qualificacaoSdr: null
         })
   })
+  const urlSynced =
+    params.tipo === 'reuniao_realizada' &&
+    params.callRecordingUrl != null &&
+    String(params.callRecordingUrl).trim() !== ''
+      ? String(params.callRecordingUrl).trim()
+      : null
+  if (params.tipo === 'reuniao_realizada') {
+    await syncAgendamentoQualificacaoFromRegistro({
+      registroRealizadaId: id,
+      leadBudget: params.leadBudget ?? null,
+      callRecordingUrl: urlSynced,
+      qualificacaoSdr: params.qualificacaoSdr ?? null
+    })
+  } else {
+    await syncAgendamentoQualificacaoFromRegistro({
+      registroRealizadaId: id,
+      leadBudget: null,
+      callRecordingUrl: null,
+      qualificacaoSdr: null
+    })
+  }
 }
 
 export async function deleteRegistro(id: string): Promise<void> {
   await deleteDoc(doc(db, 'registros', id))
+}
+
+/** Admin: marcar ou desmarcar registo como inválido para cálculos de comissão (SDR/closer). */
+export async function setRegistroInvalidoComissao(id: string, invalido: boolean): Promise<void> {
+  await updateDoc(doc(db, 'registros', id), { invalidoComissao: invalido })
+}
+
+/** Atualiza o agendamento ligado ao registo `reuniao_realizada` (ex.: após edição admin). */
+export async function syncAgendamentoQualificacaoFromRegistro(params: {
+  registroRealizadaId: string
+  leadBudget: LeadBudgetOp | null
+  callRecordingUrl: string | null
+  qualificacaoSdr: QualificacaoSdr | null
+}): Promise<void> {
+  const q = query(
+    collection(db, 'agendamentos'),
+    where('registroRealizadaSdrId', '==', params.registroRealizadaId),
+    limit(1)
+  )
+  const snap = await getDocs(q)
+  const d = snap.docs[0]
+  if (!d) return
+  await updateDoc(d.ref, {
+    leadBudget: params.leadBudget,
+    callRecordingUrl: params.callRecordingUrl,
+    qualificacaoSdr: params.qualificacaoSdr
+  })
 }
 
 export interface LeadSdrRow {
@@ -1403,6 +1495,10 @@ export interface AgendamentoRow {
   closerUserId: string | null
   closerUserName: string | null
   criadoEm?: Timestamp | null
+  /** Espelho do registo realizada (comissão SDR) */
+  leadBudget?: LeadBudgetOp | null
+  callRecordingUrl?: string | null
+  qualificacaoSdr?: QualificacaoSdr | null
 }
 
 function docToAgendamento(d: { id: string; data: () => Record<string, unknown> }): AgendamentoRow {
@@ -1431,7 +1527,13 @@ function docToAgendamento(d: { id: string; data: () => Record<string, unknown> }
     registroNoShowId: x.registroNoShowId != null ? String(x.registroNoShowId) : null,
     closerUserId: x.closerUserId != null ? String(x.closerUserId) : null,
     closerUserName: x.closerUserName != null ? String(x.closerUserName) : null,
-    criadoEm: (x.criadoEm as Timestamp | undefined) ?? null
+    criadoEm: (x.criadoEm as Timestamp | undefined) ?? null,
+    leadBudget: parseLeadBudget(x.leadBudget),
+    callRecordingUrl:
+      x.callRecordingUrl != null && String(x.callRecordingUrl).trim() !== ''
+        ? String(x.callRecordingUrl).trim()
+        : null,
+    qualificacaoSdr: parseQualificacaoSdr(x.qualificacaoSdr)
   }
 }
 
@@ -1505,10 +1607,42 @@ export async function listAgendamentos(params: { squadId: string | null; admin: 
   return rows
 }
 
+/** Agendamentos cuja data da reunião (`data`) está no intervalo — para cruzar com `registroRealizadaSdrId`. */
+export async function listAgendamentosByDataRange(start: string, end: string): Promise<AgendamentoRow[]> {
+  const q = query(
+    collection(db, 'agendamentos'),
+    where('data', '>=', start),
+    where('data', '<=', end)
+  )
+  const snap = await getDocs(q)
+  const rows = snap.docs.map((d) => docToAgendamento({ id: d.id, data: () => d.data() as Record<string, unknown> }))
+  rows.sort((a, b) => {
+    if (b.data !== a.data) return b.data.localeCompare(a.data)
+    return b.grupoWpp.localeCompare(a.grupoWpp)
+  })
+  return rows
+}
+
 export async function marcarAgendamentoRealizada(params: {
   agendamentoId: string
   closer: { id: string; nome: string; cargo: string }
+  leadBudget: LeadBudgetOp
+  callRecordingUrl: string
 }): Promise<void> {
+  const url = params.callRecordingUrl.trim()
+  if (!url.startsWith('https://')) {
+    throw new Error('O link da gravação deve começar por https://')
+  }
+  try {
+    const u = new URL(url)
+    if (u.protocol !== 'https:') throw new Error('invalid')
+  } catch {
+    throw new Error('Indique uma URL https válida para a gravação.')
+  }
+  const qualificacaoSdr = calcularQualificacaoSdr({
+    leadBudget: params.leadBudget,
+    callRecordingUrl: url
+  })
   const ref = doc(db, 'agendamentos', params.agendamentoId)
   const snap = await getDoc(ref)
   if (!snap.exists()) throw new Error('Agendamento não encontrado.')
@@ -1525,7 +1659,10 @@ export async function marcarAgendamentoRealizada(params: {
     userCargo: row.sdrUserCargo,
     anuncio: row.origemLead,
     grupoWpp: row.grupoWpp,
-    obs: obsSdr
+    obs: obsSdr,
+    leadBudget: params.leadBudget,
+    callRecordingUrl: url,
+    qualificacaoSdr
   })
   const registroCloserId = await addRegistro({
     data: row.data,
@@ -1543,6 +1680,9 @@ export async function marcarAgendamentoRealizada(params: {
     registroCloserId,
     closerUserId: params.closer.id,
     closerUserName: params.closer.nome,
+    leadBudget: params.leadBudget,
+    callRecordingUrl: url,
+    qualificacaoSdr,
     atualizadoEm: serverTimestamp()
   })
 }
@@ -1610,7 +1750,10 @@ export async function marcarAgendamentoVenda(params: {
       userCargo: row.sdrUserCargo,
       anuncio: row.origemLead,
       grupoWpp: row.grupoWpp,
-      obs: obsSdr
+      obs: obsSdr,
+      leadBudget: null,
+      callRecordingUrl: null,
+      qualificacaoSdr: 'nao_qualificada'
     })
   }
 
@@ -1633,7 +1776,7 @@ export async function marcarAgendamentoVenda(params: {
     descontoCloser: params.descontoCloser
   })
 
-  await updateDoc(ref, {
+  const patch: Record<string, unknown> = {
     status: 'venda',
     registroRealizadaSdrId,
     registroCloserId,
@@ -1641,6 +1784,12 @@ export async function marcarAgendamentoVenda(params: {
     closerUserId: params.closer.id,
     closerUserName: params.closer.nome,
     atualizadoEm: serverTimestamp()
-  })
+  }
+  if (row.status === 'agendada') {
+    patch.leadBudget = null
+    patch.callRecordingUrl = null
+    patch.qualificacaoSdr = 'nao_qualificada'
+  }
+  await updateDoc(ref, patch)
 }
 

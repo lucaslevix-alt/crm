@@ -21,6 +21,7 @@ const ROUTE_TITLES: Record<string, string> = {
 function getPageTitle(pathname: string): string {
   const parts = pathname.replace(/^\//, '').split('/').filter(Boolean)
   if (parts[0] === 'config') {
+    if (parts[1] === 'relatorios-comissoes') return 'Relatórios para comissões'
     if (parts[1] === 'metas') return 'Configuração de metas'
     if (parts[1] === 'usuarios') return 'Usuários'
     if (parts[1] === 'squads') return 'Squads'

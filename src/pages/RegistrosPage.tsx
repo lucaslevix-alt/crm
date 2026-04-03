@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
-import { ClipboardList, Pencil, Trash2 } from 'lucide-react'
+import { Ban, CalendarRange, ClipboardList, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import {
   getRegistrosByRange,
   listUsers,
   deleteRegistro,
   labelFormaPagamento,
+  setRegistroInvalidoComissao,
   type RegistroRow
 } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import type { CrmUser } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
+import { podeMarcarInvalidoComissao } from '../lib/registroComissao'
+import { QUALIFICACAO_SDR_LABELS, type QualificacaoSdr } from '../lib/qualificacaoSdr'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
@@ -24,9 +27,12 @@ function mRange(): { start: string; end: string } {
   return { start, end }
 }
 
-type RegPeriod = '7d' | '14d' | 'mes' | 'todos' | 'custom'
+type RegPeriod = '7d' | '14d' | 'mes' | 'todos' | 'custom' | 'range'
 
-function getRegRange(period: RegPeriod, customDate?: string): { start: string; end: string } {
+function getRegRange(
+  period: RegPeriod,
+  opts: { customDate?: string; rangeStart?: string; rangeEnd?: string }
+): { start: string; end: string } {
   const td = today()
   if (period === '7d') {
     const d = new Date()
@@ -39,7 +45,15 @@ function getRegRange(period: RegPeriod, customDate?: string): { start: string; e
     return { start: d.toISOString().split('T')[0], end: td }
   }
   if (period === 'mes') return mRange()
-  if (period === 'custom' && customDate) return { start: customDate, end: customDate }
+  if (period === 'custom' && opts.customDate) return { start: opts.customDate, end: opts.customDate }
+  if (period === 'range') {
+    const rawS = opts.rangeStart?.trim()
+    const rawE = opts.rangeEnd?.trim()
+    const s = rawS || rawE || td
+    const e = rawE || rawS || td
+    if (s <= e) return { start: s, end: e }
+    return { start: e, end: s }
+  }
   return { start: '2020-01-01', end: '2099-12-31' }
 }
 
@@ -67,10 +81,26 @@ const TIPO_BADGE: Record<string, string> = {
   venda: 'b-amber'
 }
 
+const QUAL_SDR_BADGE: Record<QualificacaoSdr, string> = {
+  qualificada: 'b-green',
+  pendente: 'b-amber',
+  nao_qualificada: 'b-no-show'
+}
+
 export function RegistrosPage() {
-  const { registrosVersion, openModal, setEditingRegistro, showToast, incrementRegistrosVersion } = useAppStore()
+  const {
+    registrosVersion,
+    openModal,
+    setEditingRegistro,
+    showToast,
+    incrementRegistrosVersion,
+    currentUser
+  } = useAppStore()
+  const isAdmin = currentUser?.cargo === 'admin'
   const [regPeriod, setRegPeriod] = useState<RegPeriod>('14d')
   const [customDate, setCustomDate] = useState('')
+  const [rangeStart, setRangeStart] = useState(() => mRange().start)
+  const [rangeEnd, setRangeEnd] = useState(() => mRange().end)
   const [fTipo, setFTipo] = useState('')
   const [fUser, setFUser] = useState('')
   const [busca, setBusca] = useState('')
@@ -78,12 +108,13 @@ export function RegistrosPage() {
   const [recs, setRecs] = useState<RegistroRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [invalidToggleId, setInvalidToggleId] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
     setError(null)
     try {
-      const { start, end } = getRegRange(regPeriod, customDate)
+      const { start, end } = getRegRange(regPeriod, { customDate, rangeStart, rangeEnd })
       const [rows, userList] = await Promise.all([
         getRegistrosByRange(start, end),
         listUsers()
@@ -99,7 +130,7 @@ export function RegistrosPage() {
 
   useEffect(() => {
     load()
-  }, [regPeriod, customDate, registrosVersion])
+  }, [regPeriod, customDate, rangeStart, rangeEnd, registrosVersion])
 
   const filtered = recs.filter((r) => {
     if (fTipo && r.tipo !== fTipo) return false
@@ -136,7 +167,10 @@ export function RegistrosPage() {
       produtosDetalhes: rec.produtosDetalhes ?? [],
       valorReferenciaVenda: rec.valorReferenciaVenda,
       descontoCloser: rec.descontoCloser,
-      nomeCliente: rec.nomeCliente ?? null
+      nomeCliente: rec.nomeCliente ?? null,
+      leadBudget: rec.leadBudget ?? null,
+      callRecordingUrl: rec.callRecordingUrl ?? null,
+      qualificacaoSdr: rec.qualificacaoSdr ?? null
     })
     openModal('modal-edit-reg')
   }
@@ -152,9 +186,23 @@ export function RegistrosPage() {
     }
   }
 
+  async function handleToggleInvalidoComissao(rec: RegistroRow, invalido: boolean) {
+    setInvalidToggleId(rec.id)
+    try {
+      await setRegistroInvalidoComissao(rec.id, invalido)
+      setRecs((prev) => prev.map((x) => (x.id === rec.id ? { ...x, invalidoComissao: invalido } : x)))
+      showToast(invalido ? 'Registo excluído das comissões' : 'Registo voltou a contar nas comissões')
+      incrementRegistrosVersion()
+    } catch (e) {
+      showToast('Erro: ' + formatFirebaseOrUnknownError(e), 'err')
+    } finally {
+      setInvalidToggleId(null)
+    }
+  }
+
   return (
     <div className="content">
-      <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+      <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
         <span className="ctrl-label">Período:</span>
         <button
           type="button"
@@ -184,18 +232,76 @@ export function RegistrosPage() {
         >
           Todos
         </button>
-        <input
-          type="date"
-          className="di"
-          style={{ width: 140 }}
-          value={customDate}
-          onChange={(e) => {
-            setCustomDate(e.target.value)
-            if (e.target.value) setRegPeriod('custom')
-          }}
-          title="Data específica"
-        />
+        <button
+          type="button"
+          className={`prd-btn ${regPeriod === 'range' ? 'active' : ''}`}
+          onClick={() => setRegPeriod('range')}
+          title="Filtrar por intervalo no calendário"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+          <CalendarRange size={14} strokeWidth={2} aria-hidden />
+          Calendário
+        </button>
+        <label style={{ display: 'inline-flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--text2)' }}>
+          <span>Um dia</span>
+          <input
+            type="date"
+            className="di"
+            style={{ width: 140 }}
+            value={customDate}
+            onChange={(e) => {
+              setCustomDate(e.target.value)
+              if (e.target.value) setRegPeriod('custom')
+            }}
+            title="Mostrar apenas registos desta data"
+          />
+        </label>
       </div>
+
+      {regPeriod === 'range' && (
+        <div
+          className="ctrl-row"
+          style={{
+            flexWrap: 'wrap',
+            gap: 16,
+            marginBottom: 16,
+            alignItems: 'flex-end',
+            padding: '12px 14px',
+            borderRadius: 8,
+            border: '1px solid var(--border2)',
+            background: 'var(--card-bg, rgba(128,128,128,.04))'
+          }}
+        >
+          <span className="ctrl-label" style={{ marginRight: 4 }}>
+            Intervalo:
+          </span>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--text2)' }}>
+            De
+            <input
+              type="date"
+              className="di"
+              style={{ width: 148 }}
+              value={rangeStart}
+              onChange={(e) => setRangeStart(e.target.value)}
+              aria-label="Data inicial do intervalo"
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--text2)' }}>
+            Até
+            <input
+              type="date"
+              className="di"
+              style={{ width: 148 }}
+              value={rangeEnd}
+              onChange={(e) => setRangeEnd(e.target.value)}
+              aria-label="Data final do intervalo"
+            />
+          </label>
+          <span style={{ fontSize: 12, color: 'var(--text3)', maxWidth: 280 }}>
+            Use o calendário do sistema para escolher o intervalo; a lista atualiza automaticamente.
+          </span>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div style={{ flex: 1, minWidth: 140 }}>
@@ -295,12 +401,20 @@ export function RegistrosPage() {
                       <th>Valor</th>
                       <th>Pagamento</th>
                       <th>Obs</th>
+                      {isAdmin && <th style={{ width: 1 }}>Comissão</th>}
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map((r) => (
-                      <tr key={r.id}>
+                      <tr
+                        key={r.id}
+                        style={
+                          r.invalidoComissao
+                            ? { background: 'rgba(128,128,128,.06)', opacity: 0.92 }
+                            : undefined
+                        }
+                      >
                         <td className="mono" style={{ fontSize: 12 }}>
                           {fdt(r.data)}
                         </td>
@@ -308,6 +422,24 @@ export function RegistrosPage() {
                           <span className={`badge ${TIPO_BADGE[r.tipo] || 'b-sdr'}`}>
                             {TIPO_LABEL[r.tipo] || r.tipo}
                           </span>
+                          {r.tipo === 'reuniao_realizada' && r.qualificacaoSdr ? (
+                            <span
+                              className={`badge ${QUAL_SDR_BADGE[r.qualificacaoSdr]}`}
+                              style={{ marginLeft: 6, fontSize: 10 }}
+                              title={QUALIFICACAO_SDR_LABELS[r.qualificacaoSdr]}
+                            >
+                              {QUALIFICACAO_SDR_LABELS[r.qualificacaoSdr]}
+                            </span>
+                          ) : null}
+                          {r.invalidoComissao ? (
+                            <span
+                              className="badge b-no-show"
+                              style={{ marginLeft: 6, fontSize: 10 }}
+                              title="Não entra em rankings, metas nem relatórios de comissão"
+                            >
+                              Fora comissões
+                            </span>
+                          ) : null}
                         </td>
                         <td>
                           <strong>{r.userName}</strong>
@@ -361,6 +493,37 @@ export function RegistrosPage() {
                         >
                           {r.obs || '—'}
                         </td>
+                        {isAdmin && (
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {podeMarcarInvalidoComissao(r.tipo) ? (
+                              r.invalidoComissao ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  disabled={invalidToggleId === r.id}
+                                  onClick={() => void handleToggleInvalidoComissao(r, false)}
+                                  title="Voltar a contar nas comissões (SDR/closer)"
+                                  aria-label="Incluir nas comissões"
+                                >
+                                  <RotateCcw size={16} strokeWidth={1.65} />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  disabled={invalidToggleId === r.id}
+                                  onClick={() => void handleToggleInvalidoComissao(r, true)}
+                                  title="Excluir deste registo das comissões e rankings"
+                                  aria-label="Excluir das comissões"
+                                >
+                                  <Ban size={16} strokeWidth={1.65} />
+                                </button>
+                              )
+                            ) : (
+                              <span style={{ color: 'var(--text3)', fontSize: 11 }}>—</span>
+                            )}
+                          </td>
+                        )}
                         <td>
                           <button
                             type="button"

@@ -12,6 +12,7 @@ import {
   Wallet
 } from 'lucide-react'
 import { getRegistrosByRange } from '../firebase/firestore'
+import { contaParaComissao } from '../lib/registroComissao'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { today, mRange, formatPeriodLabel } from '../lib/dates'
 import { metaFetch, metaLoadSaved, getConversionKeys, extractActionFromInsights } from '../lib/meta-ads'
@@ -111,7 +112,7 @@ export function FunilPage() {
     setUntil(u)
 
     try {
-      const recs = await getRegistrosByRange(s, u)
+      const recs = (await getRegistrosByRange(s, u)).filter(contaParaComissao)
       const ag = recs.filter((r) => r.tipo === 'reuniao_agendada').length
       const rr = recs.filter((r) => r.tipo === 'reuniao_realizada').length
       const ns = recs.filter((r) => r.tipo === 'reuniao_no_show').length

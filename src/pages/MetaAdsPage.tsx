@@ -32,6 +32,7 @@ import {
 } from '../lib/meta-ads'
 import { RankMarker } from '../components/ui/RankMarker'
 import { getRegistrosByRange } from '../firebase/firestore'
+import { contaParaComissao } from '../lib/registroComissao'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { useAppStore } from '../store/useAppStore'
 
@@ -264,7 +265,7 @@ export function MetaAdsPage() {
       const metaLeads = extractActionFromInsights(ins.actions, convKeys) ?? 0
       const cpl = spend > 0 && metaLeads > 0 ? spend / metaLeads : 0
 
-      const crmRecs = await getRegistrosByRange(since, until)
+      const crmRecs = (await getRegistrosByRange(since, until)).filter(contaParaComissao)
       const reunAgendadas = crmRecs.filter((r) => r.tipo === 'reuniao_agendada').length
       const reunRealizadas = crmRecs.filter((r) => r.tipo === 'reuniao_realizada').length
       const vendas = crmRecs.filter((r) => r.tipo === 'venda')

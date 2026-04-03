@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getRegistrosByRange, listUsers } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { contaParaComissao } from '../lib/registroComissao'
 import { today, mRange, wRange } from '../lib/dates'
 import type { CrmUser } from '../store/useAppStore'
 import { Briefcase, Trophy } from 'lucide-react'
@@ -79,17 +80,18 @@ export function RankingCloserPage({
         getRegistrosByRange(start, end),
         listUsers()
       ])
+      const validRecs = recs.filter(contaParaComissao)
       const usersById = new Map<string, CrmUser>()
       users.forEach((u) => usersById.set(u.id, u))
 
       const m = new Map<string, CloserStat>()
-      recs.filter((r) => r.tipo === 'reuniao_closer').forEach((r) => {
+      validRecs.filter((r) => r.tipo === 'reuniao_closer').forEach((r) => {
         const u = usersById.get(r.userId)
         if (!m.has(r.userId))
           m.set(r.userId, { id: r.userId, nome: u?.nome ?? r.userName, cl: 0, vn: 0, ft: 0, cc: 0, photoUrl: u?.photoUrl })
         m.get(r.userId)!.cl++
       })
-      recs.filter((r) => r.tipo === 'venda').forEach((r) => {
+      validRecs.filter((r) => r.tipo === 'venda').forEach((r) => {
         const u = usersById.get(r.userId)
         if (!m.has(r.userId))
           m.set(r.userId, { id: r.userId, nome: u?.nome ?? r.userName, cl: 0, vn: 0, ft: 0, cc: 0, photoUrl: u?.photoUrl })

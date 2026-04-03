@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getRegistrosByRange, getLeadsSdrByRange, listUsers } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { contaParaComissao } from '../lib/registroComissao'
 import { today, mRange, wRange } from '../lib/dates'
 import { useAppStore } from '../store/useAppStore'
 import type { CrmUser } from '../store/useAppStore'
@@ -79,10 +80,11 @@ export function RankingSDRPage({
         getLeadsSdrByRange(start, end),
         listUsers()
       ])
+      const validRecs = recs.filter(contaParaComissao)
       const usersById = new Map<string, CrmUser>()
       users.forEach((u) => usersById.set(u.id, u))
       const m = new Map<string, SdrStat>()
-      recs
+      validRecs
         .filter(
           (r) =>
             r.tipo === 'reuniao_agendada' || r.tipo === 'reuniao_realizada' || r.tipo === 'reuniao_no_show'

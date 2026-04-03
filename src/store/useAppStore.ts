@@ -4,6 +4,7 @@ import type {
   ProdutoBlocoPrecoTabela,
   ProdutoPacoteNegociacao
 } from '../firebase/firestore'
+import type { LeadBudgetOp, QualificacaoSdr } from '../lib/qualificacaoSdr'
 import { applyTheme, getStoredTheme, persistTheme, type ThemeMode } from '../lib/theme'
 
 export type UserRole = 'admin' | 'sdr' | 'closer' | string
@@ -51,6 +52,9 @@ export interface EditingRegistroRow {
   valorReferenciaVenda?: number
   descontoCloser?: number
   nomeCliente?: string | null
+  leadBudget?: LeadBudgetOp | null
+  callRecordingUrl?: string | null
+  qualificacaoSdr?: QualificacaoSdr | null
 }
 
 interface AppStoreState {

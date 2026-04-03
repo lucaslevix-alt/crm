@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { getRegistrosByRange, listSquads, type RegistroRow, type SquadRow } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { today, mRange, wRange } from '../lib/dates'
+import { contaParaComissao } from '../lib/registroComissao'
 import { Trophy } from 'lucide-react'
 import { RankingPodiumThree } from '../components/ranking/RankingPodium'
 import { RankMarker } from '../components/ui/RankMarker'
@@ -115,7 +116,7 @@ export function RankingSquadsPage({
     const { start, end } = getRange(period)
     try {
       const [recs, squads] = await Promise.all([getRegistrosByRange(start, end), listSquads()])
-      const stats = aggregateSquadsFromRecs(recs, squads)
+      const stats = aggregateSquadsFromRecs(recs.filter(contaParaComissao), squads)
       setList(stats)
       const withSales = stats.filter((s) => s.vn > 0)
       const totalVn = withSales.reduce((sum, x) => sum + x.vn, 0)

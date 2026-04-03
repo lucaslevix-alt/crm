@@ -15,6 +15,14 @@ import type { CrmUser } from '../../store/useAppStore'
 import { useAppStore } from '../../store/useAppStore'
 import { computeDescontoVenda } from '../../lib/vendaDesconto'
 import {
+  LEAD_BUDGET_OPTIONS,
+  QUALIFICACAO_SDR_LABELS,
+  calcularQualificacaoSdr,
+  isValidHttpsRecordingUrl,
+  type LeadBudgetOp,
+  type QualificacaoSdr
+} from '../../lib/qualificacaoSdr'
+import {
   buildLinhasByIdParaVenda,
   labelLinhaOfertaNoGrupo,
   linhaVirtualId,
@@ -29,7 +37,15 @@ interface ProdutoSelecionadoItem {
 }
 
 export function EditRegistroForm() {
-  const { editingRegistro, closeModal, setEditingRegistro, showToast, incrementRegistrosVersion } = useAppStore()
+  const {
+    editingRegistro,
+    closeModal,
+    setEditingRegistro,
+    showToast,
+    incrementRegistrosVersion,
+    currentUser
+  } = useAppStore()
+  const isAdmin = currentUser?.cargo === 'admin'
   const [users, setUsers] = useState<CrmUser[]>([])
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
   const [linhas, setLinhas] = useState<LinhaNegociacaoRow[]>([])
@@ -45,6 +61,8 @@ export function EditRegistroForm() {
   const [obs, setObs] = useState('')
   const [saving, setSaving] = useState(false)
   const [produtoItems, setProdutoItems] = useState<ProdutoSelecionadoItem[]>([])
+  const [leadBudget, setLeadBudget] = useState<LeadBudgetOp | ''>('')
+  const [callRecordingUrl, setCallRecordingUrl] = useState('')
 
   useEffect(() => {
     if (!editingRegistro) return
@@ -68,6 +86,8 @@ export function EditRegistroForm() {
           }))
         : []
     )
+    setLeadBudget(editingRegistro.leadBudget ?? '')
+    setCallRecordingUrl(editingRegistro.callRecordingUrl ?? '')
     listUsers().then(setUsers)
     Promise.all([getProdutos(), getLinhasNegociacaoAll()]).then(([p, l]) => {
       setProdutos(p)
@@ -112,6 +132,15 @@ export function EditRegistroForm() {
   const isVenda = tipo === 'venda'
   /** Grupo Wpp só em "Reunião realizada" (SDR). */
   const needsGrupoWpp = tipo === 'reuniao_realizada'
+  const needsSdrQualFields = tipo === 'reuniao_realizada'
+  const sdrQualLocked = needsSdrQualFields && !isAdmin
+
+  const qualificacaoPreview: QualificacaoSdr | null = useMemo(() => {
+    if (!needsSdrQualFields || !leadBudget) return null
+    const u = callRecordingUrl.trim()
+    if (!isValidHttpsRecordingUrl(u)) return null
+    return calcularQualificacaoSdr({ leadBudget, callRecordingUrl: u })
+  }, [needsSdrQualFields, leadBudget, callRecordingUrl])
   const linhasById = useMemo(
     () => buildLinhasByIdParaVenda(produtos, linhas),
     [produtos, linhas]
@@ -157,6 +186,39 @@ export function EditRegistroForm() {
       showToast('Informe o grupo de WhatsApp', 'err')
       return
     }
+    let outLeadBudget: LeadBudgetOp | null = null
+    let outRecordingUrl: string | null = null
+    let outQualificacao: QualificacaoSdr | null = null
+    if (needsSdrQualFields) {
+      if (sdrQualLocked) {
+        outLeadBudget = editingRegistro.leadBudget ?? null
+        outRecordingUrl =
+          editingRegistro.callRecordingUrl != null && editingRegistro.callRecordingUrl.trim() !== ''
+            ? editingRegistro.callRecordingUrl.trim()
+            : null
+        outQualificacao = editingRegistro.qualificacaoSdr ?? null
+      } else {
+        const lbEmpty = !leadBudget
+        const urlEmpty = !callRecordingUrl.trim()
+        if (lbEmpty && urlEmpty) {
+          outLeadBudget = null
+          outRecordingUrl = null
+          outQualificacao = null
+        } else if (lbEmpty !== urlEmpty) {
+          showToast('Em realizada: preencha orçamento e URL https em conjunto, ou limpe ambos (registo legado).', 'err')
+          return
+        } else {
+          const url = callRecordingUrl.trim()
+          if (!isValidHttpsRecordingUrl(url)) {
+            showToast('URL da gravação: indique um link https válido.', 'err')
+            return
+          }
+          outLeadBudget = leadBudget
+          outRecordingUrl = url
+          outQualificacao = calcularQualificacaoSdr({ leadBudget, callRecordingUrl: url })
+        }
+      }
+    }
     const u = users.find((x) => x.id === userId)
     const produtosDetalhes = produtoItems
       .map((item) => ({
@@ -193,7 +255,10 @@ export function EditRegistroForm() {
         produtosIds: tipo === 'venda' ? produtosDetalhes.flatMap((item) => Array(item.quantidade).fill(item.produtoId)) : [],
         produtosDetalhes: tipo === 'venda' ? produtosDetalhes : [],
         valorReferenciaVenda: tipo === 'venda' ? descCalc.valorReferencia : undefined,
-        descontoCloser: tipo === 'venda' ? descCalc.desconto : undefined
+        descontoCloser: tipo === 'venda' ? descCalc.desconto : undefined,
+        leadBudget: outLeadBudget,
+        callRecordingUrl: outRecordingUrl,
+        qualificacaoSdr: outQualificacao
       })
       showToast('Registro atualizado!')
       setEditingRegistro(null)
@@ -260,6 +325,57 @@ export function EditRegistroForm() {
                 placeholder="Identificação ou link do grupo"
                 required
               />
+            </div>
+          )}
+          {needsSdrQualFields && (
+            <div className="fg s2" style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
+                Qualificação para comissão SDR (só administradores podem alterar estes campos após o closer os preencher na
+                Agenda).
+              </div>
+              <div className="fg">
+                <label>Orçamento do lead {sdrQualLocked ? '' : '(legado: deixe vazio com URL vazio)'}</label>
+                <select
+                  className="di"
+                  value={leadBudget}
+                  onChange={(e) => setLeadBudget(e.target.value as LeadBudgetOp | '')}
+                  disabled={sdrQualLocked}
+                >
+                  <option value="">—</option>
+                  {LEAD_BUDGET_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="fg">
+                <label>URL da gravação (https)</label>
+                <input
+                  type="url"
+                  className="di"
+                  value={callRecordingUrl}
+                  onChange={(e) => setCallRecordingUrl(e.target.value)}
+                  placeholder="https://…"
+                  disabled={sdrQualLocked}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="fg" style={{ fontSize: 12, color: 'var(--text3)' }}>
+                {editingRegistro.qualificacaoSdr != null ? (
+                  <span>
+                    Guardado: <strong>{QUALIFICACAO_SDR_LABELS[editingRegistro.qualificacaoSdr]}</strong>
+                  </span>
+                ) : !leadBudget && !callRecordingUrl.trim() ? (
+                  <span>Sem qualificação guardada (registo legado — continua a contar nas comissões como antes).</span>
+                ) : isAdmin && qualificacaoPreview ? (
+                  <span>
+                    Após gravar: <strong>{QUALIFICACAO_SDR_LABELS[qualificacaoPreview]}</strong>
+                  </span>
+                ) : isAdmin && leadBudget && callRecordingUrl.trim() && !qualificacaoPreview ? (
+                  <span>URL inválida ou não https — ficará «Não qualificada» após gravar com estes valores.</span>
+                ) : null}
+              </div>
             </div>
           )}
           {isVenda && (

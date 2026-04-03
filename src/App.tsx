@@ -7,6 +7,7 @@ import {
   AuditoriaPage,
   ConfigHubPage,
   ConfigMetasPage,
+  RelatoriosComissoesPage,
   DashboardPage,
   FunilPage,
   MetaAdsPage,
@@ -123,6 +124,14 @@ export default function App() {
                   element={
                     <AdminOnlyRoute>
                       <ConfigMetasPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="relatorios-comissoes"
+                  element={
+                    <AdminOnlyRoute>
+                      <RelatoriosComissoesPage />
                     </AdminOnlyRoute>
                   }
                 />

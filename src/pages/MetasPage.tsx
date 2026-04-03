@@ -21,6 +21,7 @@ import {
   userHasIndivMeta
 } from '../components/metas/IndividualMetaCard'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { contaParaComissao } from '../lib/registroComissao'
 import { useAppStore } from '../store/useAppStore'
 import { metaPctParts } from '../utils/metaProgress'
 
@@ -32,13 +33,14 @@ function mRange(mv: string): { start: string; end: string } {
 }
 
 function totals(recs: RegistroRow[]) {
+  const v = recs.filter(contaParaComissao)
   return {
-    ag: recs.filter((r) => r.tipo === 'reuniao_agendada').length,
-    re: recs.filter((r) => r.tipo === 'reuniao_realizada').length,
-    cl: recs.filter((r) => r.tipo === 'reuniao_closer').length,
-    vn: recs.filter((r) => r.tipo === 'venda').length,
-    ft: recs.filter((r) => r.tipo === 'venda').reduce((s, r) => s + (r.valor || 0), 0),
-    ca: recs.filter((r) => r.tipo === 'venda').reduce((s, r) => s + (r.cashCollected || 0), 0)
+    ag: v.filter((r) => r.tipo === 'reuniao_agendada').length,
+    re: v.filter((r) => r.tipo === 'reuniao_realizada').length,
+    cl: v.filter((r) => r.tipo === 'reuniao_closer').length,
+    vn: v.filter((r) => r.tipo === 'venda').length,
+    ft: v.filter((r) => r.tipo === 'venda').reduce((s, r) => s + (r.valor || 0), 0),
+    ca: v.filter((r) => r.tipo === 'venda').reduce((s, r) => s + (r.cashCollected || 0), 0)
   }
 }
 

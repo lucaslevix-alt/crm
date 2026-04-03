@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import { CalendarClock, CheckCircle2, ChevronDown, CircleDollarSign, UserX } from 'lucide-react'
 import {
   listAgendamentos,
-  marcarAgendamentoRealizada,
   marcarAgendamentoNoShow,
   resolveSquadForUserId,
   type AgendamentoRow,
@@ -12,6 +11,8 @@ import {
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { useAppStore } from '../store/useAppStore'
 import { AgendaVendaModal } from '../components/agenda/AgendaVendaModal'
+import { AgendaRealizadaModal } from '../components/agenda/AgendaRealizadaModal'
+import { QUALIFICACAO_SDR_LABELS, type QualificacaoSdr } from '../lib/qualificacaoSdr'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
@@ -63,6 +64,12 @@ const STATUS_BADGE: Record<AgendamentoStatus, string> = {
   realizada: 'b-green',
   venda: 'b-amber',
   no_show: 'b-no-show'
+}
+
+const QUAL_BADGE: Record<QualificacaoSdr, string> = {
+  qualificada: 'b-green',
+  pendente: 'b-amber',
+  nao_qualificada: 'b-no-show'
 }
 
 type MenuRect = { top: number; right: number; minWidth: number }
@@ -226,6 +233,7 @@ export function AgendaPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [vendaPara, setVendaPara] = useState<AgendamentoRow | null>(null)
+  const [realizadaPara, setRealizadaPara] = useState<AgendamentoRow | null>(null)
   const [marcandoId, setMarcandoId] = useState<string | null>(null)
 
   const isAdmin = currentUser?.cargo === 'admin'
@@ -278,24 +286,6 @@ export function AgendaPage() {
     if (!(isAdmin || isCloser)) return false
     if (isAdmin) return true
     return a.squadId === mySquadId
-  }
-
-  async function handleRealizada(a: AgendamentoRow) {
-    if (!currentUser) return
-    if (!window.confirm('Marcar esta reunião como realizada? Serão criados os registos de SDR (realizada) e closer.')) return
-    setMarcandoId(a.id)
-    try {
-      await marcarAgendamentoRealizada({
-        agendamentoId: a.id,
-        closer: { id: currentUser.id, nome: currentUser.nome, cargo: currentUser.cargo }
-      })
-      showToast('Marcado como realizada.')
-      incrementRegistrosVersion()
-    } catch (e) {
-      showToast('Erro: ' + formatFirebaseOrUnknownError(e), 'err')
-    } finally {
-      setMarcandoId(null)
-    }
   }
 
   async function handleNoShow(a: AgendamentoRow) {
@@ -415,6 +405,7 @@ export function AgendaPage() {
                   <col className="agenda-col-sdr" />
                   <col className="agenda-col-squad" />
                   <col className="agenda-col-status" />
+                  <col className="agenda-col-qual" />
                   <col className="agenda-col-actions" />
                 </colgroup>
                 <thead>
@@ -425,6 +416,7 @@ export function AgendaPage() {
                     <th>SDR</th>
                     <th>Squad</th>
                     <th>Status</th>
+                    <th>Qualif. SDR</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -470,13 +462,25 @@ export function AgendaPage() {
                           {STATUS_LABEL[a.status]}
                         </span>
                       </td>
+                      <td className="agenda-td-qual" style={{ fontSize: 12 }}>
+                        {(a.status === 'realizada' || a.status === 'venda') && a.qualificacaoSdr ? (
+                          <span
+                            className={`badge ${QUAL_BADGE[a.qualificacaoSdr]}`}
+                            title={QUALIFICACAO_SDR_LABELS[a.qualificacaoSdr]}
+                          >
+                            {QUALIFICACAO_SDR_LABELS[a.qualificacaoSdr]}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text3)' }}>—</span>
+                        )}
+                      </td>
                       <td className="agenda-td-actions">
                         {a.status === 'agendada' && podeAgirNoItem(a) && currentUser && (
                           <AgendaCloserOutcomeMenu
                             variant="agendada"
                             disabled={marcandoId === a.id}
                             onPick={(action) => {
-                              if (action === 'realizada') void handleRealizada(a)
+                              if (action === 'realizada') setRealizadaPara(a)
                               else if (action === 'no_show') void handleNoShow(a)
                               else setVendaPara(a)
                             }}
@@ -505,6 +509,16 @@ export function AgendaPage() {
         currentUser &&
         createPortal(
           <AgendaVendaModal agendamento={vendaPara} closer={currentUser} onClose={() => setVendaPara(null)} />,
+          document.body
+        )}
+      {realizadaPara &&
+        currentUser &&
+        createPortal(
+          <AgendaRealizadaModal
+            agendamento={realizadaPara}
+            closer={currentUser}
+            onClose={() => setRealizadaPara(null)}
+          />,
           document.body
         )}
     </div>

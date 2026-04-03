@@ -1,4 +1,5 @@
 import type { MetasConfig, RegistroRow } from '../../firebase/firestore'
+import { contaParaComissao } from '../../lib/registroComissao'
 import { metaPctParts } from '../../utils/metaProgress'
 
 export const META_ITEMS: Array<{ lb: string; key: keyof MetasConfig; money: boolean }> = [
@@ -26,7 +27,8 @@ export function formatMetaBrl(v: number): string {
 }
 
 export function totalsForUser(recs: RegistroRow[], userId: string): MetaTally {
-  const mine = (tipo: string) => recs.filter((r) => r.tipo === tipo && r.userId === userId)
+  const mine = (tipo: string) =>
+    recs.filter((r) => contaParaComissao(r) && r.tipo === tipo && r.userId === userId)
   const vendas = mine('venda')
   return {
     ag: mine('reuniao_agendada').length,
@@ -39,7 +41,8 @@ export function totalsForUser(recs: RegistroRow[], userId: string): MetaTally {
 }
 
 export function totalsForUserIds(recs: RegistroRow[], userIds: Set<string>): MetaTally {
-  const mine = (tipo: string) => recs.filter((r) => r.tipo === tipo && userIds.has(r.userId))
+  const mine = (tipo: string) =>
+    recs.filter((r) => contaParaComissao(r) && r.tipo === tipo && userIds.has(r.userId))
   const vendas = mine('venda')
   return {
     ag: mine('reuniao_agendada').length,

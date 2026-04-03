@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ChevronRight, Package, Settings, Target, Users, UsersRound } from 'lucide-react'
+import { ChevronRight, FileSpreadsheet, Package, Settings, Target, Users, UsersRound } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 
 export function ConfigHubPage() {
@@ -23,6 +23,21 @@ export function ConfigHubPage() {
       </div>
 
       <div className="config-hub-grid" role="navigation" aria-label="Secções de configuração">
+        {isAdmin && (
+          <Link to="/config/relatorios-comissoes" className="config-hub-card">
+            <span className="config-hub-card-ic">
+              <FileSpreadsheet size={22} strokeWidth={1.65} aria-hidden />
+            </span>
+            <span className="config-hub-card-body">
+              <span className="config-hub-card-title">Relatórios para comissões</span>
+              <span className="config-hub-card-text">
+                Exportar SDR (agendadas, realizadas, leads) e closer (vendas e valores) por período.
+              </span>
+            </span>
+            <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
+          </Link>
+        )}
+
         {isAdmin && (
           <Link to="/config/metas" className="config-hub-card">
             <span className="config-hub-card-ic">

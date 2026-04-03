@@ -20,7 +20,8 @@ import {
   User,
   Users,
   UsersRound,
-  Zap
+  Zap,
+  FileSpreadsheet
 } from 'lucide-react'
 import { getAuth, signOut } from 'firebase/auth'
 import { initFirebaseApp } from '../../firebase/config'
@@ -216,6 +217,18 @@ export function Sidebar() {
                 </div>
                 {configNavOpen && (
                   <div className="nav-config-nest-children" role="group" aria-label="Itens de configuração">
+                    <NavLink
+                      to="/config/relatorios-comissoes"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Relatórios para comissões"
+                    >
+                      <span className="nav-icon">
+                        <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Comissões</span>
+                    </NavLink>
                     <NavLink
                       to="/config/metas"
                       className={({ isActive }) =>

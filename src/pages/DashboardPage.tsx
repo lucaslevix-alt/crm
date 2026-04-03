@@ -28,6 +28,7 @@ import {
 } from '../firebase/firestore'
 import type { MetasConfig, MetasFirestoreDoc, RegistroRow, ProdutoRow } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { contaParaComissao } from '../lib/registroComissao'
 import { UnifiedProjectionsChart, buildProjectionSeries } from '../components/dashboard/UnifiedProjectionsChart'
 import { DailyActivitySplineChart } from '../components/dashboard/DailyActivitySplineChart'
 import { metaPctParts } from '../utils/metaProgress'
@@ -68,12 +69,13 @@ function dpRange(dp: Dp, customStart?: string, customEnd?: string): { start: str
 }
 
 function totals(recs: RegistroRow[]) {
-  const vendas = recs.filter((r) => r.tipo === 'venda')
+  const v = recs.filter(contaParaComissao)
+  const vendas = v.filter((r) => r.tipo === 'venda')
   return {
-    ag: recs.filter((r) => r.tipo === 'reuniao_agendada').length,
-    re: recs.filter((r) => r.tipo === 'reuniao_realizada').length,
-    ns: recs.filter((r) => r.tipo === 'reuniao_no_show').length,
-    cl: recs.filter((r) => r.tipo === 'reuniao_closer').length,
+    ag: v.filter((r) => r.tipo === 'reuniao_agendada').length,
+    re: v.filter((r) => r.tipo === 'reuniao_realizada').length,
+    ns: v.filter((r) => r.tipo === 'reuniao_no_show').length,
+    cl: v.filter((r) => r.tipo === 'reuniao_closer').length,
     vn: vendas.length,
     ft: vendas.reduce((s, r) => s + (r.valor || 0), 0),
     ca: vendas.reduce((s, r) => s + (r.cashCollected || 0), 0),
@@ -214,8 +216,10 @@ function derivedRates(recs: RegistroRow[], leadsTotalSdrFunnel: number, sdrFunne
   const ticketMedio = t.vn > 0 ? t.ft / t.vn : null
   const agSdrFunnel =
     sdrFunnelUserIds.size > 0
-      ? recs.filter((r) => r.tipo === 'reuniao_agendada' && sdrFunnelUserIds.has(r.userId)).length
-      : recs.filter((r) => r.tipo === 'reuniao_agendada').length
+      ? recs.filter(
+          (r) => contaParaComissao(r) && r.tipo === 'reuniao_agendada' && sdrFunnelUserIds.has(r.userId)
+        ).length
+      : recs.filter((r) => contaParaComissao(r) && r.tipo === 'reuniao_agendada').length
   const leadParaReuniao =
     leadsTotalSdrFunnel > 0 ? (agSdrFunnel / leadsTotalSdrFunnel) * 100 : null
   const taxaShow = t.ag > 0 ? (t.re / t.ag) * 100 : null
@@ -237,7 +241,7 @@ function dailyFaturamentoSpark(recs: RegistroRow[], start: string, end: string):
     d.setDate(d.getDate() + 1)
   }
   for (const r of recs) {
-    if (r.tipo !== 'venda' || !r.data) continue
+    if (!contaParaComissao(r) || r.tipo !== 'venda' || !r.data) continue
     if (!map.has(r.data)) continue
     map.set(r.data, (map.get(r.data) ?? 0) + (r.valor || 0))
   }
@@ -449,7 +453,9 @@ export function DashboardPage() {
 
   const projectionSeries = useMemo(
     () =>
-      periodStart && periodEnd ? buildProjectionSeries(periodStart, periodEnd, recs, metas) : null,
+      periodStart && periodEnd
+        ? buildProjectionSeries(periodStart, periodEnd, recs.filter(contaParaComissao), metas)
+        : null,
     [periodStart, periodEnd, recs, metas]
   )
 
@@ -464,6 +470,7 @@ export function DashboardPage() {
     }
     const map = new Map<string, { ag: number; re: number; vn: number }>()
     for (const r of recs) {
+      if (!contaParaComissao(r)) continue
       const dt = r.data || ''
       if (!dt) continue
       if (!map.has(dt)) map.set(dt, { ag: 0, re: 0, vn: 0 })
@@ -774,7 +781,7 @@ export function DashboardPage() {
             </div>
             <div className="db-card-body db-card-body--activity-spline">
               {(() => {
-                const vendas = recs.filter((r) => r.tipo === 'venda')
+                const vendas = recs.filter((r) => contaParaComissao(r) && r.tipo === 'venda')
                 if (!vendas.length) {
                   return (
                     <div className="db-empty">

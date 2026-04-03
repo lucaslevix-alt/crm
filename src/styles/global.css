@@ -4801,6 +4801,11 @@ tr:hover td {
     min-width: 124px;
 }
 
+.agenda-col-qual {
+    width: 128px;
+    min-width: 108px;
+}
+
 .agenda-col-actions {
     width: 120px;
     min-width: 108px;
