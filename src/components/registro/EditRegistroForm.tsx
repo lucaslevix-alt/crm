@@ -209,13 +209,18 @@ export function EditRegistroForm() {
           return
         } else {
           const url = callRecordingUrl.trim()
+          if (!leadBudget) {
+            showToast('Em realizada: preencha orçamento e URL https em conjunto, ou limpe ambos (registo legado).', 'err')
+            return
+          }
           if (!isValidHttpsRecordingUrl(url)) {
             showToast('URL da gravação: indique um link https válido.', 'err')
             return
           }
-          outLeadBudget = leadBudget
+          const lb: LeadBudgetOp = leadBudget
+          outLeadBudget = lb
           outRecordingUrl = url
-          outQualificacao = calcularQualificacaoSdr({ leadBudget, callRecordingUrl: url })
+          outQualificacao = calcularQualificacaoSdr({ leadBudget: lb, callRecordingUrl: url })
         }
       }
     }
