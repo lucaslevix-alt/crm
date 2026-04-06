@@ -1474,7 +1474,7 @@ export async function deleteSquad(id: string): Promise<void> {
 }
 
 /** Agenda interna (Firestore): reuniões agendadas pelo SDR, ações do closer */
-export type AgendamentoStatus = 'agendada' | 'realizada' | 'venda' | 'no_show'
+export type AgendamentoStatus = 'agendada' | 'realizada' | 'venda' | 'no_show' | 'reagendada'
 
 export interface AgendamentoRow {
   id: string
@@ -1505,7 +1505,7 @@ function docToAgendamento(d: { id: string; data: () => Record<string, unknown> }
   const x = d.data()
   const st = x.status
   const status: AgendamentoStatus =
-    st === 'realizada' || st === 'venda' || st === 'no_show' ? st : 'agendada'
+    st === 'realizada' || st === 'venda' || st === 'no_show' || st === 'reagendada' ? st : 'agendada'
   return {
     id: d.id,
     squadId: String(x.squadId ?? ''),
@@ -1647,8 +1647,8 @@ export async function marcarAgendamentoRealizada(params: {
   const snap = await getDoc(ref)
   if (!snap.exists()) throw new Error('Agendamento não encontrado.')
   const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
-  if (row.status !== 'agendada') {
-    throw new Error('Só é possível marcar como realizada quando o status é “agendada”.')
+  if (row.status !== 'agendada' && row.status !== 'reagendada') {
+    throw new Error('Só é possível marcar como realizada quando o status é “agendada” ou “reagendada”.')
   }
   const obsSdr = `Agenda · closer ${params.closer.nome}`
   const registroRealizadaSdrId = await addRegistro({
@@ -1696,8 +1696,8 @@ export async function marcarAgendamentoNoShow(params: {
   const snap = await getDoc(ref)
   if (!snap.exists()) throw new Error('Agendamento não encontrado.')
   const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
-  if (row.status !== 'agendada') {
-    throw new Error('Só é possível marcar no-show quando o status é “agendada”.')
+  if (row.status !== 'agendada' && row.status !== 'reagendada') {
+    throw new Error('Só é possível marcar no-show quando o status é “agendada” ou “reagendada”.')
   }
   const registroNoShowId = await addRegistro({
     data: row.data,
@@ -1716,6 +1716,38 @@ export async function marcarAgendamentoNoShow(params: {
     closerUserName: params.closer.nome,
     atualizadoEm: serverTimestamp()
   })
+}
+
+/**
+ * Após no show: volta o item ao pipeline sem criar novo registo `reuniao_agendada`.
+ * Atualiza a data no agendamento e no registo de agendada original (mesma linha SDR).
+ */
+export async function marcarAgendamentoParaReagendamento(params: {
+  agendamentoId: string
+  novaData: string
+  closer: { id: string; nome: string; cargo: string }
+}): Promise<void> {
+  const data = params.novaData.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+    throw new Error('Data inválida. Use o formato AAAA-MM-DD.')
+  }
+  const ref = doc(db, 'agendamentos', params.agendamentoId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Agendamento não encontrado.')
+  const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
+  if (row.status !== 'no_show') {
+    throw new Error('Só é possível reagendar quando o status é “no show”.')
+  }
+  await updateDoc(ref, {
+    status: 'reagendada',
+    data,
+    closerUserId: params.closer.id,
+    closerUserName: params.closer.nome,
+    atualizadoEm: serverTimestamp()
+  })
+  if (row.registroAgendadaId) {
+    await updateDoc(doc(db, 'registros', row.registroAgendadaId), { data })
+  }
 }
 
 export async function marcarAgendamentoVenda(params: {
@@ -1740,7 +1772,7 @@ export async function marcarAgendamentoVenda(params: {
   let registroRealizadaSdrId = row.registroRealizadaSdrId
   let registroCloserId = row.registroCloserId
 
-  if (row.status === 'agendada') {
+  if (row.status === 'agendada' || row.status === 'reagendada') {
     const obsSdr = `Agenda · venda · closer ${params.closer.nome}`
     registroRealizadaSdrId = await addRegistro({
       data: row.data,
@@ -1785,7 +1817,7 @@ export async function marcarAgendamentoVenda(params: {
     closerUserName: params.closer.nome,
     atualizadoEm: serverTimestamp()
   }
-  if (row.status === 'agendada') {
+  if (row.status === 'agendada' || row.status === 'reagendada') {
     patch.leadBudget = null
     patch.callRecordingUrl = null
     patch.qualificacaoSdr = 'nao_qualificada'

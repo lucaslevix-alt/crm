@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarClock, CheckCircle2, ChevronDown, CircleDollarSign, UserX } from 'lucide-react'
+import { CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, CircleDollarSign, UserX } from 'lucide-react'
 import {
   listAgendamentos,
   marcarAgendamentoNoShow,
@@ -12,6 +12,7 @@ import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { useAppStore } from '../store/useAppStore'
 import { AgendaVendaModal } from '../components/agenda/AgendaVendaModal'
 import { AgendaRealizadaModal } from '../components/agenda/AgendaRealizadaModal'
+import { AgendaReagendarModal } from '../components/agenda/AgendaReagendarModal'
 import { QUALIFICACAO_SDR_LABELS, type QualificacaoSdr } from '../lib/qualificacaoSdr'
 
 function today(): string {
@@ -56,14 +57,16 @@ const STATUS_LABEL: Record<AgendamentoStatus, string> = {
   agendada: 'Agendada',
   realizada: 'Realizada',
   venda: 'Venda',
-  no_show: 'No show'
+  no_show: 'No show',
+  reagendada: 'Reagendada'
 }
 
 const STATUS_BADGE: Record<AgendamentoStatus, string> = {
   agendada: 'b-sdr',
   realizada: 'b-green',
   venda: 'b-amber',
-  no_show: 'b-no-show'
+  no_show: 'b-no-show',
+  reagendada: 'b-closer'
 }
 
 const QUAL_BADGE: Record<QualificacaoSdr, string> = {
@@ -234,6 +237,7 @@ export function AgendaPage() {
   const [error, setError] = useState<string | null>(null)
   const [vendaPara, setVendaPara] = useState<AgendamentoRow | null>(null)
   const [realizadaPara, setRealizadaPara] = useState<AgendamentoRow | null>(null)
+  const [reagendarPara, setReagendarPara] = useState<AgendamentoRow | null>(null)
   const [marcandoId, setMarcandoId] = useState<string | null>(null)
 
   const isAdmin = currentUser?.cargo === 'admin'
@@ -315,8 +319,9 @@ export function AgendaPage() {
       </div>
       <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 16, maxWidth: 720 }}>
         Reuniões agendadas pelo SDR (barra rápida «Agendei reunião»). O closer usa o menu{' '}
-        <strong>Desfecho</strong> na linha para escolher realizada, no show ou venda. Administradores veem todos os
-        squads.
+        <strong>Desfecho</strong> na linha para escolher realizada, no show ou venda. Após{' '}
+        <strong>no show</strong>, pode <strong>reagendar</strong> com nova data — não cria outra reunião agendada; ao
+        marcar realizada depois, conta como realizada. Administradores veem todos os squads.
       </p>
 
       {!isAdmin && !mySquadId && (
@@ -362,6 +367,7 @@ export function AgendaPage() {
               <option value="realizada">Realizada</option>
               <option value="venda">Venda</option>
               <option value="no_show">No show</option>
+              <option value="reagendada">Reagendada</option>
             </select>
           </div>
         </div>
@@ -475,7 +481,7 @@ export function AgendaPage() {
                         )}
                       </td>
                       <td className="agenda-td-actions">
-                        {a.status === 'agendada' && podeAgirNoItem(a) && currentUser && (
+                        {(a.status === 'agendada' || a.status === 'reagendada') && podeAgirNoItem(a) && currentUser && (
                           <AgendaCloserOutcomeMenu
                             variant="agendada"
                             disabled={marcandoId === a.id}
@@ -485,6 +491,18 @@ export function AgendaPage() {
                               else setVendaPara(a)
                             }}
                           />
+                        )}
+                        {a.status === 'no_show' && podeAgirNoItem(a) && currentUser && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm agenda-dd-trigger"
+                            disabled={marcandoId === a.id}
+                            onClick={() => setReagendarPara(a)}
+                            title="Nova data da reunião — não duplica agendada do SDR"
+                          >
+                            <CalendarPlus size={14} strokeWidth={1.75} aria-hidden style={{ marginRight: 4 }} />
+                            Reagendar
+                          </button>
                         )}
                         {a.status === 'realizada' && podeAgirNoItem(a) && currentUser && (
                           <AgendaCloserOutcomeMenu
@@ -518,6 +536,16 @@ export function AgendaPage() {
             agendamento={realizadaPara}
             closer={currentUser}
             onClose={() => setRealizadaPara(null)}
+          />,
+          document.body
+        )}
+      {reagendarPara &&
+        currentUser &&
+        createPortal(
+          <AgendaReagendarModal
+            agendamento={reagendarPara}
+            closer={currentUser}
+            onClose={() => setReagendarPara(null)}
           />,
           document.body
         )}
