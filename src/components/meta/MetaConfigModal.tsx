@@ -87,6 +87,10 @@ export function MetaConfigModal() {
           Gere em: Meta for Developers → Ferramentas → Explorador da API do Graph
         </span>
       </p>
+      <p style={{ color: 'var(--text2)', fontSize: 12, marginBottom: 16, lineHeight: 1.65, padding: '10px 12px', background: 'var(--bg3)', borderRadius: 8 }}>
+        Se mudaste a app para <strong>Live</strong> ou alteraste permissões: gera um <strong>token novo</strong> no Explorador (com{' '}
+        <code style={{ fontSize: 11 }}>leads_retrieval</code> para ler leads), usa <strong>«Remover token»</strong> abaixo e cola o novo. O token antigo não atualiza sozinho.
+      </p>
       {(browserToken || envToken) && (
         <div
           style={{

@@ -5,11 +5,14 @@ import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { QuickRegBar } from './QuickRegBar'
 import { useAppStore } from '../../store/useAppStore'
+import { prefetchCommonRoutesIdle } from '../../lib/routePrefetch'
 
 export function AppLayout() {
   const { pathname } = useLocation()
   const rankingsTvMode = pathname === '/rankings/tv'
   const { activeModalId, closeModal, openModal } = useAppStore()
+
+  useEffect(() => prefetchCommonRoutesIdle(), [])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

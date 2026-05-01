@@ -14,7 +14,8 @@ const ROUTE_TITLES: Record<string, string> = {
   produtos: 'Produtos',
   config: 'Configurações',
   auditoria: 'Auditoria',
-  'meta-ads': 'Meta Ads'
+  'meta-ads': 'Meta Ads',
+  'leads-meta': 'Leads Meta'
 }
 
 function getPageTitle(pathname: string): string {

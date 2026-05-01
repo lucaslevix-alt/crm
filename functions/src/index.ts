@@ -10,7 +10,7 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore()
-const GRAPH_VERSION = 'v19.0'
+const GRAPH_VERSION = 'v22.0'
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`
 const PRIVATE_DOC = 'private/meta_ads'
 

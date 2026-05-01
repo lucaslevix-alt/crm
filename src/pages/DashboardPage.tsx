@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Handshake,
   Package,
+  Target,
   TrendingDown,
   TrendingUp,
   UserX,
@@ -28,14 +29,62 @@ import {
 } from '../firebase/firestore'
 import type { MetasConfig, MetasFirestoreDoc, RegistroRow, ProdutoRow } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { useAppStore } from '../store/useAppStore'
 import { contaParaComissao } from '../lib/registroComissao'
-import { UnifiedProjectionsChart, buildProjectionSeries } from '../components/dashboard/UnifiedProjectionsChart'
 import { DailyActivitySplineChart } from '../components/dashboard/DailyActivitySplineChart'
 import { metaPctParts } from '../utils/metaProgress'
 import { smoothAreaUnderPath, smoothPathThrough } from '../lib/smooth-chart-path'
+import { fetchMetaLeadsCountForRange } from '../lib/meta-ads'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
+}
+
+function isoLastDayOfMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  const last = new Date(y, m, 0).getDate()
+  return `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`
+}
+
+function isoMinDate(a: string, b: string): string {
+  return a <= b ? a : b
+}
+
+function calendarDaysInMonth(ym: string): number {
+  const [y, m] = ym.split('-').map(Number)
+  return new Date(y, m, 0).getDate()
+}
+
+function daysInclusiveIso(startIso: string, endIso: string): number {
+  const s = new Date(`${startIso}T12:00:00`).getTime()
+  const e = new Date(`${endIso}T12:00:00`).getTime()
+  return Math.floor((e - s) / 86400000) + 1
+}
+
+/** Título do mês para UI (ex.: «Abril de 2026»). */
+function monthTitlePtBr(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  const raw = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  return raw.charAt(0).toUpperCase() + raw.slice(1)
+}
+
+function paceFractionForMonth(ym: string, td: string): { fraction: number; hint: string } {
+  const t0 = `${ym}-01`
+  const tLast = isoLastDayOfMonth(ym)
+  if (t0 > td) {
+    return { fraction: 0, hint: 'Mês futuro em relação a hoje — o ritmo começa no dia 1 do mês.' }
+  }
+  if (tLast < td) {
+    return { fraction: 1, hint: 'Mês já terminou — ritmo de 100% da meta de referência.' }
+  }
+  const dim = calendarDaysInMonth(ym)
+  const elapsed = daysInclusiveIso(t0, td)
+  const fraction = Math.min(1, elapsed / dim)
+  const dNum = parseInt(td.slice(8, 10), 10)
+  return {
+    fraction,
+    hint: `Proporção linear pelo calendário: ${elapsed} de ${dim} dias (${dNum}/${dim}).`
+  }
 }
 
 function mRange(mv?: string): { start: string; end: string } {
@@ -201,31 +250,27 @@ function RecentSortTh({
   )
 }
 
-/** Quem entra na taxa “Lead → reunião agendada” (mesmos perfis da barra rápida SDR). */
+/** Filtro SDR/Admin para série de leads no gráfico de atividade. */
 function isSdrFunnelRole(cargo: string | undefined): boolean {
   const c = String(cargo ?? '').trim().toLowerCase()
   return c === 'sdr' || c === 'admin'
 }
 
 /**
- * Taxa Lead → RA: só reuniões agendadas lançadas por SDR/Admin ÷ leads (leads_sdr) desses mesmos utilizadores.
- * Antes usava-se todas as agendadas da empresa no numerador, o que distorcia a % face ao denominador “SDR”.
+ * KPIs derivados: ticket médio (fat ÷ vendas); conv. vendas (vendas ÷ realizadas).
+ * Taxa de show = realizadas ÷ agendadas; no-show = no-show ÷ agendadas; sem desfecho = resto (as três somam 100%).
+ * Meta → agendadas = reuniões agendadas (CRM) ÷ leads do período na Meta Ads (conta/modo guardados em Meta Ads).
  */
-function derivedRates(recs: RegistroRow[], leadsTotalSdrFunnel: number, sdrFunnelUserIds: Set<string>) {
+function derivedRates(recs: RegistroRow[], metaLeadsNoPeriodo: number | null) {
   const t = totals(recs)
   const ticketMedio = t.vn > 0 ? t.ft / t.vn : null
-  const agSdrFunnel =
-    sdrFunnelUserIds.size > 0
-      ? recs.filter(
-          (r) => contaParaComissao(r) && r.tipo === 'reuniao_agendada' && sdrFunnelUserIds.has(r.userId)
-        ).length
-      : recs.filter((r) => contaParaComissao(r) && r.tipo === 'reuniao_agendada').length
   const leadParaReuniao =
-    leadsTotalSdrFunnel > 0 ? (agSdrFunnel / leadsTotalSdrFunnel) * 100 : null
+    metaLeadsNoPeriodo != null && metaLeadsNoPeriodo > 0 ? (t.ag / metaLeadsNoPeriodo) * 100 : null
   const taxaShow = t.ag > 0 ? (t.re / t.ag) * 100 : null
   const taxaNoShow = t.ag > 0 ? (t.ns / t.ag) * 100 : null
+  const taxaSemDesfecho = t.ag > 0 ? (Math.max(0, t.ag - t.re - t.ns) / t.ag) * 100 : null
   const convVendas = t.re > 0 ? (t.vn / t.re) * 100 : null
-  return { ticketMedio, leadParaReuniao, taxaShow, taxaNoShow, convVendas }
+  return { ticketMedio, leadParaReuniao, taxaShow, taxaNoShow, taxaSemDesfecho, convVendas }
 }
 
 function dailyFaturamentoSpark(recs: RegistroRow[], start: string, end: string): number[] {
@@ -342,7 +387,17 @@ const STATS: Array<{
   { key: 'ca', Icon: Banknote, label: 'Cash Collected', col: 'cyan', money: true }
 ]
 
+const DASHBOARD_META_KEYS: (keyof MetasConfig)[] = [
+  'meta_reunioes_agendadas',
+  'meta_reunioes_realizadas',
+  'meta_reunioes_closer',
+  'meta_vendas',
+  'meta_faturamento',
+  'meta_cash'
+]
+
 export function DashboardPage() {
+  const { metaConnectedAt } = useAppStore()
   const [dp, setDp] = useState<Dp>('mes')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
@@ -353,9 +408,10 @@ export function DashboardPage() {
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
-  const [leadsTotal, setLeadsTotal] = useState(0)
   const [leadsByDay, setLeadsByDay] = useState<Record<string, number>>({})
-  const [sdrFunnelUserIds, setSdrFunnelUserIds] = useState<Set<string>>(() => new Set())
+  const [metaLeadsCount, setMetaLeadsCount] = useState<number | null>(null)
+  /** Registos do mês da meta (dia 1 → hoje ou fim do mês), para ritmo vs metas mensais. */
+  const [paceMonthRecs, setPaceMonthRecs] = useState<RegistroRow[]>([])
   const [recentSort, setRecentSort] = useState<{ key: RecentSortKey; dir: 'asc' | 'desc' }>({
     key: 'data',
     dir: 'desc'
@@ -376,23 +432,32 @@ export function DashboardPage() {
       const { start, end } = dpRange(dp, customStart, customEnd)
       setPeriodStart(start)
       setPeriodEnd(end)
-      const [rows, mtDoc, prods, users] = await Promise.all([
+      const paceYm = start.slice(0, 7)
+      const paceMonthStart = `${paceYm}-01`
+      const paceMonthLast = isoLastDayOfMonth(paceYm)
+      const td = today()
+      const paceNeed =
+        paceMonthStart <= td ? getRegistrosByRange(paceMonthStart, isoMinDate(td, paceMonthLast)) : Promise.resolve([] as RegistroRow[])
+      const [rows, mtDoc, prods, users, paceRows] = await Promise.all([
         getRegistrosByRange(start, end),
         getMetasFirestoreDoc(),
         getProdutos(),
-        listUsers()
+        listUsers(),
+        paceNeed
       ])
       const funnelIds = new Set(users.filter((u) => isSdrFunnelRole(u.cargo)).map((u) => u.id))
       const leadsBundle = await getLeadsSdrRangeBundle(start, end, {
         onlyUserIds: funnelIds.size > 0 ? funnelIds : undefined
       })
+      const metaLeads = await fetchMetaLeadsCountForRange(start, end).catch(() => null)
       setRecs(rows)
       setMetasDoc(mtDoc)
       setProdutos(prods)
-      setSdrFunnelUserIds(funnelIds)
-      setLeadsTotal(leadsBundle.byUser.reduce((s, r) => s + r.quantidade, 0))
       setLeadsByDay(leadsBundle.byDay)
+      setMetaLeadsCount(metaLeads)
+      setPaceMonthRecs(paceRows)
     } catch (e) {
+      setPaceMonthRecs([])
       setError(formatFirebaseOrUnknownError(e) || 'Erro ao carregar')
     } finally {
       setLoading(false)
@@ -401,7 +466,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     load()
-  }, [dp, customStart, customEnd])
+  }, [dp, customStart, customEnd, metaConnectedAt])
 
   const metas = useMemo(
     () => (periodStart ? resolveMetasParaMes(periodStart.slice(0, 7), metasDoc) : {}),
@@ -409,14 +474,50 @@ export function DashboardPage() {
   )
 
   const t = totals(recs)
-  const metaKeys: (keyof MetasConfig)[] = [
-    'meta_reunioes_agendadas',
-    'meta_reunioes_realizadas',
-    'meta_reunioes_closer',
-    'meta_vendas',
-    'meta_faturamento',
-    'meta_cash'
-  ]
+
+  const paceMonthInfo = useMemo(() => {
+    if (!periodStart) return null
+    const ym = periodStart.slice(0, 7)
+    const { fraction, hint } = paceFractionForMonth(ym, today())
+    return { ym, fraction, hint }
+  }, [periodStart])
+
+  const paceMetaTable = useMemo(() => {
+    if (!paceMonthInfo) return []
+    const { fraction } = paceMonthInfo
+    const tMtd = totals(paceMonthRecs)
+    return STATS.map((s, i) => {
+      const mk = DASHBOARD_META_KEYS[i]
+      const metaVal = metas[mk] as number | undefined
+      const actual = (tMtd as Record<string, number>)[s.key] as number
+      const hasMeta = metaVal != null && metaVal > 0
+      const expectedRaw = hasMeta ? (metaVal as number) * fraction : null
+      const vsPct =
+        expectedRaw != null && expectedRaw > 1e-9 ? (Number(actual) / expectedRaw) * 100 : null
+      const expectedLabel =
+        expectedRaw == null ? '—' : s.money ? fmt(expectedRaw) : fmtCountFormatted(Math.round(expectedRaw))
+      const projectedRaw = fraction > 1e-9 ? Number(actual) / fraction : null
+      const projectedLabel =
+        projectedRaw == null
+          ? '—'
+          : s.money
+            ? fmt(projectedRaw)
+            : fmtCountFormatted(Math.round(projectedRaw))
+      return {
+        key: s.key,
+        label: s.label,
+        col: s.col,
+        money: !!s.money,
+        Icon: s.Icon,
+        metaVal,
+        actual,
+        hasMeta,
+        expectedLabel,
+        vsPct,
+        projectedLabel
+      }
+    })
+  }, [paceMonthInfo, paceMonthRecs, metas])
 
   const sparkFt = useMemo(
     () => dailyFaturamentoSpark(recs, periodStart, periodEnd),
@@ -446,18 +547,7 @@ export function DashboardPage() {
     return copy.slice(0, 14)
   }, [recs, recentSort])
 
-  const rates = useMemo(
-    () => derivedRates(recs, leadsTotal, sdrFunnelUserIds),
-    [recs, leadsTotal, sdrFunnelUserIds]
-  )
-
-  const projectionSeries = useMemo(
-    () =>
-      periodStart && periodEnd
-        ? buildProjectionSeries(periodStart, periodEnd, recs.filter(contaParaComissao), metas)
-        : null,
-    [periodStart, periodEnd, recs, metas]
-  )
+  const rates = useMemo(() => derivedRates(recs, metaLeadsCount), [recs, metaLeadsCount])
 
   const activityDaily = useMemo(() => {
     if (!periodStart || !periodEnd) return null
@@ -489,7 +579,7 @@ export function DashboardPage() {
   }, [recs, periodStart, periodEnd, leadsByDay])
 
   return (
-    <div className="content db-page">
+    <div className="content db-page db-page--fin">
       <header className="db-head">
         <div>
           <h1 className="db-title">Dashboard</h1>
@@ -559,131 +649,91 @@ export function DashboardPage() {
 
       {!loading && !error && (
         <>
-          <section className="db-bento db-bento--hero">
-            <div className="db-card db-card--hero">
-              <div className="db-card-label">Faturamento no período</div>
-              <div className="db-hero-value">{fmt(t.ft)}</div>
-              <div className="db-hero-meta">
-                <span className="db-hero-chip">
-                  <strong>{t.vn}</strong> vendas
-                </span>
-                <span className="db-hero-chip">
-                  Cash <strong>{fmt(t.ca)}</strong>
-                </span>
-                <span className="db-hero-chip">
-                  Reun. realiz. <strong>{t.re}</strong>
-                </span>
-                <span
-                  className="db-hero-chip"
-                  title="Soma do desconto: na venda à vista compara preços à vista das linhas; no parcelado compara totais parcelados"
+          <section className="db-bento db-bento--hero db-bento--hero-fin">
+            <div className="db-card db-card--hero db-card--fin-hero">
+              <div className="db-fin-hero-head">
+                <div className="db-card-label db-fin-hero-eyebrow">Faturamento no período</div>
+                <div className="db-hero-value db-hero-value--fin">{fmt(t.ft)}</div>
+              </div>
+              <div className="db-fin-metrics" role="list">
+                <div
+                  className="db-fin-metric db-fin-metric--orange"
+                  role="listitem"
+                  title="Ticket médio = faturamento total do período ÷ número de vendas no período (só vendas com valor contam no numerador do faturamento)."
                 >
-                  Desc. closer <strong>{fmt(t.dc)}</strong>
-                </span>
+                  <div className="db-fin-metric-val" style={{ color: 'var(--orange)' }}>
+                    {rates.ticketMedio != null ? fmt(rates.ticketMedio) : '—'}
+                  </div>
+                  <div className="db-fin-metric-lbl">Ticket médio</div>
+                </div>
+                <div
+                  className="db-fin-metric db-fin-metric--accent"
+                  role="listitem"
+                  title={
+                    metaLeadsCount != null && metaLeadsCount > 0
+                      ? `Reuniões agendadas no CRM (${t.ag}) ÷ leads da Meta Ads no período (${metaLeadsCount}). Conta e modo de conversão vêm da página Meta Ads.`
+                      : 'Conecte o token e escolha a conta em Meta Ads para obter o volume de leads do período; sem isso não há denominador Meta.'
+                  }
+                >
+                  <div className="db-fin-metric-val" style={{ color: 'var(--accent2)' }}>
+                    {fmtPct(rates.leadParaReuniao)}
+                  </div>
+                  <div className="db-fin-metric-lbl">Agend. / leads Meta</div>
+                </div>
+                <div
+                  className="db-fin-metric db-fin-metric--green"
+                  role="listitem"
+                  title="Taxa de show = reuniões realizadas ÷ reuniões agendadas. Soma com no-show e «sem desfecho» = 100% das agendadas."
+                >
+                  <div className="db-fin-metric-val" style={{ color: 'var(--green)' }}>
+                    {fmtPct(rates.taxaShow)}
+                  </div>
+                  <div className="db-fin-metric-lbl">Taxa de show</div>
+                </div>
+                <div
+                  className="db-fin-metric db-fin-metric--red"
+                  role="listitem"
+                  title="Taxa de no-show = registos no-show ÷ reuniões agendadas. O que não está em realizada nem no-show fica em «sem desfecho»."
+                >
+                  <div className="db-fin-metric-val" style={{ color: 'var(--red)' }}>
+                    {fmtPct(rates.taxaNoShow)}
+                  </div>
+                  <div className="db-fin-metric-lbl">Taxa de no-show</div>
+                </div>
+                <div
+                  className="db-fin-metric db-fin-metric--slate"
+                  role="listitem"
+                  title="Reuniões agendadas que ainda não têm registo de realizada nem de no-show (÷ agendadas). Com show e no-show, soma 100%."
+                >
+                  <div className="db-fin-metric-val" style={{ color: 'var(--text2)' }}>
+                    {fmtPct(rates.taxaSemDesfecho)}
+                  </div>
+                  <div className="db-fin-metric-lbl">Sem desfecho</div>
+                </div>
+                <div
+                  className="db-fin-metric db-fin-metric--amber"
+                  role="listitem"
+                  title="Conv. vendas = vendas ÷ reuniões realizadas no período (quantas realizadas viraram venda)."
+                >
+                  <div className="db-fin-metric-val" style={{ color: 'var(--amber)' }}>
+                    {fmtPct(rates.convVendas)}
+                  </div>
+                  <div className="db-fin-metric-lbl">Conv. vendas (p/ realiz.)</div>
+                </div>
               </div>
-              <div className="db-spark">
+              <div className="db-spark db-spark--fin">
                 <RevenueSparkline points={sparkFt} />
-              </div>
-            </div>
-            <div className="db-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 210 }}>
-              <div className="db-kpi-strip-title">Pipeline rápido</div>
-              <div className="db-kpi-grid">
-                <div className="db-kpi-mini">
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--accent2)' }}>
-                    {t.ag}
-                  </div>
-                  <div className="db-kpi-mini-lbl">Agendadas</div>
-                </div>
-                <div className="db-kpi-mini">
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--green)' }}>
-                    {t.re}
-                  </div>
-                  <div className="db-kpi-mini-lbl">Realizadas</div>
-                </div>
-                <div className="db-kpi-mini">
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--purple)' }}>
-                    {t.cl}
-                  </div>
-                  <div className="db-kpi-mini-lbl">Closer</div>
-                </div>
-                <div className="db-kpi-mini">
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--red)' }}>
-                    {t.ns}
-                  </div>
-                  <div className="db-kpi-mini-lbl">No show</div>
-                </div>
-                <div className="db-kpi-mini">
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--amber)' }}>
-                    {t.vn}
-                  </div>
-                  <div className="db-kpi-mini-lbl">Vendas</div>
-                </div>
               </div>
             </div>
           </section>
 
           <div className="db-main-stack">
-          <section className="db-bento db-bento--single">
-            <div className="db-card">
-              <div className="db-kpi-strip-title">Taxas e ticket médio</div>
-              <div
-                className="db-kpi-grid"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}
-              >
-                <div
-                  className="db-kpi-mini"
-                  title="Faturamento total ÷ número de vendas no período"
-                >
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--orange)' }}>
-                    {rates.ticketMedio != null ? fmt(rates.ticketMedio) : '—'}
-                  </div>
-                  <div className="db-kpi-mini-lbl">Ticket médio</div>
-                </div>
-                <div
-                  className="db-kpi-mini"
-                  title="Reuniões agendadas por SDR/Admin ÷ leads registrados (leads_sdr) dos mesmos utilizadores no período"
-                >
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--accent2)' }}>
-                    {fmtPct(rates.leadParaReuniao)}
-                  </div>
-                  <div className="db-kpi-mini-lbl">Lead → reunião agendada</div>
-                </div>
-                <div
-                  className="db-kpi-mini"
-                  title="Reuniões realizadas ÷ reuniões agendadas (registos no período)"
-                >
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--green)' }}>
-                    {fmtPct(rates.taxaShow)}
-                  </div>
-                  <div className="db-kpi-mini-lbl">Taxa de show</div>
-                </div>
-                <div
-                  className="db-kpi-mini"
-                  title="Registos «No show» (closer) ÷ reuniões agendadas — reuniões ainda sem desfecho não entram como no-show"
-                >
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--red)' }}>
-                    {fmtPct(rates.taxaNoShow)}
-                  </div>
-                  <div className="db-kpi-mini-lbl">Taxa de no-show</div>
-                </div>
-                <div
-                  className="db-kpi-mini"
-                  title="Vendas ÷ reuniões realizadas"
-                >
-                  <div className="db-kpi-mini-val" style={{ color: 'var(--amber)' }}>
-                    {fmtPct(rates.convVendas)}
-                  </div>
-                  <div className="db-kpi-mini-lbl">Conv. vendas (p/ realiz.)</div>
-                </div>
-              </div>
-            </div>
-          </section>
-
           <div className="db-section-block">
           <div className="db-section-title">Indicadores do período</div>
           <div className="db-stats-grid">
             {STATS.map((s) => {
               const val = s.money ? (t as Record<string, number>)[s.key] as number : (t as Record<string, number>)[s.key]
-              const metaVal = metas[metaKeys[STATS.indexOf(s)] as keyof MetasConfig] as number | undefined
+              const metaVal = metas[DASHBOARD_META_KEYS[STATS.indexOf(s)] as keyof MetasConfig] as number | undefined
               const metaP =
                 metaVal != null && metaVal > 0 ? metaPctParts(Number(val), metaVal) : null
               const cur = fmtCurrencyParts(Number(val))
@@ -754,22 +804,95 @@ export function DashboardPage() {
               )
             })}
           </div>
-          </div>
 
-          {/* Projeções — um quadro com alternância por métrica (mesmo padrão da atividade diária) */}
-          {periodStart && periodEnd && projectionSeries && projectionSeries.length > 0 && (
-            <div className="db-card">
-              <div className="db-card-header">
+          {paceMonthInfo && (
+            <div className="db-card db-pace-card">
+              <div className="db-card-header db-pace-card-head">
                 <span className="db-card-title">
-                  <TrendingUp size={14} strokeWidth={1.65} className="db-card-title-ic" />
-                  Projeções
+                  <Target size={14} strokeWidth={1.65} className="db-card-title-ic" aria-hidden />
+                  Ritmo das metas (mês calendário)
                 </span>
               </div>
-              <div className="db-card-body db-card-body--activity-spline">
-                <UnifiedProjectionsChart items={projectionSeries} />
+              <div className="db-card-body db-pace-card-body">
+                <p className="db-pace-intro">
+                  <strong>{monthTitlePtBr(paceMonthInfo.ym)}</strong>
+                  <span className="db-pace-intro-sep">·</span>
+                  {paceMonthInfo.hint}
+                  <span className="db-pace-intro-sep">·</span>
+                  «Deveria até agora» = meta do mês × proporção de dias corridos no mês (ritmo linear para bater a meta).
+                  <span className="db-pace-intro-sep">·</span>
+                  «Proj. fim do mês» = extrapolação linear do real acumulado (mantendo o ritmo até hoje até ao último dia do mês).
+                </p>
+                <div className="db-pace-table-wrap">
+                  <table className="db-pace-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Métrica</th>
+                        <th scope="col">Meta do mês</th>
+                        <th scope="col">Deveria até agora</th>
+                        <th scope="col">Real acumulado</th>
+                        <th scope="col">vs ritmo</th>
+                        <th scope="col">Proj. fim do mês</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paceMetaTable.map((row) => {
+                        const RowIcon = row.Icon
+                        const metaDisp =
+                          row.hasMeta && row.metaVal != null
+                            ? row.money
+                              ? fmt(row.metaVal)
+                              : fmtCountFormatted(row.metaVal)
+                            : '—'
+                        const actualDisp = row.money ? fmt(row.actual) : fmtCountFormatted(row.actual)
+                        const vs =
+                          row.vsPct != null && row.hasMeta ? (
+                            <span
+                              className={
+                                row.vsPct >= 100
+                                  ? 'db-pace-pct db-pace-pct--up'
+                                  : row.vsPct >= 70
+                                    ? 'db-pace-pct db-pace-pct--mid'
+                                    : 'db-pace-pct db-pace-pct--down'
+                              }
+                              title="Real acumulado no mês ÷ valor esperado pelo calendário até hoje."
+                            >
+                              {row.vsPct.toFixed(0)}%
+                            </span>
+                          ) : (
+                            <span className="db-pace-pct db-pace-pct--na">—</span>
+                          )
+                        return (
+                          <tr key={row.key}>
+                            <td>
+                              <span className={`db-pace-metric db-pace-metric--${row.col}`}>
+                                <RowIcon size={16} strokeWidth={1.65} aria-hidden />
+                                {row.label}
+                              </span>
+                            </td>
+                            <td>{metaDisp}</td>
+                            <td>{row.expectedLabel}</td>
+                            <td>{actualDisp}</td>
+                            <td>{vs}</td>
+                            <td
+                              title={
+                                row.projectedLabel === '—'
+                                  ? 'Sem dados no mês ou mês futuro — não há ritmo para extrapolar.'
+                                  : 'Real acumulado no mês ÷ proporção de dias corridos (mesma base do gráfico Projeções).'
+                              }
+                            >
+                              {row.projectedLabel}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
+          </div>
 
           {/* Produtos mais vendidos no período */}
           <div className="db-card">

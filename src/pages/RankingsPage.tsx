@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Trophy } from 'lucide-react'
+import { prefetchPath } from '../lib/routePrefetch'
 
 const TABS = [
   { to: '/rankings/sdr', label: 'SDRs' },
@@ -33,7 +34,13 @@ export function RankingsPage() {
         </div>
         <nav className="rankings-tabs" aria-label="Tipo de ranking">
           {TABS.map((t) => (
-            <NavLink key={t.to} to={t.to} className={({ isActive }) => `rankings-tab${isActive ? ' active' : ''}`}>
+            <NavLink
+              key={t.to}
+              to={t.to}
+              className={({ isActive }) => `rankings-tab${isActive ? ' active' : ''}`}
+              onPointerEnter={() => prefetchPath(t.to)}
+              onFocus={() => prefetchPath(t.to)}
+            >
               {t.label}
             </NavLink>
           ))}

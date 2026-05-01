@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Contact,
   Filter,
   LayoutDashboard,
   Link2,
@@ -26,8 +27,16 @@ import { getAuth, signOut } from 'firebase/auth'
 import { initFirebaseApp } from '../../firebase/config'
 import { useAppStore } from '../../store/useAppStore'
 import { icNavStripe } from '../../lib/icon-sizes'
+import { prefetchPath } from '../../lib/routePrefetch'
 
 const CONFIG_NAV_KEY = 'sidebar_config_nav_open'
+
+function navPrefetch(to: string) {
+  return {
+    onPointerEnter: () => prefetchPath(to),
+    onFocus: () => prefetchPath(to)
+  } as const
+}
 
 function loadConfigNavOpen(): boolean {
   try {
@@ -114,26 +123,53 @@ export function Sidebar() {
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title="Dashboard"
               end
+              {...navPrefetch('/dashboard')}
             >
               <span className="nav-icon">
                 <LayoutDashboard {...icNavStripe} />
               </span>
               <span className="nav-label">Dashboard</span>
             </NavLink>
-            <NavLink to="/meta-ads" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Meta Ads">
+            <NavLink
+              to="/meta-ads"
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title="Meta Ads"
+              {...navPrefetch('/meta-ads')}
+            >
               <span className="nav-icon">
                 <Megaphone {...icNavStripe} />
               </span>
               <span className="nav-label">Meta Ads</span>
             </NavLink>
-            <NavLink to="/registros" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Registros">
+            <NavLink
+              to="/leads-meta"
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title="Leads Meta"
+              {...navPrefetch('/leads-meta')}
+            >
+              <span className="nav-icon">
+                <Contact {...icNavStripe} />
+              </span>
+              <span className="nav-label">Leads Meta</span>
+            </NavLink>
+            <NavLink
+              to="/registros"
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title="Registros"
+              {...navPrefetch('/registros')}
+            >
               <span className="nav-icon">
                 <ClipboardList {...icNavStripe} />
               </span>
               <span className="nav-label">Registros</span>
             </NavLink>
             {(currentUser?.cargo === 'admin' || currentUser?.cargo === 'sdr' || currentUser?.cargo === 'closer') && (
-              <NavLink to="/agenda" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Agenda do squad">
+              <NavLink
+                to="/agenda"
+                className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                title="Agenda do squad"
+                {...navPrefetch('/agenda')}
+              >
                 <span className="nav-icon">
                   <CalendarClock {...icNavStripe} />
                 </span>
@@ -145,6 +181,7 @@ export function Sidebar() {
                 to="/propostas-fechamento"
                 className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
                 title="Propostas de fechamento"
+                {...navPrefetch('/propostas-fechamento')}
               >
                 <span className="nav-icon">
                   <Link2 {...icNavStripe} />
@@ -156,19 +193,30 @@ export function Sidebar() {
               to="/funil"
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               title="Funil de conversão"
+              {...navPrefetch('/funil')}
             >
               <span className="nav-icon">
                 <Filter {...icNavStripe} />
               </span>
               <span className="nav-label">Funil de conversão</span>
             </NavLink>
-            <NavLink to="/metas" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Metas">
+            <NavLink
+              to="/metas"
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title="Metas"
+              {...navPrefetch('/metas')}
+            >
               <span className="nav-icon">
                 <Target {...icNavStripe} />
               </span>
               <span className="nav-label">Metas</span>
             </NavLink>
-            <NavLink to="/rankings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Classificação">
+            <NavLink
+              to="/rankings"
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title="Classificação"
+              {...navPrefetch('/rankings')}
+            >
               <span className="nav-icon">
                 <Trophy {...icNavStripe} />
               </span>
@@ -188,6 +236,7 @@ export function Sidebar() {
                       `nav-item nav-item--config-parent${isConfigRoute ? ' active' : ''}`
                     }
                     title="Configurações"
+                    {...navPrefetch('/config')}
                   >
                     <span className="nav-icon">
                       <Settings {...icNavStripe} />
@@ -212,6 +261,7 @@ export function Sidebar() {
                         `nav-item nav-item--sub${isActive ? ' active' : ''}`
                       }
                       title="Relatórios para comissões"
+                      {...navPrefetch('/config/relatorios-comissoes')}
                     >
                       <span className="nav-icon">
                         <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
@@ -224,6 +274,7 @@ export function Sidebar() {
                         `nav-item nav-item--sub${isActive ? ' active' : ''}`
                       }
                       title="Configuração de metas"
+                      {...navPrefetch('/config/metas')}
                     >
                       <span className="nav-icon">
                         <Target size={16} strokeWidth={1.5} aria-hidden />
@@ -236,6 +287,7 @@ export function Sidebar() {
                         `nav-item nav-item--sub${isActive ? ' active' : ''}`
                       }
                       title="Usuários"
+                      {...navPrefetch('/config/usuarios')}
                     >
                       <span className="nav-icon">
                         <Users size={16} strokeWidth={1.5} aria-hidden />
@@ -248,6 +300,7 @@ export function Sidebar() {
                         `nav-item nav-item--sub${isActive ? ' active' : ''}`
                       }
                       title="Squads"
+                      {...navPrefetch('/config/squads')}
                     >
                       <span className="nav-icon">
                         <UsersRound size={16} strokeWidth={1.5} aria-hidden />
@@ -260,6 +313,7 @@ export function Sidebar() {
                         `nav-item nav-item--sub${isActive ? ' active' : ''}`
                       }
                       title="Produtos"
+                      {...navPrefetch('/config/produtos')}
                     >
                       <span className="nav-icon">
                         <Package size={16} strokeWidth={1.5} aria-hidden />
@@ -269,7 +323,12 @@ export function Sidebar() {
                   </div>
                 )}
               </div>
-              <NavLink to="/auditoria" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title="Auditoria">
+              <NavLink
+                to="/auditoria"
+                className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                title="Auditoria"
+                {...navPrefetch('/auditoria')}
+              >
                 <span className="nav-icon">
                   <Search {...icNavStripe} />
                 </span>
