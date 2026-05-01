@@ -4,7 +4,7 @@ import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { contaParaComissao } from '../lib/registroComissao'
 import { today, mRange, wRange } from '../lib/dates'
 import type { CrmUser } from '../store/useAppStore'
-import { Briefcase, Trophy } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import { RankingPodiumThree } from '../components/ranking/RankingPodium'
 import { RankMarker } from '../components/ui/RankMarker'
 
@@ -16,11 +16,21 @@ function getRange(p: RpPeriod): { start: string; end: string } {
   return { start: today(), end: today() }
 }
 
-function fmt(v: number): string {
+function isCloserCargo(cargo: string | undefined): boolean {
+  const c = String(cargo ?? '').trim().toLowerCase()
+  return c === 'closer' || c === 'admin'
+}
+
+function fmtBrl(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
 }
 
-interface CloserStat {
+function fmtPct(p: number | null): string {
+  if (p == null || Number.isNaN(p)) return '—'
+  return `${p.toFixed(1)}%`
+}
+
+interface CloserPerfRow {
   id: string
   nome: string
   cl: number
@@ -30,27 +40,59 @@ interface CloserStat {
   photoUrl?: string
 }
 
-function RankingItem({
-  index,
-  name,
-  sub,
-  val
-}: {
-  index: number
-  name: React.ReactNode
-  sub: React.ReactNode
-  val: string
-}) {
+function CloserPerfTable({ rows, dense }: { rows: CloserPerfRow[]; dense?: boolean }) {
+  if (!rows.length) {
+    return (
+      <div className="empty">
+        <p>Sem dados para o período</p>
+      </div>
+    )
+  }
+  const d = dense ? ' rank-perf-td--dense' : ''
   return (
-    <div className="ri">
-      <div className="rn">
-        <RankMarker index={index} />
-      </div>
-      <div className="ri-info">
-        <div className="ri-name">{name}</div>
-        <div className="ri-sub">{sub}</div>
-      </div>
-      <div className="ri-val">{val}</div>
+    <div className={dense ? 'rank-perf-scroll' : 'rank-perf-scroll rank-perf-scroll--padded'}>
+      <table className={`rank-perf-table${dense ? ' rank-perf-table--dense' : ''}`}>
+        <thead>
+          <tr>
+            <th className="rank-perf-th rank-perf-th--num">#</th>
+            <th className="rank-perf-th">Nome</th>
+            <th className="rank-perf-th rank-perf-th--num">Reuniões realizadas</th>
+            <th className="rank-perf-th rank-perf-th--num">Vendas</th>
+            <th className="rank-perf-th rank-perf-th--num">Taxa de conversão</th>
+            <th className="rank-perf-th rank-perf-th--num">Faturamento</th>
+            <th className="rank-perf-th rank-perf-th--num">Cash collected</th>
+            <th className="rank-perf-th rank-perf-th--num">Ticket médio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((s, idx) => {
+            const conv: number | null = s.cl > 0 ? (s.vn / s.cl) * 100 : null
+            const convColor =
+              conv === null ? 'var(--text3)' : conv >= 40 ? 'var(--green)' : conv >= 20 ? 'var(--amber)' : 'var(--red)'
+            const tm = s.vn > 0 ? s.ft / s.vn : null
+            return (
+              <tr key={s.id} className={idx === 0 ? 'rank-perf-tr--top' : undefined}>
+                <td className={`rank-perf-td rank-perf-td--num${d}`}>
+                  <span className="rank-perf-rankcell">
+                    <RankMarker index={idx} />
+                  </span>
+                </td>
+                <td className={`rank-perf-td${d}`}>
+                  <span className="rank-perf-name">{s.nome}</span>
+                </td>
+                <td className={`rank-perf-td rank-perf-td--num${d}`}>{s.cl}</td>
+                <td className={`rank-perf-td rank-perf-td--num${d}`}>{s.vn}</td>
+                <td className={`rank-perf-td rank-perf-td--num${d}`} style={{ color: convColor, fontWeight: 600 }}>
+                  {fmtPct(conv)}
+                </td>
+                <td className={`rank-perf-td rank-perf-td--num rank-perf-td--money${d}`}>{fmtBrl(s.ft)}</td>
+                <td className={`rank-perf-td rank-perf-td--num rank-perf-td--money${d}`}>{fmtBrl(s.cc)}</td>
+                <td className={`rank-perf-td rank-perf-td--num rank-perf-td--money${d}`}>{tm != null ? fmtBrl(tm) : '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -62,8 +104,8 @@ export function RankingCloserPage({
   const [period, setPeriod] = useState<RpPeriod>('mes')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [list, setList] = useState<CloserStat[]>([])
-  const [ticketMedio, setTicketMedio] = useState(0)
+  const [rows, setRows] = useState<CloserPerfRow[]>([])
+  const [ticketMedioEquipe, setTicketMedioEquipe] = useState(0)
   const [view, setView] = useState<'lista' | 'podio'>(() => (tvMode ? 'podio' : 'lista'))
 
   useEffect(() => {
@@ -76,39 +118,69 @@ export function RankingCloserPage({
     setError(null)
     const { start, end } = getRange(period)
     try {
-      const [recs, users] = await Promise.all([
-        getRegistrosByRange(start, end),
-        listUsers()
-      ])
+      const [recs, users] = await Promise.all([getRegistrosByRange(start, end), listUsers()])
       const validRecs = recs.filter(contaParaComissao)
       const usersById = new Map<string, CrmUser>()
       users.forEach((u) => usersById.set(u.id, u))
 
-      const m = new Map<string, CloserStat>()
-      validRecs.filter((r) => r.tipo === 'reuniao_closer').forEach((r) => {
-        const u = usersById.get(r.userId)
-        if (!m.has(r.userId))
-          m.set(r.userId, { id: r.userId, nome: u?.nome ?? r.userName, cl: 0, vn: 0, ft: 0, cc: 0, photoUrl: u?.photoUrl })
-        m.get(r.userId)!.cl++
-      })
-      validRecs.filter((r) => r.tipo === 'venda').forEach((r) => {
-        const u = usersById.get(r.userId)
-        if (!m.has(r.userId))
-          m.set(r.userId, { id: r.userId, nome: u?.nome ?? r.userName, cl: 0, vn: 0, ft: 0, cc: 0, photoUrl: u?.photoUrl })
-        const s = m.get(r.userId)!
-        s.vn++
-        s.ft += r.valor || 0
-        s.cc += r.cashCollected || 0
-      })
-      const sorted = Array.from(m.values()).sort((a, b) => b.ft - a.ft)
-      setList(sorted)
+      const closerUsers = users.filter((u) => isCloserCargo(u.cargo))
+      const closerIdSet = new Set(closerUsers.map((u) => u.id))
+
+      const m = new Map<string, CloserPerfRow>()
+      for (const u of closerUsers) {
+        m.set(u.id, { id: u.id, nome: u.nome, cl: 0, vn: 0, ft: 0, cc: 0, photoUrl: u.photoUrl })
+      }
+
+      validRecs
+        .filter((r) => closerIdSet.has(r.userId) && r.tipo === 'reuniao_closer')
+        .forEach((r) => {
+          if (!m.has(r.userId)) {
+            const u = usersById.get(r.userId)
+            m.set(r.userId, {
+              id: r.userId,
+              nome: u?.nome ?? r.userName,
+              cl: 0,
+              vn: 0,
+              ft: 0,
+              cc: 0,
+              photoUrl: u?.photoUrl
+            })
+          }
+          m.get(r.userId)!.cl++
+        })
+
+      validRecs
+        .filter((r) => closerIdSet.has(r.userId) && r.tipo === 'venda')
+        .forEach((r) => {
+          if (!m.has(r.userId)) {
+            const u = usersById.get(r.userId)
+            m.set(r.userId, {
+              id: r.userId,
+              nome: u?.nome ?? r.userName,
+              cl: 0,
+              vn: 0,
+              ft: 0,
+              cc: 0,
+              photoUrl: u?.photoUrl
+            })
+          }
+          const s = m.get(r.userId)!
+          s.vn++
+          s.ft += r.valor || 0
+          s.cc += r.cashCollected || 0
+        })
+
+      const sorted = Array.from(m.values())
+        .filter((x) => x.cl + x.vn > 0)
+        .sort((a, b) => b.ft - a.ft || b.vn - a.vn || a.nome.localeCompare(b.nome))
+      setRows(sorted)
       const totalVn = sorted.reduce((sum, x) => sum + x.vn, 0)
       const totalFt = sorted.reduce((sum, x) => sum + x.ft, 0)
-      setTicketMedio(totalVn > 0 ? totalFt / totalVn : 0)
+      setTicketMedioEquipe(totalVn > 0 ? totalFt / totalVn : 0)
     } catch (err) {
       setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
-      setList([])
-      setTicketMedio(0)
+      setRows([])
+      setTicketMedioEquipe(0)
     } finally {
       if (!silent) setLoading(false)
     }
@@ -149,7 +221,7 @@ export function RankingCloserPage({
               }}
               onClick={() => setView('lista')}
             >
-              Lista
+              Tabela
             </button>
             <button
               type="button"
@@ -181,68 +253,26 @@ export function RankingCloserPage({
       )}
 
       {!loading && !error && view === 'lista' && (
-        <div style={{ marginTop: 16 }}>
-          <div className="card mb">
-            <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <span className="card-title card-title--ic">
-                <Briefcase size={16} strokeWidth={1.65} aria-hidden />
-                Ranking Individual
-              </span>
-              <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-                Ticket médio geral: {fmt(ticketMedio)}
-              </span>
-            </div>
-            <div>
-              {list.length ? (
-                list.slice(0, 10).map((x, i) => {
-                  const conv = x.cl > 0 ? Math.round((x.vn / x.cl) * 100) : 0
-                  const tm = x.vn > 0 ? x.ft / x.vn : 0
-                  const convCol = conv >= 40 ? 'var(--green)' : conv >= 20 ? 'var(--amber)' : 'var(--red)'
-                  const sub = (
-                    <>
-                      <span style={{ fontSize: 10, color: 'var(--text3)' }}>
-                        {x.vn} vendas · {x.cl} reun.
-                      </span>{' '}
-                      <span
-                        style={{
-                          fontSize: 10,
-                          padding: '2px 5px',
-                          borderRadius: 4,
-                          background: 'rgba(128,128,128,.1)',
-                          color: convCol,
-                          fontWeight: 700
-                        }}
-                      >
-                        {conv}% conv.
-                      </span>
-                      {x.vn > 0 && (
-                        <span style={{ fontSize: 10, color: 'var(--text3)' }}> · TM: {fmt(tm)}</span>
-                      )}
-                    </>
-                  )
-                  return (
-                    <RankingItem
-                      key={x.nome + i}
-                      index={i}
-                      name={x.nome}
-                      sub={sub}
-                      val={fmt(x.ft)}
-                    />
-                  )
-                })
-              ) : (
-                <div className="empty">
-                  <p>Sem dados</p>
-                </div>
+        <div className="card rank-perf-card" style={{ marginTop: 16 }}>
+          <div className="rank-perf-card-head">
+            <h3 className="rank-perf-card-title">Desempenho dos Closers</h3>
+            <p className="rank-perf-card-hint">
+              Taxa de conversão = vendas ÷ reuniões closer no período. Ticket médio = faturamento ÷ n.º de vendas.
+              {ticketMedioEquipe > 0 && (
+                <>
+                  {' '}
+                  <strong>Ticket médio da equipa:</strong> {fmtBrl(ticketMedioEquipe)}.
+                </>
               )}
-            </div>
+            </p>
           </div>
+          <CloserPerfTable rows={rows} />
         </div>
       )}
 
       {!loading && !error && view === 'podio' && (
         <div style={{ marginTop: 16 }}>
-          <div className="card mb">
+          <div className="card mb rank-perf-card">
             <div className="card-header">
               <span className="card-title card-title--ic">
                 <Trophy size={16} strokeWidth={1.65} aria-hidden />
@@ -250,19 +280,19 @@ export function RankingCloserPage({
               </span>
             </div>
             <div style={{ padding: 16 }}>
-              {list.length === 0 ? (
+              {rows.length === 0 ? (
                 <div className="empty">
                   <p>Sem dados para o período</p>
                 </div>
               ) : (
                 <>
                   {(() => {
-                    const podium = list.slice(0, 3)
-                    const toPerson = (s: CloserStat) => ({
+                    const podium = rows.slice(0, 3)
+                    const toPerson = (s: CloserPerfRow) => ({
                       id: s.id,
                       nome: s.nome,
                       photoUrl: s.photoUrl,
-                      valueMain: fmt(s.ft),
+                      valueMain: fmtBrl(s.ft),
                       valueLabel: 'faturamento',
                       sub: `${s.vn} vendas`
                     })
@@ -274,50 +304,7 @@ export function RankingCloserPage({
                       />
                     )
                   })()}
-                  <div className="rpodium-table">
-                    <div
-                      className="rpodium-table-head"
-                      style={{ gridTemplateColumns: '32px 1.15fr repeat(4, minmax(0, 0.68fr))' }}
-                    >
-                      <span className="rpodium-medal-col">#</span>
-                      <span>Nome</span>
-                      <span style={{ textAlign: 'right' }}>Reun.</span>
-                      <span style={{ textAlign: 'right' }}>Conv.</span>
-                      <span style={{ textAlign: 'right' }}>Vendas</span>
-                      <span style={{ textAlign: 'right' }}>Faturamento</span>
-                    </div>
-                    {list.map((s, idx) => {
-                      const conv = s.cl > 0 ? Math.round((s.vn / s.cl) * 100) : 0
-                      const convColor =
-                        s.cl === 0 ? 'var(--text3)' : conv >= 40 ? 'var(--green)' : conv >= 20 ? 'var(--amber)' : 'var(--red)'
-                      return (
-                        <div
-                          key={s.id}
-                          className={`rpodium-table-row ${idx === 0 ? 'rpodium-table-row--first' : ''}`}
-                          style={{ gridTemplateColumns: '32px 1.15fr repeat(4, minmax(0, 0.68fr))' }}
-                        >
-                          <span className="rpodium-medal-col">
-                            <RankMarker index={idx} />
-                          </span>
-                          <span style={{ fontWeight: 600 }}>{s.nome}</span>
-                          <span style={{ textAlign: 'right' }}>{s.cl}</span>
-                          <span style={{ textAlign: 'right', color: convColor }}>
-                            {s.cl > 0 ? `${conv}%` : '—'}
-                          </span>
-                          <span style={{ textAlign: 'right' }}>{s.vn}</span>
-                          <span
-                            style={{
-                              textAlign: 'right',
-                              fontWeight: idx === 0 ? 800 : 600,
-                              color: idx === 0 ? 'var(--green)' : undefined
-                            }}
-                          >
-                            {fmt(s.ft)}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <CloserPerfTable rows={rows} dense />
                 </>
               )}
             </div>

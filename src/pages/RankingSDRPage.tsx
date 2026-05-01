@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
-import { getRegistrosByRange, getLeadsSdrByRange, listUsers } from '../firebase/firestore'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  getRegistrosByRange,
+  getLeadsSdrByRange,
+  listUsers,
+  listAgendamentosByRegistroVendaIds
+} from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { contaParaComissao } from '../lib/registroComissao'
 import { today, mRange, wRange } from '../lib/dates'
 import { useAppStore } from '../store/useAppStore'
 import type { CrmUser } from '../store/useAppStore'
-import { BarChart3, CalendarCheck, CalendarClock, Target, Trophy } from 'lucide-react'
+import { Target, Trophy } from 'lucide-react'
 import { RankingPodiumThree } from '../components/ranking/RankingPodium'
 import { RankMarker } from '../components/ui/RankMarker'
 
@@ -17,37 +22,73 @@ function getRange(p: RpPeriod): { start: string; end: string } {
   return { start: today(), end: today() }
 }
 
-interface SdrStat {
+function isSdrCargo(cargo: string | undefined): boolean {
+  const c = String(cargo ?? '').trim().toLowerCase()
+  return c === 'sdr' || c === 'admin'
+}
+
+function fmtBrl(v: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
+}
+
+interface SdrPerfRow {
   id: string
   nome: string
   ag: number
   re: number
   ns: number
+  vn: number
+  ft: number
+  cc: number
   leads: number
   photoUrl?: string
 }
 
-function RankingItem({
-  index,
-  name,
-  sub,
-  val
-}: {
-  index: number
-  name: React.ReactNode
-  sub: React.ReactNode
-  val: string | number
-}) {
+function SdrPerfTable({ rows, dense }: { rows: SdrPerfRow[]; dense?: boolean }) {
+  if (!rows.length) {
+    return (
+      <div className="empty">
+        <p>Sem dados para o período</p>
+      </div>
+    )
+  }
+  const d = dense ? ' rank-perf-td--dense' : ''
   return (
-    <div className="ri">
-      <div className="rn">
-        <RankMarker index={index} />
-      </div>
-      <div className="ri-info">
-        <div className="ri-name">{name}</div>
-        <div className="ri-sub">{sub}</div>
-      </div>
-      <div className="ri-val">{typeof val === 'string' && val.includes('R$') ? val : val}</div>
+    <div className={dense ? 'rank-perf-scroll' : 'rank-perf-scroll rank-perf-scroll--padded'}>
+      <table className={`rank-perf-table${dense ? ' rank-perf-table--dense' : ''}`}>
+        <thead>
+          <tr>
+            <th className="rank-perf-th rank-perf-th--num">#</th>
+            <th className="rank-perf-th">Nome</th>
+            <th className="rank-perf-th rank-perf-th--num">Agendamentos</th>
+            <th className="rank-perf-th rank-perf-th--num">Realizadas</th>
+            <th className="rank-perf-th rank-perf-th--num">No show</th>
+            <th className="rank-perf-th rank-perf-th--num">Vendas</th>
+            <th className="rank-perf-th rank-perf-th--num">Faturamento</th>
+            <th className="rank-perf-th rank-perf-th--num">Cash collected</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((s, idx) => (
+            <tr key={s.id} className={idx === 0 ? 'rank-perf-tr--top' : undefined}>
+              <td className={`rank-perf-td rank-perf-td--num${d}`}>
+                <span className="rank-perf-rankcell">
+                  <RankMarker index={idx} />
+                </span>
+              </td>
+              <td className={`rank-perf-td${d}`}>
+                <span className="rank-perf-name">{s.nome}</span>
+              </td>
+              <td className={`rank-perf-td rank-perf-td--num${d}`}>{s.ag}</td>
+              <td className={`rank-perf-td rank-perf-td--num${d}`}>{s.re}</td>
+              <td className={`rank-perf-td rank-perf-td--num${d}`}>{s.ns}</td>
+              <td className={`rank-perf-td rank-perf-td--num${d}`}>{s.vn}</td>
+              <td className={`rank-perf-td rank-perf-td--num rank-perf-td--money${d}`}>{fmtBrl(s.ft)}</td>
+              <td className={`rank-perf-td rank-perf-td--num rank-perf-td--money${d}`}>{fmtBrl(s.cc)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -60,14 +101,14 @@ export function RankingSDRPage({
   const [period, setPeriod] = useState<RpPeriod>('mes')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [byAg, setByAg] = useState<SdrStat[]>([])
-  const [byRe, setByRe] = useState<SdrStat[]>([])
-  const [byLeads, setByLeads] = useState<SdrStat[]>([])
+  const [rows, setRows] = useState<SdrPerfRow[]>([])
   const [view, setView] = useState<'lista' | 'podio'>(() => (tvMode ? 'podio' : 'lista'))
 
   useEffect(() => {
     if (tvMode) setView('podio')
   }, [tvMode])
+
+  const byRe = useMemo(() => [...rows].sort((a, b) => b.re - a.re || b.ft - a.ft), [rows])
 
   const loadRanking = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true
@@ -83,21 +124,44 @@ export function RankingSDRPage({
       const validRecs = recs.filter(contaParaComissao)
       const usersById = new Map<string, CrmUser>()
       users.forEach((u) => usersById.set(u.id, u))
-      const m = new Map<string, SdrStat>()
+
+      const sdrUsers = users.filter((u) => isSdrCargo(u.cargo))
+      const sdrIdSet = new Set(sdrUsers.map((u) => u.id))
+
+      const m = new Map<string, SdrPerfRow>()
+      for (const u of sdrUsers) {
+        m.set(u.id, {
+          id: u.id,
+          nome: u.nome,
+          ag: 0,
+          re: 0,
+          ns: 0,
+          vn: 0,
+          ft: 0,
+          cc: 0,
+          leads: 0,
+          photoUrl: u.photoUrl
+        })
+      }
+
       validRecs
         .filter(
           (r) =>
-            r.tipo === 'reuniao_agendada' || r.tipo === 'reuniao_realizada' || r.tipo === 'reuniao_no_show'
+            sdrIdSet.has(r.userId) &&
+            (r.tipo === 'reuniao_agendada' || r.tipo === 'reuniao_realizada' || r.tipo === 'reuniao_no_show')
         )
         .forEach((r) => {
-          const u = usersById.get(r.userId)
           if (!m.has(r.userId)) {
+            const u = usersById.get(r.userId)
             m.set(r.userId, {
               id: r.userId,
               nome: u?.nome ?? r.userName,
               ag: 0,
               re: 0,
               ns: 0,
+              vn: 0,
+              ft: 0,
+              cc: 0,
               leads: 0,
               photoUrl: u?.photoUrl
             })
@@ -107,38 +171,66 @@ export function RankingSDRPage({
           else if (r.tipo === 'reuniao_realizada') s.re++
           else s.ns++
         })
+
       leadsRows.forEach((l) => {
-        const u = usersById.get(l.userId)
+        if (!sdrIdSet.has(l.userId)) return
         if (!m.has(l.userId)) {
+          const u = usersById.get(l.userId)
           m.set(l.userId, {
             id: l.userId,
             nome: u?.nome ?? l.userName,
             ag: 0,
             re: 0,
             ns: 0,
+            vn: 0,
+            ft: 0,
+            cc: 0,
             leads: 0,
             photoUrl: u?.photoUrl
           })
         }
         m.get(l.userId)!.leads += l.quantidade
       })
-      const list = Array.from(m.values())
-      setByAg([...list].sort((a, b) => b.ag - a.ag))
-      setByRe([...list].sort((a, b) => b.re - a.re))
-      setByLeads(
-        [...list]
-          .filter((s) => s.leads > 0 || s.ag > 0)
-          .sort((a, b) => {
-            const ra = a.leads > 0 ? a.ag / a.leads : 0
-            const rb = b.leads > 0 ? b.ag / b.leads : 0
-            return rb - ra
+
+      const vendas = validRecs.filter((r) => r.tipo === 'venda')
+      const ags = await listAgendamentosByRegistroVendaIds(vendas.map((r) => r.id))
+      const vendaIdToSdr = new Map<string, string>()
+      for (const ag of ags) {
+        const vid = (ag.registroVendaId ?? '').trim()
+        if (vid) vendaIdToSdr.set(vid, ag.sdrUserId)
+      }
+      for (const r of vendas) {
+        const sdrId = vendaIdToSdr.get(r.id)
+        if (!sdrId || !sdrIdSet.has(sdrId)) continue
+        if (!m.has(sdrId)) {
+          const u = usersById.get(sdrId)
+          m.set(sdrId, {
+            id: sdrId,
+            nome: u?.nome ?? '—',
+            ag: 0,
+            re: 0,
+            ns: 0,
+            vn: 0,
+            ft: 0,
+            cc: 0,
+            leads: 0,
+            photoUrl: u?.photoUrl
           })
+        }
+        const s = m.get(sdrId)!
+        s.vn++
+        s.ft += r.valor || 0
+        s.cc += r.cashCollected || 0
+      }
+
+      const list = Array.from(m.values()).filter(
+        (s) => s.ag + s.re + s.ns + s.vn + s.leads > 0
       )
+      list.sort((a, b) => b.ft - a.ft || b.re - a.re || b.ag - a.ag || a.nome.localeCompare(b.nome))
+      setRows(list)
     } catch (err) {
       setError(formatFirebaseOrUnknownError(err) || 'Erro ao carregar')
-      setByAg([])
-      setByRe([])
-      setByLeads([])
+      setRows([])
     } finally {
       if (!silent) setLoading(false)
     }
@@ -148,27 +240,6 @@ export function RankingSDRPage({
     const silent = tvMode && tvRefreshKey !== undefined && tvRefreshKey > 0
     loadRanking(silent ? { silent: true } : undefined)
   }, [loadRanking, tvRefreshKey, tvMode])
-
-  function noShowBadge(ag: number, nsCount: number): React.ReactNode {
-    const ns = ag > 0 ? Math.round((nsCount / ag) * 100) : null
-    if (ns === null) return null
-    const col = ns <= 10 ? 'var(--green)' : ns <= 25 ? 'var(--amber)' : 'var(--red)'
-    return (
-      <span
-        style={{
-          fontSize: 10,
-          padding: '2px 6px',
-          borderRadius: 4,
-          background: 'rgba(128,128,128,.1)',
-          color: col,
-          fontWeight: 700,
-          marginLeft: 4
-        }}
-      >
-        {ns}% no-show
-      </span>
-    )
-  }
 
   return (
     <>
@@ -212,7 +283,7 @@ export function RankingSDRPage({
                 }}
                 onClick={() => setView('lista')}
               >
-                Lista
+                Tabela
               </button>
               <button
                 type="button"
@@ -244,124 +315,19 @@ export function RankingSDRPage({
         </div>
       )}
       {!loading && !error && view === 'lista' && (
-        <div className="g3" style={{ marginTop: 16 }}>
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title card-title--ic">
-                <CalendarClock size={16} strokeWidth={1.65} aria-hidden />
-                Reuniões Agendadas
-              </span>
-            </div>
-            <div>
-              {byAg.length ? (
-                byAg.slice(0, 10).map((s, i) => (
-                  <RankingItem
-                    key={s.nome + i}
-                    index={i}
-                    name={
-                      <>
-                        {s.nome}
-                        {noShowBadge(s.ag, s.ns)}
-                      </>
-                    }
-                    sub={`${s.re} realizadas`}
-                    val={`${s.ag} ag.`}
-                  />
-                ))
-              ) : (
-                <div className="empty">
-                  <p>Sem dados</p>
-                </div>
-              )}
-            </div>
+        <div className="card rank-perf-card" style={{ marginTop: 16 }}>
+          <div className="rank-perf-card-head">
+            <h3 className="rank-perf-card-title">Desempenho dos SDRs</h3>
+            <p className="rank-perf-card-hint">
+              Vendas e valores atribuídos ao SDR quando a venda está ligada à agenda do squad (campo na agenda).
+            </p>
           </div>
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title card-title--ic">
-                <CalendarCheck size={16} strokeWidth={1.65} aria-hidden />
-                Realizadas
-              </span>
-            </div>
-            <div>
-              {byRe.length ? (
-                byRe.slice(0, 10).map((s, i) => (
-                  <RankingItem
-                    key={s.nome + i}
-                    index={i}
-                    name={
-                      <>
-                        {s.nome}
-                        {noShowBadge(s.ag, s.ns)}
-                      </>
-                    }
-                    sub={`${s.ag} agendadas`}
-                    val={`${s.re} real.`}
-                  />
-                ))
-              ) : (
-                <div className="empty">
-                  <p>Sem dados</p>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title card-title--ic">
-                <BarChart3 size={16} strokeWidth={1.65} aria-hidden />
-                Aproveitamento de Leads
-              </span>
-            </div>
-            <div>
-              {!byLeads.length ? (
-                <div className="empty">
-                  <p>
-                    Nenhum lead registrado
-                    <br />
-                    <small style={{ color: 'var(--text3)' }}>Use o botão &quot;Registrar Leads&quot; para começar</small>
-                  </p>
-                </div>
-              ) : (
-                byLeads.slice(0, 10).map((s, i) => {
-                  const taxa = s.leads > 0 ? Math.round((s.ag / s.leads) * 100) : null
-                  const col = taxa === null ? 'var(--text3)' : taxa >= 30 ? 'var(--green)' : taxa >= 15 ? 'var(--amber)' : 'var(--red)'
-                  const txLabel = taxa !== null ? `${taxa}% conv.` : 'sem leads'
-                  const sub = s.leads > 0 ? `${s.leads} leads → ${s.ag} agendadas` : 'registre leads para calcular'
-                  return (
-                    <RankingItem
-                      key={s.nome + i}
-                      index={i}
-                      name={
-                        <>
-                          {s.nome}
-                          <span
-                            style={{
-                              fontSize: 10,
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              background: 'rgba(128,128,128,.1)',
-                              color: col,
-                              fontWeight: 700,
-                              marginLeft: 4
-                            }}
-                          >
-                            {txLabel}
-                          </span>
-                        </>
-                      }
-                      sub={sub}
-                      val={`${s.ag} ag.`}
-                    />
-                  )
-                })
-              )}
-            </div>
-          </div>
+          <SdrPerfTable rows={rows} />
         </div>
       )}
       {!loading && !error && view === 'podio' && (
         <div style={{ marginTop: 16 }}>
-          <div className="card mb">
+          <div className="card mb rank-perf-card">
             <div className="card-header">
               <span className="card-title card-title--ic">
                 <Trophy size={16} strokeWidth={1.65} aria-hidden />
@@ -384,7 +350,7 @@ export function RankingSDRPage({
                         </div>
                       )
                     }
-                    const toPerson = (s: SdrStat) => ({
+                    const toPerson = (s: SdrPerfRow) => ({
                       id: s.id,
                       nome: s.nome,
                       photoUrl: s.photoUrl,
@@ -400,55 +366,7 @@ export function RankingSDRPage({
                       />
                     )
                   })()}
-                  <div className="rpodium-table">
-                    <div
-                      className="rpodium-table-head"
-                      style={{ gridTemplateColumns: '32px 1.2fr repeat(5, minmax(0, 0.62fr))' }}
-                    >
-                      <span className="rpodium-medal-col">#</span>
-                      <span>Nome</span>
-                      <span style={{ textAlign: 'right' }}>Reun.</span>
-                      <span style={{ textAlign: 'right' }}>Cmp.</span>
-                      <span style={{ textAlign: 'right' }}>Ag.</span>
-                      <span style={{ textAlign: 'right' }}>L→A</span>
-                      <span style={{ textAlign: 'right' }}>Leads</span>
-                    </div>
-                    {byRe.map((s, idx) => {
-                      const convLeadAg = s.leads > 0 ? Math.round((s.ag / s.leads) * 100) : 0
-                      const convLeadColor =
-                        s.leads === 0
-                          ? 'var(--text3)'
-                          : convLeadAg >= 30
-                            ? 'var(--green)'
-                            : convLeadAg >= 15
-                              ? 'var(--amber)'
-                              : 'var(--red)'
-                      const cmp = s.ag > 0 ? Math.round((s.re / s.ag) * 100) : 0
-                      const cmpColor =
-                        s.ag === 0 ? 'var(--text3)' : cmp >= 50 ? 'var(--green)' : cmp >= 30 ? 'var(--amber)' : 'var(--red)'
-                      return (
-                        <div
-                          key={s.id}
-                          className={`rpodium-table-row ${idx === 0 ? 'rpodium-table-row--first' : ''}`}
-                          style={{ gridTemplateColumns: '32px 1.2fr repeat(5, minmax(0, 0.62fr))' }}
-                        >
-                          <span className="rpodium-medal-col">
-                            <RankMarker index={idx} />
-                          </span>
-                          <span style={{ fontWeight: 600 }}>{s.nome}</span>
-                          <span style={{ textAlign: 'right', fontWeight: idx === 0 ? 700 : undefined }}>{s.re}</span>
-                          <span style={{ textAlign: 'right', color: cmpColor }}>
-                            {s.ag > 0 ? `${cmp}%` : '—'}
-                          </span>
-                          <span style={{ textAlign: 'right' }}>{s.ag}</span>
-                          <span style={{ textAlign: 'right', color: convLeadColor }}>
-                            {s.leads > 0 ? `${convLeadAg}%` : '—'}
-                          </span>
-                          <span style={{ textAlign: 'right' }}>{s.leads}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <SdrPerfTable rows={byRe} dense />
                 </>
               )}
             </div>

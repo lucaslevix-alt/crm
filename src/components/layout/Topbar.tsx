@@ -8,13 +8,12 @@ const ROUTE_TITLES: Record<string, string> = {
   registros: 'Registros',
   funil: 'Funil de Conversão',
   metas: 'Metas',
-  rankings: 'Rankings',
+  rankings: 'Classificação',
   squads: 'Squads',
   usuarios: 'Usuários',
   produtos: 'Produtos',
   config: 'Configurações',
   auditoria: 'Auditoria',
-  negociacoes: 'Negociações',
   'meta-ads': 'Meta Ads'
 }
 

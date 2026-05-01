@@ -12,7 +12,6 @@ import {
   FunilPage,
   MetaAdsPage,
   MetasPage,
-  NegociacoesPage,
   ProdutosPage,
   PropostasFechamentoPage,
   RankingCloserPage,
@@ -162,7 +161,6 @@ export default function App() {
               </Route>
               <Route path="produtos" element={<Navigate to="/config/produtos" replace />} />
               <Route path="auditoria" element={<AuditoriaPage />} />
-              <Route path="negociacoes" element={<NegociacoesPage />} />
               <Route
                 path="propostas-fechamento"
                 element={

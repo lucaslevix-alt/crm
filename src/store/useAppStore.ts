@@ -64,7 +64,7 @@ interface AppStoreState {
   fbConfig: FirebaseConfig | null
   themeMode: ThemeMode
   quickBarHidden: boolean
-  /** Apenas desktop (≥1040px): menu lateral ícone vs. etiquetas */
+  /** Apenas desktop (≥1040px): rail ícones vs. etiquetas; omissão = recolhido */
   sidebarCollapsed: boolean
   activeModalId: string | null
   toast: ToastState
@@ -158,9 +158,11 @@ function loadQuickBarHidden(): boolean {
 
 function loadSidebarCollapsed(): boolean {
   try {
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+    const raw = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+    if (raw === null) return true
+    return raw === '1'
   } catch {
-    return false
+    return true
   }
 }
 
@@ -170,7 +172,7 @@ export const useAppStore = create<AppStoreState>((set) => ({
   fbConfig: typeof window !== 'undefined' ? loadFbConfigFromStorage() : null,
   themeMode: typeof window !== 'undefined' ? getStoredTheme() : 'dark',
   quickBarHidden: typeof window !== 'undefined' ? loadQuickBarHidden() : false,
-  sidebarCollapsed: typeof window !== 'undefined' ? loadSidebarCollapsed() : false,
+  sidebarCollapsed: typeof window !== 'undefined' ? loadSidebarCollapsed() : true,
   activeModalId: null,
   toast: { message: null, variant: 'ok' },
   registrosVersion: 0,

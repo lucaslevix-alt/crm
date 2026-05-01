@@ -2,8 +2,8 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Trophy } from 'lucide-react'
 
 const TABS = [
-  { to: '/rankings/sdr', label: 'SDR' },
-  { to: '/rankings/closer', label: 'Closer' },
+  { to: '/rankings/sdr', label: 'SDRs' },
+  { to: '/rankings/closer', label: 'Closers' },
   { to: '/rankings/squads', label: 'Squads' },
   { to: '/rankings/tv', label: 'TV' },
   { to: '/rankings/metas', label: 'Metas' }
@@ -25,10 +25,10 @@ export function RankingsPage() {
         <div className="rankings-shell-title">
           <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
             <Trophy size={24} strokeWidth={1.65} aria-hidden />
-            Rankings
+            Classificação
           </h2>
           <p style={{ color: 'var(--text2)', marginBottom: 0 }}>
-            SDR, Closer, Squads, modo TV (pódios em rotação) e metas por squad
+            Desempenho de SDRs e Closers em tabela, Squads, modo TV e metas por squad
           </p>
         </div>
         <nav className="rankings-tabs" aria-label="Tipo de ranking">

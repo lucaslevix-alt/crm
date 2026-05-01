@@ -1623,6 +1623,23 @@ export async function listAgendamentosByDataRange(start: string, end: string): P
   return rows
 }
 
+/** Agendamentos cujo `registroVendaId` está na lista (até 10 IDs por query — limite Firestore `in`). */
+export async function listAgendamentosByRegistroVendaIds(registroVendaIds: string[]): Promise<AgendamentoRow[]> {
+  const uniq = [...new Set(registroVendaIds.map((id) => id.trim()).filter(Boolean))]
+  if (uniq.length === 0) return []
+  const out: AgendamentoRow[] = []
+  const chunkSize = 10
+  for (let i = 0; i < uniq.length; i += chunkSize) {
+    const chunk = uniq.slice(i, i + chunkSize)
+    const q = query(collection(db, 'agendamentos'), where('registroVendaId', 'in', chunk))
+    const snap = await getDocs(q)
+    for (const d of snap.docs) {
+      out.push(docToAgendamento({ id: d.id, data: () => d.data() as Record<string, unknown> }))
+    }
+  }
+  return out
+}
+
 export async function marcarAgendamentoRealizada(params: {
   agendamentoId: string
   closer: { id: string; nome: string; cargo: string }

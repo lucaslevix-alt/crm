@@ -6,7 +6,6 @@ import {
   ChevronRight,
   ClipboardList,
   Filter,
-  Handshake,
   LayoutDashboard,
   Link2,
   CalendarClock,
@@ -141,16 +140,6 @@ export function Sidebar() {
                 <span className="nav-label">Agenda</span>
               </NavLink>
             )}
-            <NavLink
-              to="/negociacoes"
-              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-              title="Negociações"
-            >
-              <span className="nav-icon">
-                <Handshake {...icNavStripe} />
-              </span>
-              <span className="nav-label">Negociações</span>
-            </NavLink>
             {(currentUser?.cargo === 'admin' || currentUser?.cargo === 'closer') && (
               <NavLink
                 to="/propostas-fechamento"
