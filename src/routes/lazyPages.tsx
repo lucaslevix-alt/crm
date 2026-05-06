@@ -29,6 +29,12 @@ export const RankingMetasPage = lazy(() =>
 export const RankingTVPage = lazy(() =>
   import('../pages/RankingTVPage').then((m) => ({ default: m.RankingTVPage }))
 )
+export const RankingBasePage = lazy(() =>
+  import('../pages/RankingBasePage').then((m) => ({ default: m.RankingBasePage }))
+)
+export const BaseClientesPage = lazy(() =>
+  import('../pages/BaseClientesPage').then((m) => ({ default: m.BaseClientesPage }))
+)
 export const OperacaoPage = lazy(() =>
   import('../pages/OperacaoPage').then((m) => ({ default: m.OperacaoPage }))
 )

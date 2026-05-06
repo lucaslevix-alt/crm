@@ -27,6 +27,7 @@ function getPageTitle(pathname: string): string {
     if (parts[1] === 'usuarios') return 'Usuários'
     if (parts[1] === 'squads') return 'Squads'
     if (parts[1] === 'gestao-op') return 'Gestão OP'
+    if (parts[1] === 'base') return 'Base'
     if (parts[1] === 'produtos') return 'Produtos'
     return ROUTE_TITLES.config
   }

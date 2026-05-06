@@ -3918,6 +3918,11 @@ tr:hover td {
     color: #4ade80
 }
 
+.rpodium-value-main--neg {
+    color: #f87171 !important;
+    text-shadow: 0 0 24px rgba(248, 113, 113, 0.35)
+}
+
 .rpodium-value-label {
     font-size: 9px;
     text-transform: uppercase;
@@ -4053,6 +4058,11 @@ tr:hover td {
 
 [data-theme="light"] .rpodium-value-main--r1 {
     color: #15803d
+}
+
+[data-theme="light"] .rpodium-value-main--neg {
+    color: #dc2626 !important;
+    text-shadow: none
 }
 
 [data-theme="light"] .rpodium-value-label {
@@ -6838,4 +6848,203 @@ input.di:-webkit-autofill:focus {
         border-color: var(--border2);
         box-shadow: var(--tech-glow)
     }
+}
+
+/* Pódio — clientes ativos na operação (Classificação → Base) */
+.base-op-podium {
+    position: relative;
+    padding: 2rem 1rem 2.5rem;
+    border-radius: 20px;
+    background:
+        radial-gradient(ellipse 85% 55% at 50% 0%, rgba(234, 179, 8, 0.14), transparent 55%),
+        linear-gradient(165deg, var(--bg3), var(--bg2));
+    border: 1px solid var(--border2);
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2)
+}
+
+.base-op-podium--tv {
+    padding: 2.5rem 1.25rem 3rem;
+    border-radius: 24px
+}
+
+.base-op-podium-deck-glow {
+    position: absolute;
+    inset: -40% 20% auto;
+    height: 70%;
+    background: radial-gradient(circle, rgba(250, 204, 21, 0.12), transparent 65%);
+    pointer-events: none
+}
+
+.base-op-podium-kicker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 0 0 1.25rem;
+    font-size: clamp(0.95rem, 2vw, 1.15rem);
+    font-weight: 700;
+    color: var(--text2);
+    letter-spacing: 0.02em;
+    text-transform: uppercase
+}
+
+.base-op-podium-kicker-ic {
+    color: #eab308;
+    flex-shrink: 0
+}
+
+.base-op-podium-row {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: clamp(0.35rem, 2.5vw, 1.75rem);
+    max-width: 960px;
+    margin: 0 auto
+}
+
+.base-op-podium-side {
+    flex: 0 1 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0
+}
+
+.base-op-podium-side-inner {
+    text-align: center;
+    padding: 0.75rem 0.5rem 1rem;
+    width: 100%
+}
+
+.base-op-podium-side-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.35rem;
+    line-height: 1.25
+}
+
+.base-op-podium-side-num {
+    font-size: clamp(1.35rem, 3.5vw, 1.85rem);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    opacity: 0.88
+}
+
+.base-op-podium-center {
+    flex: 1 1 280px;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    z-index: 1
+}
+
+.base-op-podium-center-card {
+    text-align: center;
+    padding: 1rem 1rem 0.5rem;
+    width: 100%
+}
+
+.base-op-podium-center-label {
+    display: block;
+    font-size: clamp(0.8rem, 1.8vw, 0.95rem);
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.04em
+}
+
+.base-op-podium-center-sub {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.12em
+}
+
+.base-op-podium-hero-num {
+    display: block;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(3.2rem, 11vw, 6rem);
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #fde047 0%, #eab308 40%, #ca8a04 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 2px 20px rgba(234, 179, 8, 0.45));
+    animation: base-op-podium-pulse 3.5s ease-in-out infinite
+}
+
+.base-op-podium--tv .base-op-podium-hero-num {
+    font-size: clamp(4rem, 16vw, 9rem);
+    filter: drop-shadow(0 4px 32px rgba(250, 204, 21, 0.5))
+}
+
+.base-op-podium--tv .base-op-podium-kicker {
+    font-size: clamp(1rem, 2.2vw, 1.35rem);
+    margin-bottom: 1.5rem
+}
+
+@keyframes base-op-podium-pulse {
+
+    0%,
+    100% {
+        filter: drop-shadow(0 2px 18px rgba(234, 179, 8, 0.4))
+    }
+
+    50% {
+        filter: drop-shadow(0 5px 42px rgba(250, 204, 21, 0.65))
+    }
+}
+
+.base-op-podium-pillar {
+    width: 72%;
+    max-width: 200px;
+    border-radius: 8px 8px 0 0;
+    margin-top: 0.35rem;
+    background: linear-gradient(180deg, var(--bg4), var(--bg3));
+    border: 1px solid var(--border2);
+    border-bottom: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06)
+}
+
+.base-op-podium-pillar--side {
+    height: clamp(36px, 5vw, 52px);
+    opacity: 0.85
+}
+
+.base-op-podium-pillar--center {
+    height: clamp(52px, 8vw, 88px);
+    width: 78%;
+    max-width: 280px;
+    background: linear-gradient(180deg, rgba(234, 179, 8, 0.2), var(--bg3));
+    border-color: rgba(234, 179, 8, 0.35)
+}
+
+[data-theme="light"] .base-op-podium {
+    background:
+        radial-gradient(ellipse 85% 55% at 50% 0%, rgba(202, 138, 4, 0.12), transparent 55%),
+        linear-gradient(165deg, #fff, #f8fafc);
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08)
+}
+
+[data-theme="light"] .base-op-podium-pillar {
+    background: linear-gradient(180deg, #e2e8f0, #f1f5f9)
+}
+
+[data-theme="light"] .base-op-podium-pillar--center {
+    background: linear-gradient(180deg, rgba(234, 179, 8, 0.25), #f8fafc)
 }

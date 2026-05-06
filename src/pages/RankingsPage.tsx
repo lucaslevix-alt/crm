@@ -6,6 +6,7 @@ const TABS = [
   { to: '/rankings/sdr', label: 'SDRs' },
   { to: '/rankings/closer', label: 'Closers' },
   { to: '/rankings/squads', label: 'Squads' },
+  { to: '/rankings/base', label: 'Base' },
   { to: '/rankings/tv', label: 'TV' },
   { to: '/rankings/metas', label: 'Metas' }
 ] as const
@@ -29,7 +30,7 @@ export function RankingsPage() {
             Classificação
           </h2>
           <p style={{ color: 'var(--text2)', marginBottom: 0 }}>
-            Desempenho de SDRs e Closers em tabela, Squads, modo TV e metas por squad
+            SDRs, Closers, Squads, base de clientes ativos na operação, modo TV e metas por squad
           </p>
         </div>
         <nav className="rankings-tabs" aria-label="Tipo de ranking">

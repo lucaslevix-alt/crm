@@ -1556,7 +1556,7 @@ function parseSquadOperacaoItemRaw(x: unknown): SquadOperacaoRow | null {
     fotoUrl: String(o.fotoUrl ?? ''),
     memberIds: Array.isArray(o.memberIds) ? o.memberIds.map((v) => String(v)) : [],
     bonusInicial: bi,
-    bonusSaldo: Math.max(0, bs) || 0,
+    bonusSaldo: bs,
     ordem: Number(o.ordem ?? 0),
     lancamentos: parseLancamentosOperacaoRaw(o.lancamentos)
   }
@@ -1657,7 +1657,8 @@ export async function updateSquadOperacao(
   params: { nome: string; fotoUrl?: string; memberIds: string[]; bonusInicial: number; bonusSaldo: number }
 ): Promise<void> {
   const bi = Math.max(0, Number(params.bonusInicial) || 0)
-  const bs = Math.max(0, Number(params.bonusSaldo) || 0)
+  const bsRaw = Number(params.bonusSaldo)
+  const bs = Number.isFinite(bsRaw) ? bsRaw : 0
 
   await runTransaction(db, async (trx) => {
     const snap = await trx.get(squadsOperacaoConfigRef)
@@ -1724,7 +1725,7 @@ export async function registrarLancamentosOperacao(
         revertidoEm: null
       }
       if (lancamentoAumentaSaldo(e.tipo)) saldo += e.valor
-      else saldo = Math.max(0, saldo - e.valor)
+      else saldo -= e.valor
       return L
     })
 
@@ -1758,7 +1759,7 @@ export async function reverterLancamentoOperacao(squadId: string, lancamentoId: 
 
     let saldo = squad.bonusSaldo
     if (lancamentoAumentaSaldo(L.tipo)) {
-      saldo = Math.max(0, saldo - L.valor)
+      saldo -= L.valor
     } else {
       saldo += L.valor
     }
@@ -1787,6 +1788,78 @@ export async function deleteSquadOperacao(id: string): Promise<void> {
       { merge: true }
     )
   })
+}
+
+/** Total de clientes ativos na operação por ano/mês (doc único em `config`). */
+export interface BaseClientesOperacaoDoc {
+  /** ano (string, ex. "2026") → mês ("1"…"12") → total (inteiro ≥ 0) */
+  anos: Record<string, Record<string, number>>
+}
+
+const baseClientesOperacaoRef = doc(db, 'config', 'base_clientes_operacao')
+
+function parseBaseClientesOperacaoDoc(data: Record<string, unknown> | undefined): BaseClientesOperacaoDoc {
+  const anosRaw = data?.anos
+  const anos: Record<string, Record<string, number>> = {}
+  if (anosRaw && typeof anosRaw === 'object' && !Array.isArray(anosRaw)) {
+    for (const [yKey, monthsVal] of Object.entries(anosRaw)) {
+      if (!monthsVal || typeof monthsVal !== 'object' || Array.isArray(monthsVal)) continue
+      const meses: Record<string, number> = {}
+      for (const [mKey, v] of Object.entries(monthsVal)) {
+        meses[String(mKey)] = Math.max(0, Math.floor(Number(v) || 0))
+      }
+      anos[String(yKey)] = meses
+    }
+  }
+  return { anos }
+}
+
+export function getTotalClientesOperacaoMes(anos: BaseClientesOperacaoDoc['anos'], year: number, month: number): number {
+  const y = String(year)
+  const m = String(month)
+  return Math.max(0, Math.floor(Number(anos[y]?.[m]) || 0))
+}
+
+export async function getBaseClientesOperacao(): Promise<BaseClientesOperacaoDoc> {
+  const snap = await getDoc(baseClientesOperacaoRef)
+  return parseBaseClientesOperacaoDoc(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+}
+
+export async function setTotalClientesOperacaoMes(year: number, month: number, total: number): Promise<void> {
+  const t = Math.max(0, Math.floor(Number(total) || 0))
+  const y = String(year)
+  const m = String(month)
+  await runTransaction(db, async (trx) => {
+    const snap = await trx.get(baseClientesOperacaoRef)
+    const cur = parseBaseClientesOperacaoDoc(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+    const meses = { ...(cur.anos[y] ?? {}), [m]: t }
+    const anos = { ...cur.anos, [y]: meses }
+    trx.set(baseClientesOperacaoRef, { anos, atualizadoEm: serverTimestamp() }, { merge: true })
+  })
+}
+
+/** Soma `adicionar` e subtrai `remover` do total do mês (mínimo 0). */
+export async function ajustarTotalClientesOperacaoMes(
+  year: number,
+  month: number,
+  adicionar: number,
+  remover: number
+): Promise<number> {
+  const add = Math.max(0, Math.floor(Number(adicionar) || 0))
+  const rem = Math.max(0, Math.floor(Number(remover) || 0))
+  let novo = 0
+  const y = String(year)
+  const m = String(month)
+  await runTransaction(db, async (trx) => {
+    const snap = await trx.get(baseClientesOperacaoRef)
+    const cur = parseBaseClientesOperacaoDoc(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+    const base = getTotalClientesOperacaoMes(cur.anos, year, month)
+    novo = Math.max(0, base + add - rem)
+    const meses = { ...(cur.anos[y] ?? {}), [m]: novo }
+    const anos = { ...cur.anos, [y]: meses }
+    trx.set(baseClientesOperacaoRef, { anos, atualizadoEm: serverTimestamp() }, { merge: true })
+  })
+  return novo
 }
 
 /** Agenda interna (Firestore): reuniões agendadas pelo SDR, ações do closer */

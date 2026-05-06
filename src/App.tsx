@@ -20,7 +20,9 @@ import {
   RankingMetasPage,
   RankingSDRPage,
   RankingTVPage,
+  RankingBasePage,
   RankingsPage,
+  BaseClientesPage,
   OperacaoPage,
   GestaoOpPage,
   SquadsPage,
@@ -113,6 +115,7 @@ export default function App() {
                 <Route path="closer" element={<RankingCloserPage />} />
                 <Route path="squads" element={<RankingSquadsPage />} />
                 <Route path="tv" element={<RankingTVPage />} />
+                <Route path="base" element={<RankingBasePage />} />
                 <Route path="metas" element={<RankingMetasPage />} />
               </Route>
               <Route path="ranking-sdr" element={<Navigate to="/rankings/sdr" replace />} />
@@ -159,6 +162,14 @@ export default function App() {
                   element={
                     <AdminOnlyRoute>
                       <GestaoOpPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="base"
+                  element={
+                    <AdminOnlyRoute>
+                      <BaseClientesPage />
                     </AdminOnlyRoute>
                   }
                 />

@@ -60,6 +60,7 @@ export function prefetchPath(raw: string) {
         import('../pages/RankingSquadsPage'),
         import('../pages/RankingOperacaoPage'),
         import('../pages/RankingMetasPage'),
+        import('../pages/RankingBasePage'),
         import('../pages/RankingTVPage')
       ])
     )
@@ -78,6 +79,7 @@ export function prefetchPath(raw: string) {
         import('../pages/UsuariosPage'),
         import('../pages/SquadsPage'),
         import('../pages/GestaoOpPage'),
+        import('../pages/BaseClientesPage'),
         import('../pages/ProdutosPage')
       ])
     )

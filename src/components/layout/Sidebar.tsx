@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ClipboardList,
   Contact,
+  Database,
   Filter,
   Factory,
   LayoutDashboard,
@@ -331,6 +332,19 @@ export function Sidebar() {
                         <Factory size={16} strokeWidth={1.5} aria-hidden />
                       </span>
                       <span className="nav-label">Gestão OP</span>
+                    </NavLink>
+                    <NavLink
+                      to="/config/base"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Base"
+                      {...navPrefetch('/config/base')}
+                    >
+                      <span className="nav-icon">
+                        <Database size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Base</span>
                     </NavLink>
                     <NavLink
                       to="/config/produtos"

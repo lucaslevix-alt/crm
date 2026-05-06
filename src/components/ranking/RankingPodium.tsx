@@ -8,6 +8,8 @@ export type PodiumPerson = {
   valueMain: string
   valueLabel?: string
   sub?: ReactNode
+  /** Saldo negativo — destaca o valor em vermelho */
+  saldoNegativo?: boolean
 }
 
 function PodiumSlot({
@@ -41,7 +43,13 @@ function PodiumSlot({
         </div>
         <div className={`rpodium-name ${isFirst ? 'rpodium-name--r1' : ''}`}>{person.nome}</div>
         <div className={`rpodium-valuebox ${isFirst ? 'rpodium-valuebox--r1' : ''}`}>
-          <div className={`rpodium-value-main ${isFirst ? 'rpodium-value-main--r1' : ''}`}>{person.valueMain}</div>
+          <div
+            className={`rpodium-value-main ${isFirst ? 'rpodium-value-main--r1' : ''}${
+              person.saldoNegativo ? ' rpodium-value-main--neg' : ''
+            }`}
+          >
+            {person.valueMain}
+          </div>
           {person.valueLabel && <div className="rpodium-value-label">{person.valueLabel}</div>}
         </div>
         {person.sub && <div className="rpodium-sub">{person.sub}</div>}

@@ -4,13 +4,15 @@ import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { Trophy } from 'lucide-react'
 import { RankingPodiumThree } from '../components/ranking/RankingPodium'
 import { RankMarker } from '../components/ui/RankMarker'
+import { fmtBRLSaldoOp } from '../lib/fmtBRLSaldoOp'
 
 function fmt(v: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
+  const n = Number(v)
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number.isFinite(n) ? n : 0)
 }
 
 function fmtPctMantido(inicial: number, saldo: number): string {
-  if (inicial <= 0) return saldo > 0 ? '100%' : '—'
+  if (inicial <= 0) return '—'
   const p = (saldo / inicial) * 100
   if (!Number.isFinite(p)) return '—'
   return `${p.toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 0 })}%`
@@ -18,6 +20,11 @@ function fmtPctMantido(inicial: number, saldo: number): string {
 
 function perdidoRs(inicial: number, saldo: number): number {
   return Math.max(0, inicial - saldo)
+}
+
+function saldoCor(saldo: number): string | undefined {
+  if (saldo < 0) return 'var(--red)'
+  return undefined
 }
 
 /** # | Squad | Bônus atual | % mantido | Perdido */
@@ -28,12 +35,14 @@ function RankingItem({
   index,
   name,
   sub,
-  val
+  val,
+  valColor
 }: {
   index: number
   name: React.ReactNode
   sub: React.ReactNode
   val: string
+  valColor?: string
 }) {
   return (
     <div className="ri">
@@ -44,7 +53,9 @@ function RankingItem({
         <div className="ri-name">{name}</div>
         <div className="ri-sub">{sub}</div>
       </div>
-      <div className="ri-val">{val}</div>
+      <div className="ri-val" style={valColor ? { color: valColor, fontWeight: 700 } : undefined}>
+        {val}
+      </div>
     </div>
   )
 }
@@ -156,6 +167,7 @@ export function RankingOperacaoPage({
                     <RankingItem
                       key={x.id}
                       index={i}
+                      valColor={saldoCor(x.bonusSaldo)}
                       name={
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <span
@@ -180,7 +192,7 @@ export function RankingOperacaoPage({
                         </span>
                       }
                       sub={sub}
-                      val={fmt(x.bonusSaldo)}
+                      val={fmtBRLSaldoOp(x.bonusSaldo)}
                     />
                   )
                 })
@@ -219,13 +231,20 @@ export function RankingOperacaoPage({
                         id: s.id,
                         nome: s.nome,
                         photoUrl: s.fotoUrl || undefined,
-                        valueMain: fmt(s.bonusSaldo),
+                        valueMain: fmtBRLSaldoOp(s.bonusSaldo),
                         valueLabel: 'saldo do bônus',
+                        saldoNegativo: s.bonusSaldo < 0,
                         sub: (
                           <span style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.35 }}>
                             {pct} do bônus mantido
                             <br />
                             Perdeu {fmt(perd)}
+                            {s.bonusSaldo < 0 && (
+                              <>
+                                <br />
+                                <span style={{ color: 'var(--red)', fontWeight: 600 }}>Saldo negativo</span>
+                              </>
+                            )}
                           </span>
                         )
                       }
@@ -290,12 +309,20 @@ export function RankingOperacaoPage({
                             style={{
                               textAlign: 'right',
                               fontWeight: idx === 0 ? 800 : 600,
-                              color: idx === 0 ? 'var(--green)' : undefined
+                              color:
+                                s.bonusSaldo < 0 ? 'var(--red)' : idx === 0 ? 'var(--green)' : undefined
                             }}
                           >
-                            {fmt(s.bonusSaldo)}
+                            {fmtBRLSaldoOp(s.bonusSaldo)}
                           </span>
-                          <span style={{ textAlign: 'right' }}>{fmtPctMantido(s.bonusInicial, s.bonusSaldo)}</span>
+                          <span
+                            style={{
+                              textAlign: 'right',
+                              color: s.bonusSaldo < 0 ? 'var(--red)' : undefined
+                            }}
+                          >
+                            {fmtPctMantido(s.bonusInicial, s.bonusSaldo)}
+                          </span>
                           <span style={{ textAlign: 'right' }}>{fmt(perd)}</span>
                         </div>
                       )

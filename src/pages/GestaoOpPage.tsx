@@ -15,6 +15,7 @@ import {
   type SquadOperacaoRow
 } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { fmtBRLSaldoOp } from '../lib/fmtBRLSaldoOp'
 import type { CrmUser } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
 
@@ -23,13 +24,29 @@ function canBeSquadMember(u: CrmUser): boolean {
 }
 
 function fmt(v: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
+  const n = Number(v)
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number.isFinite(n) ? n : 0)
 }
 
 function parseMoney(raw: string): number {
   const t = raw.trim().replace(/\s/g, '').replace(/R\$\s?/i, '').replace(/\./g, '').replace(',', '.')
   const n = Number(t)
   return Number.isFinite(n) ? Math.max(0, n) : 0
+}
+
+/** Saldo do bônus pode ser negativo (ex.: perdas acima do bônus inicial). */
+function parseMoneySigned(raw: string): number {
+  let t = raw.trim().replace(/\s/g, '').replace(/R\$\s?/i, '')
+  let neg = false
+  if (t.startsWith('-')) {
+    neg = true
+    t = t.slice(1).trim()
+  }
+  t = t.replace(/\./g, '').replace(',', '.')
+  const n = Number(t)
+  if (!Number.isFinite(n)) return 0
+  const v = Math.abs(n)
+  return neg ? -v : v
 }
 
 const LANCAMENTO_LABEL: Record<LancamentoOperacaoTipoDb, string> = {
@@ -183,7 +200,7 @@ export function GestaoOpPage() {
     setSaving(true)
     try {
       if (editingId) {
-        const bs = parseMoney(bonusSaldoStr)
+        const bs = parseMoneySigned(bonusSaldoStr)
         await updateSquadOperacao(editingId, {
           nome: n,
           fotoUrl,
@@ -496,7 +513,15 @@ export function GestaoOpPage() {
               <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ fontWeight: 700 }}>{s.nome}</div>
                 <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
-                  Inicial: {fmt(s.bonusInicial)} · Saldo: {fmt(s.bonusSaldo)}
+                  Inicial: {fmt(s.bonusInicial)} · Saldo:{' '}
+                  <span
+                    style={{
+                      color: s.bonusSaldo < 0 ? 'var(--red)' : undefined,
+                      fontWeight: s.bonusSaldo < 0 ? 700 : undefined
+                    }}
+                  >
+                    {fmtBRLSaldoOp(s.bonusSaldo)}
+                  </span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>
                   {s.memberIds.length
@@ -545,7 +570,7 @@ export function GestaoOpPage() {
                 Lançamentos — {retirarTarget.nome}
               </h3>
               <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>
-                Saldo atual: {fmt(retirarTarget.bonusSaldo)}. Para cada tipo com valor, indique o nome do cliente. Retiradas
+                Saldo atual: {fmtBRLSaldoOp(retirarTarget.bonusSaldo)}. Para cada tipo com valor, indique o nome do cliente. Retiradas
                 diminuem o saldo; crédito no bônus aumenta. Tudo é guardado no histórico.
               </p>
 
@@ -608,7 +633,7 @@ export function GestaoOpPage() {
 
               <p style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>
                 Soma retiradas neste envio: {fmt(totalRetiradas)} · Crédito: {fmt(totalCredito)} · Líquido no saldo:{' '}
-                {fmt(totalCredito - totalRetiradas)}
+                {fmtBRLSaldoOp(totalCredito - totalRetiradas)}
               </p>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
@@ -639,7 +664,7 @@ export function GestaoOpPage() {
                 Histórico — {historicoSquad.nome}
               </h3>
               <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
-                Saldo atual: {fmt(historicoSquad.bonusSaldo)}. Lançamentos revertidos permanecem visíveis para auditoria.
+                Saldo atual: {fmtBRLSaldoOp(historicoSquad.bonusSaldo)}. Lançamentos revertidos permanecem visíveis para auditoria.
               </p>
               <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, marginBottom: 12 }}>
                 {historicoOrdenado.length === 0 ? (

@@ -5,6 +5,7 @@ import { RankingSDRPage } from './RankingSDRPage'
 import { RankingCloserPage } from './RankingCloserPage'
 import { RankingSquadsPage } from './RankingSquadsPage'
 import { RankingOperacaoPage } from './RankingOperacaoPage'
+import { RankingBasePage } from './RankingBasePage'
 
 const ROTATE_MS = 30_000
 const REFRESH_MS = 60_000
@@ -14,6 +15,7 @@ const ALL_TV_SLIDES = [
   { key: 'sdr', label: 'SDRs', Component: RankingSDRPage },
   { key: 'closer', label: 'Closers', Component: RankingCloserPage },
   { key: 'squads', label: 'Squads', Component: RankingSquadsPage },
+  { key: 'base', label: 'Base', Component: RankingBasePage },
   { key: 'operacao', label: 'Operação', Component: RankingOperacaoPage }
 ] as const
 
