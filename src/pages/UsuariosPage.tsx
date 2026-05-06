@@ -9,6 +9,7 @@ import { useAppStore } from '../store/useAppStore'
 const CARGO_BADGE: Record<string, string> = {
   sdr: 'b-sdr',
   closer: 'b-closer',
+  gt: 'b-gt',
   admin: 'b-admin'
 }
 

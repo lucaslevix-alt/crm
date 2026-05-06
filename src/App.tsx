@@ -21,8 +21,10 @@ import {
   RankingSDRPage,
   RankingTVPage,
   RankingBasePage,
+  RankingGTsPage,
   RankingsPage,
   BaseClientesPage,
+  ConfigGtsPage,
   OperacaoPage,
   GestaoOpPage,
   SquadsPage,
@@ -116,6 +118,7 @@ export default function App() {
                 <Route path="squads" element={<RankingSquadsPage />} />
                 <Route path="tv" element={<RankingTVPage />} />
                 <Route path="base" element={<RankingBasePage />} />
+                <Route path="gts" element={<RankingGTsPage />} />
                 <Route path="metas" element={<RankingMetasPage />} />
               </Route>
               <Route path="ranking-sdr" element={<Navigate to="/rankings/sdr" replace />} />
@@ -170,6 +173,14 @@ export default function App() {
                   element={
                     <AdminOnlyRoute>
                       <BaseClientesPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="gts"
+                  element={
+                    <AdminOnlyRoute>
+                      <ConfigGtsPage />
                     </AdminOnlyRoute>
                   }
                 />

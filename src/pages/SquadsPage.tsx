@@ -7,7 +7,7 @@ import type { CrmUser } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
 
 function canBeSquadMember(u: CrmUser): boolean {
-  return u.cargo === 'sdr' || u.cargo === 'closer' || u.cargo === 'admin'
+  return u.cargo === 'sdr' || u.cargo === 'closer' || u.cargo === 'admin' || u.cargo === 'gt'
 }
 
 export function SquadsPage() {

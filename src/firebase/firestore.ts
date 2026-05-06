@@ -1484,6 +1484,8 @@ export interface LancamentoOperacaoRow {
   criadoEm: string
   /** Preenchido quando o lançamento foi revertido (ISO) */
   revertidoEm: string | null
+  /** Utilizador com cargo GT atribuído ao churn (opcional nos docs antigos) */
+  gtUserId: string | null
 }
 
 function lancamentoAumentaSaldo(tipo: LancamentoOperacaoTipoDb): boolean {
@@ -1527,13 +1529,17 @@ function parseLancamentoOperacaoRaw(x: unknown): LancamentoOperacaoRow | null {
   if (cr instanceof Timestamp) criadoEm = cr.toDate().toISOString()
   else if (typeof cr === 'string' && cr.trim()) criadoEm = cr.trim()
   else criadoEm = new Date(0).toISOString()
+  const gtRaw = o.gtUserId
+  let gtUserId: string | null = null
+  if (typeof gtRaw === 'string' && gtRaw.trim()) gtUserId = gtRaw.trim()
   return {
     id,
     tipo,
     valor,
     clienteNome: String(o.clienteNome ?? '').trim(),
     criadoEm,
-    revertidoEm
+    revertidoEm,
+    gtUserId
   }
 }
 
@@ -1578,14 +1584,18 @@ function squadsOperacaoToFirestorePayload(items: SquadOperacaoRow[]): Record<str
     bonusInicial: s.bonusInicial,
     bonusSaldo: s.bonusSaldo,
     ordem: s.ordem,
-    lancamentos: (s.lancamentos ?? []).map((L) => ({
-      id: L.id,
-      tipo: L.tipo,
-      valor: L.valor,
-      clienteNome: L.clienteNome,
-      criadoEm: L.criadoEm,
-      revertidoEm: L.revertidoEm
-    }))
+    lancamentos: (s.lancamentos ?? []).map((L) => {
+      const base: Record<string, unknown> = {
+        id: L.id,
+        tipo: L.tipo,
+        valor: L.valor,
+        clienteNome: L.clienteNome,
+        criadoEm: L.criadoEm,
+        revertidoEm: L.revertidoEm
+      }
+      if (L.gtUserId) base.gtUserId = L.gtUserId
+      return base
+    })
   }))
 }
 
@@ -1688,14 +1698,27 @@ export async function updateSquadOperacao(
 /** Regista um ou mais lançamentos (retirada ou crédito) com nome do cliente; atualiza saldo e histórico. */
 export async function registrarLancamentosOperacao(
   squadId: string,
-  entries: { tipo: LancamentoOperacaoTipoDb; valor: number; clienteNome: string }[]
+  entries: {
+    tipo: LancamentoOperacaoTipoDb
+    valor: number
+    clienteNome: string
+    gtUserId?: string | null
+  }[]
 ): Promise<void> {
   const normalized = entries
-    .map((e) => ({
-      tipo: e.tipo,
-      valor: Math.max(0, Number(e.valor) || 0),
-      clienteNome: e.clienteNome.trim()
-    }))
+    .map((e) => {
+      const tipo = e.tipo
+      const gt =
+        tipo === 'churn' && e.gtUserId != null && String(e.gtUserId).trim()
+          ? String(e.gtUserId).trim()
+          : null
+      return {
+        tipo,
+        valor: Math.max(0, Number(e.valor) || 0),
+        clienteNome: e.clienteNome.trim(),
+        gtUserId: gt
+      }
+    })
     .filter((e) => e.valor > 0)
   if (normalized.length === 0) throw new Error('Nenhum lançamento com valor positivo.')
   for (const e of normalized) {
@@ -1722,7 +1745,8 @@ export async function registrarLancamentosOperacao(
         valor: e.valor,
         clienteNome: e.clienteNome,
         criadoEm: nowIso,
-        revertidoEm: null
+        revertidoEm: null,
+        gtUserId: e.tipo === 'churn' && e.gtUserId ? e.gtUserId : null
       }
       if (lancamentoAumentaSaldo(e.tipo)) saldo += e.valor
       else saldo -= e.valor
@@ -1858,6 +1882,104 @@ export async function ajustarTotalClientesOperacaoMes(
     const meses = { ...(cur.anos[y] ?? {}), [m]: novo }
     const anos = { ...cur.anos, [y]: meses }
     trx.set(baseClientesOperacaoRef, { anos, atualizadoEm: serverTimestamp() }, { merge: true })
+  })
+  return novo
+}
+
+/** Quantidade de churn (log) por GT e por mês — cadastro manual em `config`, como a Base. */
+export interface GtsChurnOperacaoDoc {
+  /** ano → mês → userId (GT) → quantidade de churn (inteiro ≥ 0) */
+  anos: Record<string, Record<string, Record<string, number>>>
+}
+
+const gtsChurnOperacaoRef = doc(db, 'config', 'gts_churn_operacao')
+
+function parseGtsChurnOperacaoDoc(data: Record<string, unknown> | undefined): GtsChurnOperacaoDoc {
+  const anosRaw = data?.anos
+  const anos: Record<string, Record<string, Record<string, number>>> = {}
+  if (anosRaw && typeof anosRaw === 'object' && !Array.isArray(anosRaw)) {
+    for (const [yKey, monthsVal] of Object.entries(anosRaw)) {
+      if (!monthsVal || typeof monthsVal !== 'object' || Array.isArray(monthsVal)) continue
+      const meses: Record<string, Record<string, number>> = {}
+      for (const [mKey, usersVal] of Object.entries(monthsVal)) {
+        if (!usersVal || typeof usersVal !== 'object' || Array.isArray(usersVal)) continue
+        const byUser: Record<string, number> = {}
+        for (const [uid, v] of Object.entries(usersVal)) {
+          byUser[String(uid)] = Math.max(0, Math.floor(Number(v) || 0))
+        }
+        meses[String(mKey)] = byUser
+      }
+      anos[String(yKey)] = meses
+    }
+  }
+  return { anos }
+}
+
+export function getChurnGtOperacaoMes(
+  anos: GtsChurnOperacaoDoc['anos'],
+  year: number,
+  month: number,
+  userId: string
+): number {
+  const y = String(year)
+  const m = String(month)
+  const uid = String(userId ?? '').trim()
+  if (!uid) return 0
+  return Math.max(0, Math.floor(Number(anos[y]?.[m]?.[uid]) || 0))
+}
+
+export async function getGtsChurnOperacao(): Promise<GtsChurnOperacaoDoc> {
+  const snap = await getDoc(gtsChurnOperacaoRef)
+  return parseGtsChurnOperacaoDoc(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+}
+
+export async function setChurnGtOperacaoMes(
+  year: number,
+  month: number,
+  userId: string,
+  total: number
+): Promise<void> {
+  const t = Math.max(0, Math.floor(Number(total) || 0))
+  const y = String(year)
+  const m = String(month)
+  const uid = String(userId ?? '').trim()
+  if (!uid) throw new Error('GT inválido.')
+
+  await runTransaction(db, async (trx) => {
+    const snap = await trx.get(gtsChurnOperacaoRef)
+    const cur = parseGtsChurnOperacaoDoc(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+    const byUser = { ...(cur.anos[y]?.[m] ?? {}), [uid]: t }
+    const meses = { ...(cur.anos[y] ?? {}), [m]: byUser }
+    const anos = { ...cur.anos, [y]: meses }
+    trx.set(gtsChurnOperacaoRef, { anos, atualizadoEm: serverTimestamp() }, { merge: true })
+  })
+}
+
+/** Soma `adicionar` e subtrai `remover` da quantidade de churn do GT no mês (mínimo 0). */
+export async function ajustarChurnGtOperacaoMes(
+  year: number,
+  month: number,
+  userId: string,
+  adicionar: number,
+  remover: number
+): Promise<number> {
+  const add = Math.max(0, Math.floor(Number(adicionar) || 0))
+  const rem = Math.max(0, Math.floor(Number(remover) || 0))
+  const y = String(year)
+  const m = String(month)
+  const uid = String(userId ?? '').trim()
+  if (!uid) throw new Error('GT inválido.')
+
+  let novo = 0
+  await runTransaction(db, async (trx) => {
+    const snap = await trx.get(gtsChurnOperacaoRef)
+    const cur = parseGtsChurnOperacaoDoc(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+    const base = getChurnGtOperacaoMes(cur.anos, year, month, uid)
+    novo = Math.max(0, base + add - rem)
+    const byUser = { ...(cur.anos[y]?.[m] ?? {}), [uid]: novo }
+    const meses = { ...(cur.anos[y] ?? {}), [m]: byUser }
+    const anos = { ...cur.anos, [y]: meses }
+    trx.set(gtsChurnOperacaoRef, { anos, atualizadoEm: serverTimestamp() }, { merge: true })
   })
   return novo
 }

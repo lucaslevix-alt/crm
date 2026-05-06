@@ -6,6 +6,7 @@ import { RankingCloserPage } from './RankingCloserPage'
 import { RankingSquadsPage } from './RankingSquadsPage'
 import { RankingOperacaoPage } from './RankingOperacaoPage'
 import { RankingBasePage } from './RankingBasePage'
+import { RankingGTsPage } from './RankingGTsPage'
 
 const ROTATE_MS = 30_000
 const REFRESH_MS = 60_000
@@ -16,6 +17,7 @@ const ALL_TV_SLIDES = [
   { key: 'closer', label: 'Closers', Component: RankingCloserPage },
   { key: 'squads', label: 'Squads', Component: RankingSquadsPage },
   { key: 'base', label: 'Base', Component: RankingBasePage },
+  { key: 'gts', label: 'GTs', Component: RankingGTsPage },
   { key: 'operacao', label: 'Operação', Component: RankingOperacaoPage }
 ] as const
 

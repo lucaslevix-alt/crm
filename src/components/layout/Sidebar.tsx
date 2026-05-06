@@ -347,6 +347,19 @@ export function Sidebar() {
                       <span className="nav-label">Base</span>
                     </NavLink>
                     <NavLink
+                      to="/config/gts"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="GTs"
+                      {...navPrefetch('/config/gts')}
+                    >
+                      <span className="nav-icon">
+                        <Trophy size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">GTs</span>
+                    </NavLink>
+                    <NavLink
                       to="/config/produtos"
                       className={({ isActive }) =>
                         `nav-item nav-item--sub${isActive ? ' active' : ''}`

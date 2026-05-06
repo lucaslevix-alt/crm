@@ -228,6 +228,7 @@ export function UserFormModal() {
           <select id="u-cargo" value={cargo} onChange={(e) => setCargo(e.target.value)}>
             <option value="sdr">SDR</option>
             <option value="closer">Closer</option>
+            <option value="gt">GT</option>
             <option value="admin">Admin</option>
           </select>
         </div>

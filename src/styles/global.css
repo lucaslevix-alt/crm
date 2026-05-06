@@ -617,6 +617,11 @@ select[multiple] option:checked {
     color: var(--purple)
 }
 
+.user-avatar.gt {
+    background: rgba(251, 191, 36, .22);
+    color: var(--amber, #f59e0b)
+}
+
 .u-name {
     font-size: 13px;
     font-weight: 700;
@@ -3456,6 +3461,11 @@ tr:hover td {
 .b-closer {
     background: rgba(167, 139, 250, .12);
     color: var(--purple)
+}
+
+.b-gt {
+    background: rgba(251, 191, 36, .14);
+    color: var(--amber, #f59e0b)
 }
 
 .b-admin {
@@ -6475,6 +6485,11 @@ input.di:-webkit-autofill:focus {
 [data-theme="light"] .b-closer {
     background: rgba(109, 40, 217, 0.1);
     color: var(--purple)
+}
+
+[data-theme="light"] .b-gt {
+    background: rgba(217, 119, 6, 0.12);
+    color: #b45309
 }
 
 [data-theme="light"] .b-admin {

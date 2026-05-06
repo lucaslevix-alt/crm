@@ -20,7 +20,7 @@ import type { CrmUser } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
 
 function canBeSquadMember(u: CrmUser): boolean {
-  return u.cargo === 'sdr' || u.cargo === 'closer' || u.cargo === 'admin'
+  return u.cargo === 'sdr' || u.cargo === 'closer' || u.cargo === 'admin' || u.cargo === 'gt'
 }
 
 function fmt(v: number): string {
@@ -431,7 +431,9 @@ export function GestaoOpPage() {
                 background: 'var(--bg3)'
               }}
             >
-              {eligibleUsers.length === 0 && <span style={{ color: 'var(--text3)', fontSize: 13 }}>Nenhum usuário SDR/Closer.</span>}
+              {eligibleUsers.length === 0 && (
+                <span style={{ color: 'var(--text3)', fontSize: 13 }}>Nenhum usuário SDR/Closer/GT/Admin elegível.</span>
+              )}
               {eligibleUsers.map((u) => (
                 <label
                   key={u.id}
@@ -571,7 +573,8 @@ export function GestaoOpPage() {
               </h3>
               <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>
                 Saldo atual: {fmtBRLSaldoOp(retirarTarget.bonusSaldo)}. Para cada tipo com valor, indique o nome do cliente. Retiradas
-                diminuem o saldo; crédito no bônus aumenta. Tudo é guardado no histórico.
+                diminuem o saldo; crédito no bônus aumenta. Tudo é guardado no histórico. O ranking de GTs por quantidade de churn é
+                cadastrado em Configurações → GTs (não usa estes valores em R$).
               </p>
 
               <LancamentoLinhaRetirada
