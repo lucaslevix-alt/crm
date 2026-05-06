@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { Factory, Pencil, Trash2 } from 'lucide-react'
+import { Factory, History, Pencil, Trash2 } from 'lucide-react'
 import {
   listSquadsOperacao,
   listUsers,
   addSquadOperacao,
   updateSquadOperacao,
   deleteSquadOperacao,
-  abaterBonusOperacao,
+  registrarLancamentosOperacao,
+  reverterLancamentoOperacao,
+  type LancamentoOperacaoRow,
+  type LancamentoOperacaoTipoDb,
   type SquadOperacaoRow
 } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
@@ -28,6 +32,65 @@ function parseMoney(raw: string): number {
   return Number.isFinite(n) ? Math.max(0, n) : 0
 }
 
+const LANCAMENTO_LABEL: Record<LancamentoOperacaoTipoDb, string> = {
+  churn: 'Churn',
+  inadimplencia: 'Inadimplência',
+  acrescimo: 'Acréscimo',
+  credito_bonus: 'Crédito no bônus'
+}
+
+function fmtDataHora(iso: string): string {
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return iso
+    return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
+}
+
+function LancamentoLinhaRetirada({
+  titulo,
+  valor,
+  cliente,
+  onValor,
+  onCliente
+}: {
+  titulo: string
+  valor: string
+  cliente: string
+  onValor: (v: string) => void
+  onCliente: (v: string) => void
+}) {
+  return (
+    <div
+      style={{
+        padding: 12,
+        borderRadius: 10,
+        border: '1px solid var(--border2)',
+        background: 'var(--bg3)',
+        marginBottom: 12
+      }}
+    >
+      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>{titulo}</div>
+      <div className="fg" style={{ marginBottom: 0 }}>
+        <label>Valor (retirada)</label>
+        <input className="di" inputMode="decimal" placeholder="0,00" value={valor} onChange={(e) => onValor(e.target.value)} />
+      </div>
+      <div className="fg" style={{ marginBottom: 0 }}>
+        <label>Nome do cliente</label>
+        <input
+          className="di"
+          placeholder="Obrigatório se houver valor"
+          value={cliente}
+          onChange={(e) => onCliente(e.target.value)}
+          autoComplete="off"
+        />
+      </div>
+    </div>
+  )
+}
+
 export function GestaoOpPage() {
   const { showToast } = useAppStore()
   const [loading, setLoading] = useState(true)
@@ -43,8 +106,19 @@ export function GestaoOpPage() {
   const [bonusSaldoStr, setBonusSaldoStr] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [abaterById, setAbaterById] = useState<Record<string, string>>({})
-  const [abaterBusy, setAbaterBusy] = useState<string | null>(null)
+  const [retirarTarget, setRetirarTarget] = useState<SquadOperacaoRow | null>(null)
+  const [retirarChurn, setRetirarChurn] = useState('')
+  const [retirarChurnCliente, setRetirarChurnCliente] = useState('')
+  const [retirarInad, setRetirarInad] = useState('')
+  const [retirarInadCliente, setRetirarInadCliente] = useState('')
+  const [retirarAcrescimo, setRetirarAcrescimo] = useState('')
+  const [retirarAcrescimoCliente, setRetirarAcrescimoCliente] = useState('')
+  const [retirarCredito, setRetirarCredito] = useState('')
+  const [retirarCreditoCliente, setRetirarCreditoCliente] = useState('')
+  const [retirarSaving, setRetirarSaving] = useState(false)
+
+  const [historicoSquad, setHistoricoSquad] = useState<SquadOperacaoRow | null>(null)
+  const [revertBusyId, setRevertBusyId] = useState<string | null>(null)
 
   const eligibleUsers = useMemo(() => users.filter(canBeSquadMember).sort((a, b) => a.nome.localeCompare(b.nome)), [users])
 
@@ -143,30 +217,123 @@ export function GestaoOpPage() {
     }
   }
 
-  async function handleAbater(s: SquadOperacaoRow) {
-    const raw = (abaterById[s.id] ?? '').trim()
-    const val = parseMoney(raw)
-    if (val <= 0) {
-      showToast('Informe um valor positivo para abater.', 'err')
+  function openRetirar(s: SquadOperacaoRow) {
+    setRetirarTarget(s)
+    setRetirarChurn('')
+    setRetirarChurnCliente('')
+    setRetirarInad('')
+    setRetirarInadCliente('')
+    setRetirarAcrescimo('')
+    setRetirarAcrescimoCliente('')
+    setRetirarCredito('')
+    setRetirarCreditoCliente('')
+  }
+
+  function closeRetirar() {
+    if (retirarSaving) return
+    setRetirarTarget(null)
+  }
+
+  async function handleRetirarSalvar() {
+    if (!retirarTarget) return
+
+    const blocos: { tipo: LancamentoOperacaoTipoDb; valor: number; cliente: string }[] = [
+      { tipo: 'churn', valor: parseMoney(retirarChurn), cliente: retirarChurnCliente.trim() },
+      { tipo: 'inadimplencia', valor: parseMoney(retirarInad), cliente: retirarInadCliente.trim() },
+      { tipo: 'acrescimo', valor: parseMoney(retirarAcrescimo), cliente: retirarAcrescimoCliente.trim() },
+      { tipo: 'credito_bonus', valor: parseMoney(retirarCredito), cliente: retirarCreditoCliente.trim() }
+    ]
+
+    const ativos = blocos.filter((b) => b.valor > 0)
+    for (const b of ativos) {
+      if (!b.cliente) {
+        showToast(`Informe o nome do cliente em: ${LANCAMENTO_LABEL[b.tipo]}.`, 'err')
+        return
+      }
+    }
+
+    if (ativos.length === 0) {
+      showToast('Preencha pelo menos um lançamento com valor e nome do cliente.', 'err')
       return
     }
-    setAbaterBusy(s.id)
+
+    setRetirarSaving(true)
     try {
-      await abaterBonusOperacao(s.id, val)
-      setAbaterById((prev) => ({ ...prev, [s.id]: '' }))
-      showToast(`Abatido ${fmt(val)} do bônus de "${s.nome}".`)
+      await registrarLancamentosOperacao(
+        retirarTarget.id,
+        ativos.map((b) => ({ tipo: b.tipo, valor: b.valor, clienteNome: b.cliente }))
+      )
+      showToast('Lançamentos registados e saldo atualizado.')
+      setRetirarTarget(null)
       await load()
     } catch (err) {
-      showToast(formatFirebaseOrUnknownError(err) || 'Erro ao abater', 'err')
+      showToast(formatFirebaseOrUnknownError(err) || 'Erro ao registar lançamentos', 'err')
     } finally {
-      setAbaterBusy(null)
+      setRetirarSaving(false)
     }
   }
+
+  async function handleReverter(l: LancamentoOperacaoRow) {
+    if (!historicoSquad || l.revertidoEm) return
+    if (
+      !window.confirm(
+        `Reverter este lançamento?\n\n${LANCAMENTO_LABEL[l.tipo]} · ${l.clienteNome} · ${fmt(l.valor)}\n\nO saldo do squad será ajustado.`
+      )
+    ) {
+      return
+    }
+    setRevertBusyId(l.id)
+    try {
+      await reverterLancamentoOperacao(historicoSquad.id, l.id)
+      showToast('Lançamento revertido.')
+      const snap = await listSquadsOperacao()
+      setSquads(snap)
+      const u = snap.find((x) => x.id === historicoSquad.id)
+      if (u) setHistoricoSquad(u)
+    } catch (err) {
+      showToast(formatFirebaseOrUnknownError(err) || 'Erro ao reverter', 'err')
+    } finally {
+      setRevertBusyId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (!retirarTarget) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (retirarSaving) return
+      setRetirarTarget(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [retirarTarget, retirarSaving])
+
+  useEffect(() => {
+    if (!historicoSquad) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (revertBusyId) return
+      setHistoricoSquad(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [historicoSquad, revertBusyId])
 
   function memberLabel(uid: string): string {
     const u = users.find((x) => x.id === uid)
     return u ? `${u.nome} (${String(u.cargo).toUpperCase()})` : uid
   }
+
+  const totalRetiradas =
+    parseMoney(retirarChurn) + parseMoney(retirarInad) + parseMoney(retirarAcrescimo)
+  const totalCredito = parseMoney(retirarCredito)
+
+  const historicoOrdenado = useMemo(() => {
+    if (!historicoSquad?.lancamentos?.length) return []
+    return [...historicoSquad.lancamentos].sort(
+      (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()
+    )
+  }, [historicoSquad])
 
   return (
     <div className="content">
@@ -179,8 +346,9 @@ export function GestaoOpPage() {
           Gestão OP
         </h2>
         <p style={{ color: 'var(--text2)' }}>
-          Cadastre squads operacionais (nome, foto, membros) e o bônus inicial. Use o saldo para acompanhar o que ainda resta e
-          abata valores quando as regras internas exigirem. Estes squads são independentes dos squads comerciais.
+          Cadastre squads operacionais (nome, foto, membros) e o bônus inicial. Em Retirar, cada tipo tem valor e nome do
+          cliente; tudo fica no histórico consultável. Crédito no bônus aumenta o saldo. Pode reverter lançamentos ativos pelo
+          histórico.
         </p>
       </div>
 
@@ -335,30 +503,18 @@ export function GestaoOpPage() {
                     ? s.memberIds.map((id) => memberLabel(id)).join(' · ')
                     : 'Sem membros.'}
                 </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    gap: 8,
-                    marginTop: 10
-                  }}
-                >
-                  <input
-                    className="di"
-                    style={{ maxWidth: 140, margin: 0 }}
-                    inputMode="decimal"
-                    placeholder="Abater R$"
-                    value={abaterById[s.id] ?? ''}
-                    onChange={(e) => setAbaterById((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                  />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => openRetirar(s)}>
+                    Retirar / crédito
+                  </button>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
-                    onClick={() => handleAbater(s)}
-                    disabled={abaterBusy === s.id}
+                    onClick={() => setHistoricoSquad(s)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
-                    {abaterBusy === s.id ? 'Aplicando…' : 'Abater do bônus'}
+                    <History size={16} strokeWidth={1.65} aria-hidden />
+                    Histórico
                   </button>
                 </div>
               </div>
@@ -373,6 +529,180 @@ export function GestaoOpPage() {
             </div>
           ))}
       </div>
+
+      {retirarTarget &&
+        createPortal(
+          <div className="mo" onClick={closeRetirar} role="presentation">
+            <div
+              className="modal"
+              style={{ maxWidth: 520, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="retirar-op-title"
+            >
+              <h3 id="retirar-op-title" className="page-title-row" style={{ fontSize: 18, marginBottom: 8 }}>
+                Lançamentos — {retirarTarget.nome}
+              </h3>
+              <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>
+                Saldo atual: {fmt(retirarTarget.bonusSaldo)}. Para cada tipo com valor, indique o nome do cliente. Retiradas
+                diminuem o saldo; crédito no bônus aumenta. Tudo é guardado no histórico.
+              </p>
+
+              <LancamentoLinhaRetirada
+                titulo="Churn"
+                valor={retirarChurn}
+                cliente={retirarChurnCliente}
+                onValor={setRetirarChurn}
+                onCliente={setRetirarChurnCliente}
+              />
+              <LancamentoLinhaRetirada
+                titulo="Inadimplência"
+                valor={retirarInad}
+                cliente={retirarInadCliente}
+                onValor={setRetirarInad}
+                onCliente={setRetirarInadCliente}
+              />
+              <LancamentoLinhaRetirada
+                titulo="Acréscimo"
+                valor={retirarAcrescimo}
+                cliente={retirarAcrescimoCliente}
+                onValor={setRetirarAcrescimo}
+                onCliente={setRetirarAcrescimoCliente}
+              />
+
+              <div
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  border: '1px solid var(--border2)',
+                  background: 'var(--bg3)',
+                  marginBottom: 12
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Crédito no bônus</div>
+                <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>
+                  Aumenta o saldo (ex.: correção ou estorno interno registado com cliente).
+                </p>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Valor (crédito)</label>
+                  <input
+                    className="di"
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    value={retirarCredito}
+                    onChange={(e) => setRetirarCredito(e.target.value)}
+                  />
+                </div>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Nome do cliente</label>
+                  <input
+                    className="di"
+                    placeholder="Obrigatório se houver valor"
+                    value={retirarCreditoCliente}
+                    onChange={(e) => setRetirarCreditoCliente(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+
+              <p style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>
+                Soma retiradas neste envio: {fmt(totalRetiradas)} · Crédito: {fmt(totalCredito)} · Líquido no saldo:{' '}
+                {fmt(totalCredito - totalRetiradas)}
+              </p>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                <button type="button" className="btn btn-ghost" onClick={closeRetirar} disabled={retirarSaving}>
+                  Cancelar
+                </button>
+                <button type="button" className="btn btn-primary" onClick={handleRetirarSalvar} disabled={retirarSaving}>
+                  {retirarSaving ? 'Salvando…' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {historicoSquad &&
+        createPortal(
+          <div className="mo" onClick={() => !revertBusyId && setHistoricoSquad(null)} role="presentation">
+            <div
+              className="modal"
+              style={{ maxWidth: 640, width: '100%', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="hist-op-title"
+            >
+              <h3 id="hist-op-title" className="page-title-row" style={{ fontSize: 18, marginBottom: 8 }}>
+                Histórico — {historicoSquad.nome}
+              </h3>
+              <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
+                Saldo atual: {fmt(historicoSquad.bonusSaldo)}. Lançamentos revertidos permanecem visíveis para auditoria.
+              </p>
+              <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, marginBottom: 12 }}>
+                {historicoOrdenado.length === 0 ? (
+                  <p style={{ color: 'var(--text3)', fontSize: 13 }}>Nenhum lançamento registado.</p>
+                ) : (
+                  <table className="rank-perf-table" style={{ width: '100%', fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        <th className="rank-perf-th">Data</th>
+                        <th className="rank-perf-th">Tipo</th>
+                        <th className="rank-perf-th">Cliente</th>
+                        <th className="rank-perf-th rank-perf-th--num">Valor</th>
+                        <th className="rank-perf-th">Efeito</th>
+                        <th className="rank-perf-th" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicoOrdenado.map((l) => {
+                        const cred = l.tipo === 'credito_bonus'
+                        const rev = !!l.revertidoEm
+                        return (
+                          <tr key={l.id} style={{ opacity: rev ? 0.55 : 1 }}>
+                            <td className="rank-perf-td">{fmtDataHora(l.criadoEm)}</td>
+                            <td className="rank-perf-td">{LANCAMENTO_LABEL[l.tipo]}</td>
+                            <td className="rank-perf-td">{l.clienteNome || '—'}</td>
+                            <td className="rank-perf-td rank-perf-td--num">{fmt(l.valor)}</td>
+                            <td className="rank-perf-td" style={{ fontSize: 12 }}>
+                              {rev ? (
+                                <span style={{ color: 'var(--text3)' }}>Revertido {fmtDataHora(l.revertidoEm!)}</span>
+                              ) : cred ? (
+                                <span style={{ color: 'var(--green)' }}>+ saldo</span>
+                              ) : (
+                                <span style={{ color: 'var(--red)' }}>− saldo</span>
+                              )}
+                            </td>
+                            <td className="rank-perf-td rank-perf-td--num">
+                              {!rev && (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  disabled={revertBusyId !== null}
+                                  onClick={() => handleReverter(l)}
+                                >
+                                  {revertBusyId === l.id ? '…' : 'Reverter'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-ghost" onClick={() => setHistoricoSquad(null)} disabled={!!revertBusyId}>
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

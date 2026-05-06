@@ -1473,6 +1473,23 @@ export async function deleteSquad(id: string): Promise<void> {
   await deleteDoc(doc(db, 'squads', id))
 }
 
+/** Tipos de lançamento no histórico do squad operacional */
+export type LancamentoOperacaoTipoDb = 'churn' | 'inadimplencia' | 'acrescimo' | 'credito_bonus'
+
+export interface LancamentoOperacaoRow {
+  id: string
+  tipo: LancamentoOperacaoTipoDb
+  valor: number
+  clienteNome: string
+  criadoEm: string
+  /** Preenchido quando o lançamento foi revertido (ISO) */
+  revertidoEm: string | null
+}
+
+function lancamentoAumentaSaldo(tipo: LancamentoOperacaoTipoDb): boolean {
+  return tipo === 'credito_bonus'
+}
+
 /** Squads operacionais: disputa por saldo de bônus (independente dos squads comerciais) */
 export interface SquadOperacaoRow {
   id: string
@@ -1484,10 +1501,46 @@ export interface SquadOperacaoRow {
   /** Saldo atual após abatimentos */
   bonusSaldo: number
   ordem: number
+  /** Histórico de retiradas e créditos (consulta e reversão) */
+  lancamentos: LancamentoOperacaoRow[]
 }
 
 /** Um único doc em `config` (como `config/metas`) — evita nova coleção de raiz nas regras do Firebase. */
 const squadsOperacaoConfigRef = doc(db, 'config', 'squads_operacao')
+
+function parseLancamentoOperacaoRaw(x: unknown): LancamentoOperacaoRow | null {
+  if (!x || typeof x !== 'object') return null
+  const o = x as Record<string, unknown>
+  const id = String(o.id ?? '').trim()
+  if (!id) return null
+  const tr = String(o.tipo ?? '')
+  const tipo: LancamentoOperacaoTipoDb | null =
+    tr === 'churn' || tr === 'inadimplencia' || tr === 'acrescimo' || tr === 'credito_bonus' ? tr : null
+  if (!tipo) return null
+  const valor = Math.max(0, Number(o.valor) || 0)
+  const rev = o.revertidoEm
+  let revertidoEm: string | null = null
+  if (rev instanceof Timestamp) revertidoEm = rev.toDate().toISOString()
+  else if (typeof rev === 'string' && rev.trim()) revertidoEm = rev.trim()
+  const cr = o.criadoEm
+  let criadoEm = ''
+  if (cr instanceof Timestamp) criadoEm = cr.toDate().toISOString()
+  else if (typeof cr === 'string' && cr.trim()) criadoEm = cr.trim()
+  else criadoEm = new Date(0).toISOString()
+  return {
+    id,
+    tipo,
+    valor,
+    clienteNome: String(o.clienteNome ?? '').trim(),
+    criadoEm,
+    revertidoEm
+  }
+}
+
+function parseLancamentosOperacaoRaw(raw: unknown): LancamentoOperacaoRow[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map(parseLancamentoOperacaoRaw).filter((r): r is LancamentoOperacaoRow => r != null)
+}
 
 function parseSquadOperacaoItemRaw(x: unknown): SquadOperacaoRow | null {
   if (!x || typeof x !== 'object') return null
@@ -1504,7 +1557,8 @@ function parseSquadOperacaoItemRaw(x: unknown): SquadOperacaoRow | null {
     memberIds: Array.isArray(o.memberIds) ? o.memberIds.map((v) => String(v)) : [],
     bonusInicial: bi,
     bonusSaldo: Math.max(0, bs) || 0,
-    ordem: Number(o.ordem ?? 0)
+    ordem: Number(o.ordem ?? 0),
+    lancamentos: parseLancamentosOperacaoRaw(o.lancamentos)
   }
 }
 
@@ -1523,7 +1577,15 @@ function squadsOperacaoToFirestorePayload(items: SquadOperacaoRow[]): Record<str
     memberIds: s.memberIds,
     bonusInicial: s.bonusInicial,
     bonusSaldo: s.bonusSaldo,
-    ordem: s.ordem
+    ordem: s.ordem,
+    lancamentos: (s.lancamentos ?? []).map((L) => ({
+      id: L.id,
+      tipo: L.tipo,
+      valor: L.valor,
+      clienteNome: L.clienteNome,
+      criadoEm: L.criadoEm,
+      revertidoEm: L.revertidoEm
+    }))
   }))
 }
 
@@ -1577,7 +1639,8 @@ export async function addSquadOperacao(params: {
       memberIds: params.memberIds,
       bonusInicial: bi,
       bonusSaldo: bi,
-      ordem
+      ordem,
+      lancamentos: []
     }
     const next = [...items, row]
     trx.set(
@@ -1610,7 +1673,8 @@ export async function updateSquadOperacao(
       fotoUrl: (params.fotoUrl ?? '').trim(),
       memberIds: params.memberIds,
       bonusInicial: bi,
-      bonusSaldo: bs
+      bonusSaldo: bs,
+      lancamentos: prev.lancamentos ?? []
     }
     trx.set(
       squadsOperacaoConfigRef,
@@ -1620,19 +1684,89 @@ export async function updateSquadOperacao(
   })
 }
 
-export async function abaterBonusOperacao(id: string, valor: number): Promise<void> {
-  const v = Math.max(0, Number(valor) || 0)
-  if (v <= 0) return
+/** Regista um ou mais lançamentos (retirada ou crédito) com nome do cliente; atualiza saldo e histórico. */
+export async function registrarLancamentosOperacao(
+  squadId: string,
+  entries: { tipo: LancamentoOperacaoTipoDb; valor: number; clienteNome: string }[]
+): Promise<void> {
+  const normalized = entries
+    .map((e) => ({
+      tipo: e.tipo,
+      valor: Math.max(0, Number(e.valor) || 0),
+      clienteNome: e.clienteNome.trim()
+    }))
+    .filter((e) => e.valor > 0)
+  if (normalized.length === 0) throw new Error('Nenhum lançamento com valor positivo.')
+  for (const e of normalized) {
+    if (!e.clienteNome) {
+      throw new Error('Informe o nome do cliente em cada lançamento com valor.')
+    }
+  }
 
   await runTransaction(db, async (trx) => {
     const snap = await trx.get(squadsOperacaoConfigRef)
     const items = squadsOperacaoItemsFromSnapData(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
-    const idx = items.findIndex((s) => s.id === id)
+    const idx = items.findIndex((s) => s.id === squadId)
     if (idx < 0) throw new Error('Squad operacional não encontrado.')
-    const cur = items[idx].bonusSaldo
-    const nextSaldo = Math.max(0, cur - v)
+    const squad = items[idx]
+    const nowIso = new Date().toISOString()
+    const makeId = () =>
+      globalThis.crypto?.randomUUID?.() ?? `l_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+
+    let saldo = squad.bonusSaldo
+    const novos: LancamentoOperacaoRow[] = normalized.map((e) => {
+      const L: LancamentoOperacaoRow = {
+        id: makeId(),
+        tipo: e.tipo,
+        valor: e.valor,
+        clienteNome: e.clienteNome,
+        criadoEm: nowIso,
+        revertidoEm: null
+      }
+      if (lancamentoAumentaSaldo(e.tipo)) saldo += e.valor
+      else saldo = Math.max(0, saldo - e.valor)
+      return L
+    })
+
     const next = [...items]
-    next[idx] = { ...items[idx], bonusSaldo: nextSaldo }
+    next[idx] = {
+      ...squad,
+      bonusSaldo: saldo,
+      lancamentos: [...(squad.lancamentos ?? []), ...novos]
+    }
+    trx.set(
+      squadsOperacaoConfigRef,
+      { items: squadsOperacaoToFirestorePayload(next), atualizadoEm: serverTimestamp() },
+      { merge: true }
+    )
+  })
+}
+
+/** Anula um lançamento ativo: ajusta o saldo no sentido oposto e marca `revertidoEm`. */
+export async function reverterLancamentoOperacao(squadId: string, lancamentoId: string): Promise<void> {
+  await runTransaction(db, async (trx) => {
+    const snap = await trx.get(squadsOperacaoConfigRef)
+    const items = squadsOperacaoItemsFromSnapData(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+    const idx = items.findIndex((s) => s.id === squadId)
+    if (idx < 0) throw new Error('Squad operacional não encontrado.')
+    const squad = items[idx]
+    const lancs = squad.lancamentos ?? []
+    const li = lancs.findIndex((l) => l.id === lancamentoId)
+    if (li < 0) throw new Error('Lançamento não encontrado.')
+    const L = lancs[li]
+    if (L.revertidoEm) throw new Error('Este lançamento já foi revertido.')
+
+    let saldo = squad.bonusSaldo
+    if (lancamentoAumentaSaldo(L.tipo)) {
+      saldo = Math.max(0, saldo - L.valor)
+    } else {
+      saldo += L.valor
+    }
+
+    const nowIso = new Date().toISOString()
+    const updatedLancs = lancs.map((l, i) => (i === li ? { ...l, revertidoEm: nowIso } : l))
+    const next = [...items]
+    next[idx] = { ...squad, bonusSaldo: saldo, lancamentos: updatedLancs }
     trx.set(
       squadsOperacaoConfigRef,
       { items: squadsOperacaoToFirestorePayload(next), atualizadoEm: serverTimestamp() },
