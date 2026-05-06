@@ -9,6 +9,7 @@ const ROUTE_TITLES: Record<string, string> = {
   funil: 'Funil de Conversão',
   metas: 'Metas',
   rankings: 'Classificação',
+  operacao: 'Operação',
   squads: 'Squads',
   usuarios: 'Usuários',
   produtos: 'Produtos',
@@ -25,6 +26,7 @@ function getPageTitle(pathname: string): string {
     if (parts[1] === 'metas') return 'Configuração de metas'
     if (parts[1] === 'usuarios') return 'Usuários'
     if (parts[1] === 'squads') return 'Squads'
+    if (parts[1] === 'gestao-op') return 'Gestão OP'
     if (parts[1] === 'produtos') return 'Produtos'
     return ROUTE_TITLES.config
   }

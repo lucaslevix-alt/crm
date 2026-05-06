@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Contact,
   Filter,
+  Factory,
   LayoutDashboard,
   Link2,
   CalendarClock,
@@ -222,6 +223,17 @@ export function Sidebar() {
               </span>
               <span className="nav-label">Classificação</span>
             </NavLink>
+            <NavLink
+              to="/operacao"
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              title="Operação"
+              {...navPrefetch('/operacao')}
+            >
+              <span className="nav-icon">
+                <Factory {...icNavStripe} />
+              </span>
+              <span className="nav-label">Operação</span>
+            </NavLink>
           </div>
 
           {isAdmin && (
@@ -306,6 +318,19 @@ export function Sidebar() {
                         <UsersRound size={16} strokeWidth={1.5} aria-hidden />
                       </span>
                       <span className="nav-label">Squads</span>
+                    </NavLink>
+                    <NavLink
+                      to="/config/gestao-op"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Gestão OP"
+                      {...navPrefetch('/config/gestao-op')}
+                    >
+                      <span className="nav-icon">
+                        <Factory size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Gestão OP</span>
                     </NavLink>
                     <NavLink
                       to="/config/produtos"

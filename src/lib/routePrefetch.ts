@@ -45,6 +45,12 @@ export function prefetchPath(raw: string) {
     runOnce('p:metas', () => import('../pages/MetasPage'))
     return
   }
+  if (a === 'operacao') {
+    runOnce('p:operacao', () =>
+      Promise.all([import('../pages/OperacaoPage'), import('../pages/RankingOperacaoPage')])
+    )
+    return
+  }
   if (a === 'rankings') {
     runOnce('p:rankings-all', () =>
       Promise.all([
@@ -52,6 +58,7 @@ export function prefetchPath(raw: string) {
         import('../pages/RankingSDRPage'),
         import('../pages/RankingCloserPage'),
         import('../pages/RankingSquadsPage'),
+        import('../pages/RankingOperacaoPage'),
         import('../pages/RankingMetasPage'),
         import('../pages/RankingTVPage')
       ])
@@ -70,6 +77,7 @@ export function prefetchPath(raw: string) {
         import('../pages/RelatoriosComissoesPage'),
         import('../pages/UsuariosPage'),
         import('../pages/SquadsPage'),
+        import('../pages/GestaoOpPage'),
         import('../pages/ProdutosPage')
       ])
     )

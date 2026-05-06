@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ChevronRight, FileSpreadsheet, Package, Settings, Target, Users, UsersRound } from 'lucide-react'
+import { ChevronRight, Factory, FileSpreadsheet, Package, Settings, Target, Users, UsersRound } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 
 export function ConfigHubPage() {
@@ -72,6 +72,19 @@ export function ConfigHubPage() {
             <span className="config-hub-card-body">
               <span className="config-hub-card-title">Squads</span>
               <span className="config-hub-card-text">Equipas, membros e faturamento por squad.</span>
+            </span>
+            <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
+          </Link>
+        )}
+
+        {isAdmin && (
+          <Link to="/config/gestao-op" className="config-hub-card">
+            <span className="config-hub-card-ic">
+              <Factory size={22} strokeWidth={1.65} aria-hidden />
+            </span>
+            <span className="config-hub-card-body">
+              <span className="config-hub-card-title">Gestão OP</span>
+              <span className="config-hub-card-text">Squads operacionais, bônus inicial e abatimentos de saldo.</span>
             </span>
             <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
           </Link>

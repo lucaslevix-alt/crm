@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Trophy } from 'lucide-react'
 
 export type PodiumPerson = {
@@ -6,7 +7,7 @@ export type PodiumPerson = {
   photoUrl?: string
   valueMain: string
   valueLabel?: string
-  sub?: string
+  sub?: ReactNode
 }
 
 function PodiumSlot({

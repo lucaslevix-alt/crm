@@ -21,6 +21,8 @@ import {
   RankingSDRPage,
   RankingTVPage,
   RankingsPage,
+  OperacaoPage,
+  GestaoOpPage,
   SquadsPage,
   RegistrosPage,
   AgendaPage,
@@ -104,6 +106,7 @@ export default function App() {
               />
               <Route path="funil" element={<FunilPage />} />
               <Route path="metas" element={<MetasPage />} />
+              <Route path="operacao" element={<OperacaoPage />} />
               <Route path="rankings" element={<RankingsPage />}>
                 <Route index element={<Navigate to="sdr" replace />} />
                 <Route path="sdr" element={<RankingSDRPage />} />
@@ -148,6 +151,14 @@ export default function App() {
                   element={
                     <AdminOnlyRoute>
                       <SquadsPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="gestao-op"
+                  element={
+                    <AdminOnlyRoute>
+                      <GestaoOpPage />
                     </AdminOnlyRoute>
                   }
                 />

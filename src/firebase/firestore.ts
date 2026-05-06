@@ -1473,6 +1473,188 @@ export async function deleteSquad(id: string): Promise<void> {
   await deleteDoc(doc(db, 'squads', id))
 }
 
+/** Squads operacionais: disputa por saldo de bônus (independente dos squads comerciais) */
+export interface SquadOperacaoRow {
+  id: string
+  nome: string
+  fotoUrl: string
+  memberIds: string[]
+  /** Valor inicial do bônus (referência para % mantido e valor perdido) */
+  bonusInicial: number
+  /** Saldo atual após abatimentos */
+  bonusSaldo: number
+  ordem: number
+}
+
+/** Um único doc em `config` (como `config/metas`) — evita nova coleção de raiz nas regras do Firebase. */
+const squadsOperacaoConfigRef = doc(db, 'config', 'squads_operacao')
+
+function parseSquadOperacaoItemRaw(x: unknown): SquadOperacaoRow | null {
+  if (!x || typeof x !== 'object') return null
+  const o = x as Record<string, unknown>
+  const id = String(o.id ?? '').trim()
+  if (!id) return null
+  const bi = Number(o.bonusInicial ?? 0) || 0
+  const bsRaw = o.bonusSaldo
+  const bs = bsRaw != null && Number.isFinite(Number(bsRaw)) ? Number(bsRaw) : bi
+  return {
+    id,
+    nome: String(o.nome ?? ''),
+    fotoUrl: String(o.fotoUrl ?? ''),
+    memberIds: Array.isArray(o.memberIds) ? o.memberIds.map((v) => String(v)) : [],
+    bonusInicial: bi,
+    bonusSaldo: Math.max(0, bs) || 0,
+    ordem: Number(o.ordem ?? 0)
+  }
+}
+
+function squadsOperacaoItemsFromSnapData(data: Record<string, unknown> | undefined): SquadOperacaoRow[] {
+  const raw = data?.items
+  if (!Array.isArray(raw)) return []
+  const rows = raw.map(parseSquadOperacaoItemRaw).filter((r): r is SquadOperacaoRow => r != null)
+  return rows
+}
+
+function squadsOperacaoToFirestorePayload(items: SquadOperacaoRow[]): Record<string, unknown>[] {
+  return items.map((s) => ({
+    id: s.id,
+    nome: s.nome,
+    fotoUrl: s.fotoUrl,
+    memberIds: s.memberIds,
+    bonusInicial: s.bonusInicial,
+    bonusSaldo: s.bonusSaldo,
+    ordem: s.ordem
+  }))
+}
+
+function validateSquadOperacaoMembersUniqueInList(
+  memberIds: string[],
+  excludeId: string | undefined,
+  all: SquadOperacaoRow[]
+): void {
+  const uniq = [...new Set(memberIds.filter(Boolean))]
+  if (uniq.length !== memberIds.filter(Boolean).length) {
+    throw new Error('Membro duplicado no mesmo squad operacional.')
+  }
+  const set = new Set(uniq)
+  for (const s of all) {
+    if (excludeId && s.id === excludeId) continue
+    for (const uid of s.memberIds) {
+      if (set.has(uid)) {
+        throw new Error(
+          `Um ou mais membros já estão no squad operacional "${s.nome}". Cada pessoa pode pertencer a apenas um squad OP.`
+        )
+      }
+    }
+  }
+}
+
+export async function listSquadsOperacao(): Promise<SquadOperacaoRow[]> {
+  const snap = await getDoc(squadsOperacaoConfigRef)
+  const rows = squadsOperacaoItemsFromSnapData(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+  rows.sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome))
+  return rows
+}
+
+export async function addSquadOperacao(params: {
+  nome: string
+  fotoUrl?: string
+  memberIds: string[]
+  bonusInicial: number
+}): Promise<string> {
+  const bi = Math.max(0, Number(params.bonusInicial) || 0)
+  const newId = globalThis.crypto?.randomUUID?.() ?? `op_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+
+  await runTransaction(db, async (trx) => {
+    const snap = await trx.get(squadsOperacaoConfigRef)
+    const items = squadsOperacaoItemsFromSnapData(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+    validateSquadOperacaoMembersUniqueInList(params.memberIds, undefined, items)
+    const ordem = items.length ? Math.max(...items.map((s) => s.ordem)) + 1 : 0
+    const row: SquadOperacaoRow = {
+      id: newId,
+      nome: params.nome.trim(),
+      fotoUrl: (params.fotoUrl ?? '').trim(),
+      memberIds: params.memberIds,
+      bonusInicial: bi,
+      bonusSaldo: bi,
+      ordem
+    }
+    const next = [...items, row]
+    trx.set(
+      squadsOperacaoConfigRef,
+      { items: squadsOperacaoToFirestorePayload(next), atualizadoEm: serverTimestamp() },
+      { merge: true }
+    )
+  })
+  return newId
+}
+
+export async function updateSquadOperacao(
+  id: string,
+  params: { nome: string; fotoUrl?: string; memberIds: string[]; bonusInicial: number; bonusSaldo: number }
+): Promise<void> {
+  const bi = Math.max(0, Number(params.bonusInicial) || 0)
+  const bs = Math.max(0, Number(params.bonusSaldo) || 0)
+
+  await runTransaction(db, async (trx) => {
+    const snap = await trx.get(squadsOperacaoConfigRef)
+    const items = squadsOperacaoItemsFromSnapData(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+    const idx = items.findIndex((s) => s.id === id)
+    if (idx < 0) throw new Error('Squad operacional não encontrado.')
+    validateSquadOperacaoMembersUniqueInList(params.memberIds, id, items)
+    const prev = items[idx]
+    const next = [...items]
+    next[idx] = {
+      ...prev,
+      nome: params.nome.trim(),
+      fotoUrl: (params.fotoUrl ?? '').trim(),
+      memberIds: params.memberIds,
+      bonusInicial: bi,
+      bonusSaldo: bs
+    }
+    trx.set(
+      squadsOperacaoConfigRef,
+      { items: squadsOperacaoToFirestorePayload(next), atualizadoEm: serverTimestamp() },
+      { merge: true }
+    )
+  })
+}
+
+export async function abaterBonusOperacao(id: string, valor: number): Promise<void> {
+  const v = Math.max(0, Number(valor) || 0)
+  if (v <= 0) return
+
+  await runTransaction(db, async (trx) => {
+    const snap = await trx.get(squadsOperacaoConfigRef)
+    const items = squadsOperacaoItemsFromSnapData(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+    const idx = items.findIndex((s) => s.id === id)
+    if (idx < 0) throw new Error('Squad operacional não encontrado.')
+    const cur = items[idx].bonusSaldo
+    const nextSaldo = Math.max(0, cur - v)
+    const next = [...items]
+    next[idx] = { ...items[idx], bonusSaldo: nextSaldo }
+    trx.set(
+      squadsOperacaoConfigRef,
+      { items: squadsOperacaoToFirestorePayload(next), atualizadoEm: serverTimestamp() },
+      { merge: true }
+    )
+  })
+}
+
+export async function deleteSquadOperacao(id: string): Promise<void> {
+  await runTransaction(db, async (trx) => {
+    const snap = await trx.get(squadsOperacaoConfigRef)
+    const items = squadsOperacaoItemsFromSnapData(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined)
+    const next = items.filter((s) => s.id !== id)
+    if (next.length === items.length) throw new Error('Squad operacional não encontrado.')
+    trx.set(
+      squadsOperacaoConfigRef,
+      { items: squadsOperacaoToFirestorePayload(next), atualizadoEm: serverTimestamp() },
+      { merge: true }
+    )
+  })
+}
+
 /** Agenda interna (Firestore): reuniões agendadas pelo SDR, ações do closer */
 export type AgendamentoStatus = 'agendada' | 'realizada' | 'venda' | 'no_show' | 'reagendada'
 

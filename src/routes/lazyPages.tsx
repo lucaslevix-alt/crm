@@ -29,6 +29,12 @@ export const RankingMetasPage = lazy(() =>
 export const RankingTVPage = lazy(() =>
   import('../pages/RankingTVPage').then((m) => ({ default: m.RankingTVPage }))
 )
+export const OperacaoPage = lazy(() =>
+  import('../pages/OperacaoPage').then((m) => ({ default: m.OperacaoPage }))
+)
+export const GestaoOpPage = lazy(() =>
+  import('../pages/GestaoOpPage').then((m) => ({ default: m.GestaoOpPage }))
+)
 export const SquadsPage = lazy(() => import('../pages/SquadsPage').then((m) => ({ default: m.SquadsPage })))
 export const MetaAdsPage = lazy(() => import('../pages/MetaAdsPage').then((m) => ({ default: m.MetaAdsPage })))
 export const MetaLeadsPage = lazy(() => import('../pages/MetaLeadsPage').then((m) => ({ default: m.MetaLeadsPage })))
