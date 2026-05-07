@@ -30,6 +30,21 @@ export function formatFirebaseOrUnknownError(err: unknown): string {
       if (code === 'functions/failed-precondition') {
         return err.message || 'Requisito não cumprido (ex.: planilha sem acesso público ou aba incorreta).'
       }
+      if (code === 'functions/unavailable') {
+        return (
+          err.message ||
+          'Serviço temporariamente indisponível. Verifique rede / Firebase ou tente em instantes.'
+        )
+      }
+      if (code === 'functions/internal') {
+        const msg = (err.message || '').trim()
+        if (msg && msg.toLowerCase() !== 'internal') return msg
+        return (
+          'Erro interno no servidor (sem detalhe). Refaça o deploy das functions ' +
+          '(npm run firebase:deploy:functions), confira o nome da aba e partilha da planilha ' +
+          '(“qualquer pessoa com o link” como leitor). Se persistir, veja os logs em Firebase Console → Functions.'
+        )
+      }
       return err.message || `Erro: ${code}`
     }
     if (err.code === 'permission-denied') return MSG_FIRESTORE_PERMISSION

@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Contact,
   Database,
   Filter,
   Factory,
@@ -142,17 +141,6 @@ export function Sidebar() {
                 <Megaphone {...icNavStripe} />
               </span>
               <span className="nav-label">Meta Ads</span>
-            </NavLink>
-            <NavLink
-              to="/leads-meta"
-              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-              title="Leads Meta"
-              {...navPrefetch('/leads-meta')}
-            >
-              <span className="nav-icon">
-                <Contact {...icNavStripe} />
-              </span>
-              <span className="nav-label">Leads Meta</span>
             </NavLink>
             <NavLink
               to="/registros"

@@ -190,40 +190,58 @@ function buildSheetCsvUrl(spreadsheetId, tabName) {
 }
 /** Proxy autenticado para Google Sheets (evita CORS no browser). */
 exports.fetchPublicSheetCsv = (0, https_1.onCall)(async (request) => {
-    const email = request.auth?.token?.email;
-    if (!email)
-        throw new https_1.HttpsError('unauthenticated', 'Login necessário.');
-    const cargo = await getCrmCargo(email);
-    if (!canFetchLeadsSheet(cargo))
-        throw new https_1.HttpsError('permission-denied', 'Sem permissão.');
-    const sheetUrlOrId = String(request.data?.sheetUrlOrId ?? '').trim();
-    const tab = String(request.data?.tab ?? '').trim();
-    if (!sheetUrlOrId)
-        throw new https_1.HttpsError('invalid-argument', 'sheetUrlOrId em falta.');
-    if (!tab)
-        throw new https_1.HttpsError('invalid-argument', 'tab em falta.');
-    if (tab.length > 120)
-        throw new https_1.HttpsError('invalid-argument', 'tab demasiado longo.');
-    const spreadsheetId = extractSpreadsheetId(sheetUrlOrId);
-    if (!spreadsheetId)
-        throw new https_1.HttpsError('invalid-argument', 'Link/ID da planilha inválido.');
-    const url = buildSheetCsvUrl(spreadsheetId, tab);
-    logger.info('fetchPublicSheetCsv', { spreadsheetId, tab });
-    let res;
     try {
-        res = await fetch(url, { method: 'GET' });
+        const email = request.auth?.token?.email;
+        if (!email)
+            throw new https_1.HttpsError('unauthenticated', 'Login necessário.');
+        const cargo = await getCrmCargo(email);
+        if (!canFetchLeadsSheet(cargo))
+            throw new https_1.HttpsError('permission-denied', 'Sem permissão.');
+        const sheetUrlOrId = String(request.data?.sheetUrlOrId ?? '').trim();
+        const tab = String(request.data?.tab ?? '').trim();
+        if (!sheetUrlOrId)
+            throw new https_1.HttpsError('invalid-argument', 'sheetUrlOrId em falta.');
+        if (!tab)
+            throw new https_1.HttpsError('invalid-argument', 'tab em falta.');
+        if (tab.length > 120)
+            throw new https_1.HttpsError('invalid-argument', 'tab demasiado longo.');
+        const spreadsheetId = extractSpreadsheetId(sheetUrlOrId);
+        if (!spreadsheetId)
+            throw new https_1.HttpsError('invalid-argument', 'Link/ID da planilha inválido.');
+        const url = buildSheetCsvUrl(spreadsheetId, tab);
+        logger.info('fetchPublicSheetCsv', { spreadsheetId, tab });
+        let res;
+        try {
+            res = await fetch(url, { method: 'GET' });
+        }
+        catch (netErr) {
+            logger.warn('fetchPublicSheetCsv fetch error', netErr);
+            throw new https_1.HttpsError('unavailable', 'Não foi possível contactar o Google Sheets. Verifique a rede ou tente mais tarde.');
+        }
+        if (!res.ok) {
+            let hint = `HTTP ${res.status}.`;
+            if (res.status === 401 || res.status === 403) {
+                hint +=
+                    ' A planilha precisa estar partilhada: “Qualquer pessoa com o link” como Leitor (ou público).';
+            }
+            throw new https_1.HttpsError('failed-precondition', `Falha ao carregar a planilha (${hint})`);
+        }
+        const csv = await res.text();
+        const trimmed = csv.trimStart();
+        if (trimmed.startsWith('<') || trimmed.toLowerCase().startsWith('<!doctype')) {
+            throw new https_1.HttpsError('failed-precondition', 'O Google devolveu HTML em vez de CSV. Confirme o nome exato da aba (ex.: cadastro nativo) e o link da planilha.');
+        }
+        if (!csv.trim())
+            throw new https_1.HttpsError('failed-precondition', 'Planilha vazia.');
+        if (csv.length > 4_000_000)
+            throw new https_1.HttpsError('failed-precondition', 'CSV demasiado grande.');
+        return { csv, spreadsheetId, tab };
     }
-    catch {
-        throw new https_1.HttpsError('internal', 'Falha ao contactar o Google Sheets.');
+    catch (e) {
+        if (e instanceof https_1.HttpsError)
+            throw e;
+        logger.error('fetchPublicSheetCsv unexpected', e);
+        throw new https_1.HttpsError('failed-precondition', 'Erro ao ler a planilha. Confirme o nome da aba e que o link está correto.');
     }
-    if (!res.ok) {
-        throw new https_1.HttpsError('failed-precondition', `Falha ao carregar a planilha (${res.status}). Verifique se está partilhada (qualquer um com link).`);
-    }
-    const csv = await res.text();
-    if (!csv.trim())
-        throw new https_1.HttpsError('failed-precondition', 'Planilha vazia.');
-    if (csv.length > 4_000_000)
-        throw new https_1.HttpsError('failed-precondition', 'CSV demasiado grande.');
-    return { csv, spreadsheetId, tab };
 });
 //# sourceMappingURL=index.js.map

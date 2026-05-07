@@ -170,37 +170,59 @@ function buildSheetCsvUrl(spreadsheetId: string, tabName: string): string {
 
 /** Proxy autenticado para Google Sheets (evita CORS no browser). */
 export const fetchPublicSheetCsv = onCall(async (request) => {
-  const email = request.auth?.token?.email
-  if (!email) throw new HttpsError('unauthenticated', 'Login necessário.')
-
-  const cargo = await getCrmCargo(email)
-  if (!canFetchLeadsSheet(cargo)) throw new HttpsError('permission-denied', 'Sem permissão.')
-
-  const sheetUrlOrId = String(request.data?.sheetUrlOrId ?? '').trim()
-  const tab = String(request.data?.tab ?? '').trim()
-  if (!sheetUrlOrId) throw new HttpsError('invalid-argument', 'sheetUrlOrId em falta.')
-  if (!tab) throw new HttpsError('invalid-argument', 'tab em falta.')
-  if (tab.length > 120) throw new HttpsError('invalid-argument', 'tab demasiado longo.')
-
-  const spreadsheetId = extractSpreadsheetId(sheetUrlOrId)
-  if (!spreadsheetId) throw new HttpsError('invalid-argument', 'Link/ID da planilha inválido.')
-
-  const url = buildSheetCsvUrl(spreadsheetId, tab)
-  logger.info('fetchPublicSheetCsv', { spreadsheetId, tab })
-  let res: Response
   try {
-    res = await fetch(url, { method: 'GET' })
-  } catch {
-    throw new HttpsError('internal', 'Falha ao contactar o Google Sheets.')
-  }
-  if (!res.ok) {
+    const email = request.auth?.token?.email
+    if (!email) throw new HttpsError('unauthenticated', 'Login necessário.')
+
+    const cargo = await getCrmCargo(email)
+    if (!canFetchLeadsSheet(cargo)) throw new HttpsError('permission-denied', 'Sem permissão.')
+
+    const sheetUrlOrId = String(request.data?.sheetUrlOrId ?? '').trim()
+    const tab = String(request.data?.tab ?? '').trim()
+    if (!sheetUrlOrId) throw new HttpsError('invalid-argument', 'sheetUrlOrId em falta.')
+    if (!tab) throw new HttpsError('invalid-argument', 'tab em falta.')
+    if (tab.length > 120) throw new HttpsError('invalid-argument', 'tab demasiado longo.')
+
+    const spreadsheetId = extractSpreadsheetId(sheetUrlOrId)
+    if (!spreadsheetId) throw new HttpsError('invalid-argument', 'Link/ID da planilha inválido.')
+
+    const url = buildSheetCsvUrl(spreadsheetId, tab)
+    logger.info('fetchPublicSheetCsv', { spreadsheetId, tab })
+    let res: Response
+    try {
+      res = await fetch(url, { method: 'GET' })
+    } catch (netErr) {
+      logger.warn('fetchPublicSheetCsv fetch error', netErr)
+      throw new HttpsError(
+        'unavailable',
+        'Não foi possível contactar o Google Sheets. Verifique a rede ou tente mais tarde.'
+      )
+    }
+    if (!res.ok) {
+      let hint = `HTTP ${res.status}.`
+      if (res.status === 401 || res.status === 403) {
+        hint +=
+          ' A planilha precisa estar partilhada: “Qualquer pessoa com o link” como Leitor (ou público).'
+      }
+      throw new HttpsError('failed-precondition', `Falha ao carregar a planilha (${hint})`)
+    }
+    const csv = await res.text()
+    const trimmed = csv.trimStart()
+    if (trimmed.startsWith('<') || trimmed.toLowerCase().startsWith('<!doctype')) {
+      throw new HttpsError(
+        'failed-precondition',
+        'O Google devolveu HTML em vez de CSV. Confirme o nome exato da aba (ex.: cadastro nativo) e o link da planilha.'
+      )
+    }
+    if (!csv.trim()) throw new HttpsError('failed-precondition', 'Planilha vazia.')
+    if (csv.length > 4_000_000) throw new HttpsError('failed-precondition', 'CSV demasiado grande.')
+    return { csv, spreadsheetId, tab }
+  } catch (e) {
+    if (e instanceof HttpsError) throw e
+    logger.error('fetchPublicSheetCsv unexpected', e)
     throw new HttpsError(
       'failed-precondition',
-      `Falha ao carregar a planilha (${res.status}). Verifique se está partilhada (qualquer um com link).`
+      'Erro ao ler a planilha. Confirme o nome da aba e que o link está correto.'
     )
   }
-  const csv = await res.text()
-  if (!csv.trim()) throw new HttpsError('failed-precondition', 'Planilha vazia.')
-  if (csv.length > 4_000_000) throw new HttpsError('failed-precondition', 'CSV demasiado grande.')
-  return { csv, spreadsheetId, tab }
 })
