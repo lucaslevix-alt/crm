@@ -16,6 +16,22 @@ export function formatFirebaseOrUnknownError(err: unknown): string {
     return err
   }
   if (err instanceof FirebaseError) {
+    const code = err.code || ''
+    if (code.startsWith('functions/')) {
+      if (code === 'functions/unauthenticated') {
+        return 'Sessão expirada ou não autenticado. Faça login novamente.'
+      }
+      if (code === 'functions/permission-denied') {
+        return err.message || 'Sem permissão para esta ação.'
+      }
+      if (code === 'functions/not-found') {
+        return 'Function não encontrada. Faça deploy: npm run firebase:deploy:functions'
+      }
+      if (code === 'functions/failed-precondition') {
+        return err.message || 'Requisito não cumprido (ex.: planilha sem acesso público ou aba incorreta).'
+      }
+      return err.message || `Erro: ${code}`
+    }
     if (err.code === 'permission-denied') return MSG_FIRESTORE_PERMISSION
     if (err.code === 'unauthenticated') {
       return 'Sessão expirada ou não autenticado. Faça login novamente.'

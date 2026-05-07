@@ -61,7 +61,11 @@ function toPublishedCsvUrl(url: string): string {
 
 function isAppsScriptUrl(url: string): boolean {
   const u = String(url ?? '').trim()
-  return u.includes('script.google.com') && u.includes('/macros/s/') && u.endsWith('/exec')
+  if (!u.includes('script.google.com') || !u.includes('/macros/s/') || !u.endsWith('/exec')) return false
+  const m = u.match(/\/macros\/s\/([^/]+)\/exec/i)
+  const seg = (m?.[1] ?? '').trim()
+  if (!seg || /xxxx/i.test(seg) || seg.length < 12) return false
+  return true
 }
 
 function pickColIndex(headers: string[], wanted: string[]): number {
@@ -88,7 +92,10 @@ function rowsFromCsv(grid: string[][]): { headers: string[]; rows: SheetRow[] } 
 export function LeadsMetaSheetPage() {
   const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem(LS_SHEET_URL) ?? DEFAULT_SHEET_URL)
   const [tab, setTab] = useState(() => localStorage.getItem(LS_SHEET_TAB) ?? DEFAULT_TAB)
-  const [scriptUrl, setScriptUrl] = useState(() => localStorage.getItem(LS_SCRIPT_URL) ?? '')
+  const [scriptUrl, setScriptUrl] = useState(() => {
+    const raw = localStorage.getItem(LS_SCRIPT_URL) ?? ''
+    return raw && isAppsScriptUrl(raw) ? raw : ''
+  })
   const [autoRefresh, setAutoRefresh] = useState(() => (localStorage.getItem(LS_AUTO_REFRESH) ?? '1') === '1')
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -109,6 +116,10 @@ export function LeadsMetaSheetPage() {
       let text = ''
       if (uploadedCsvText.trim()) {
         text = uploadedCsvText
+      } else if (spreadsheetId) {
+        const call = getCallable<{ sheetUrlOrId: string; tab: string }, { csv: string }>('fetchPublicSheetCsv')
+        const r = await call({ sheetUrlOrId: sheetUrl, tab: tab || DEFAULT_TAB })
+        text = String(r.data?.csv ?? '')
       } else if (effectiveScriptUrl) {
         const u = new URL(effectiveScriptUrl)
         u.searchParams.set('tab', tab || DEFAULT_TAB)
@@ -116,10 +127,6 @@ export function LeadsMetaSheetPage() {
         if (!res.ok) throw new Error(`Falha ao carregar via Apps Script (${res.status}).`)
         const json = (await res.json()) as { csv?: string }
         text = String(json?.csv ?? '')
-      } else if (spreadsheetId) {
-        const call = getCallable<{ sheetUrlOrId: string; tab: string }, { csv: string }>('fetchPublicSheetCsv')
-        const r = await call({ sheetUrlOrId: sheetUrl, tab: tab || DEFAULT_TAB })
-        text = String(r.data?.csv ?? '')
       } else if (publishedCsv) {
         const res = await fetch(publishedCsv)
         if (!res.ok) throw new Error(`Falha ao carregar o CSV (${res.status}).`)
@@ -139,7 +146,7 @@ export function LeadsMetaSheetPage() {
       try {
         localStorage.setItem(LS_SHEET_URL, sheetUrl)
         localStorage.setItem(LS_SHEET_TAB, tab)
-        localStorage.setItem(LS_SCRIPT_URL, scriptUrl)
+        localStorage.setItem(LS_SCRIPT_URL, isAppsScriptUrl(scriptUrl) ? scriptUrl : '')
         localStorage.setItem(LS_AUTO_REFRESH, autoRefresh ? '1' : '0')
       } catch {
         /* ignore */
@@ -258,7 +265,7 @@ export function LeadsMetaSheetPage() {
               className="di"
               value={scriptUrl}
               onChange={(e) => setScriptUrl(e.target.value)}
-              placeholder="https://script.google.com/macros/s/XXXX/exec"
+              placeholder="(deixe em branco se usar Firebase)"
             />
             <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>
               {effectiveScriptUrl ? (
