@@ -58,6 +58,9 @@ async function getCrmCargo(email) {
 function canUseMetaAds(cargo) {
     return cargo === 'admin' || cargo === 'sdr' || cargo === 'closer';
 }
+function canFetchLeadsSheet(cargo) {
+    return cargo === 'admin' || cargo === 'sdr' || cargo === 'closer' || cargo === 'gt';
+}
 function isAdmin(cargo) {
     return cargo === 'admin';
 }
@@ -191,7 +194,7 @@ exports.fetchPublicSheetCsv = (0, https_1.onCall)(async (request) => {
     if (!email)
         throw new https_1.HttpsError('unauthenticated', 'Login necessário.');
     const cargo = await getCrmCargo(email);
-    if (!canUseMetaAds(cargo))
+    if (!canFetchLeadsSheet(cargo))
         throw new https_1.HttpsError('permission-denied', 'Sem permissão.');
     const sheetUrlOrId = String(request.data?.sheetUrlOrId ?? '').trim();
     const tab = String(request.data?.tab ?? '').trim();

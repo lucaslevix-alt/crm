@@ -2,13 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { parseCsv } from '../lib/csv'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { getCallable } from '../firebase/functionsClient'
 
 const LS_SHEET_URL = 'leadsMetaSheetUrl'
 const LS_SHEET_TAB = 'leadsMetaSheetTab'
+const LS_SCRIPT_URL = 'leadsMetaScriptUrl'
+const LS_AUTO_REFRESH = 'leadsMetaAutoRefresh'
 
 const DEFAULT_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1m3mMpJy0HURqpoAQXLO8_9tSfLGfVhzD_tmJjKURAqA/edit?usp=sharing'
 const DEFAULT_TAB = 'Cadastro nativo'
+const DEFAULT_AUTO_REFRESH_SEC = 60
 
 const MQL_FAT_CODES = new Set(['de_r$_20_mil_a_r$_50_mil', 'de_r$_50_a_100_mil', 'acima_de_r$_100_mil'])
 
@@ -55,6 +59,11 @@ function toPublishedCsvUrl(url: string): string {
   return ''
 }
 
+function isAppsScriptUrl(url: string): boolean {
+  const u = String(url ?? '').trim()
+  return u.includes('script.google.com') && u.includes('/macros/s/') && u.endsWith('/exec')
+}
+
 function pickColIndex(headers: string[], wanted: string[]): number {
   const hn = headers.map((h) => normKey(h))
   for (const w of wanted) {
@@ -79,29 +88,45 @@ function rowsFromCsv(grid: string[][]): { headers: string[]; rows: SheetRow[] } 
 export function LeadsMetaSheetPage() {
   const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem(LS_SHEET_URL) ?? DEFAULT_SHEET_URL)
   const [tab, setTab] = useState(() => localStorage.getItem(LS_SHEET_TAB) ?? DEFAULT_TAB)
+  const [scriptUrl, setScriptUrl] = useState(() => localStorage.getItem(LS_SCRIPT_URL) ?? '')
+  const [autoRefresh, setAutoRefresh] = useState(() => (localStorage.getItem(LS_AUTO_REFRESH) ?? '1') === '1')
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [headers, setHeaders] = useState<string[]>([])
   const [rows, setRows] = useState<SheetRow[]>([])
   const [lastLoadedAt, setLastLoadedAt] = useState<string>('')
+  const [uploadedCsvName, setUploadedCsvName] = useState<string>('')
+  const [uploadedCsvText, setUploadedCsvText] = useState<string>('')
 
   const spreadsheetId = useMemo(() => extractSpreadsheetId(sheetUrl), [sheetUrl])
   const publishedCsv = useMemo(() => toPublishedCsvUrl(sheetUrl), [sheetUrl])
+  const effectiveScriptUrl = useMemo(() => (isAppsScriptUrl(scriptUrl) ? scriptUrl.trim() : ''), [scriptUrl])
 
   const reload = useCallback(async () => {
     setLoading(true)
     setErr(null)
     try {
       let text = ''
-      if (publishedCsv) {
+      if (uploadedCsvText.trim()) {
+        text = uploadedCsvText
+      } else if (effectiveScriptUrl) {
+        const u = new URL(effectiveScriptUrl)
+        u.searchParams.set('tab', tab || DEFAULT_TAB)
+        const res = await fetch(u.toString())
+        if (!res.ok) throw new Error(`Falha ao carregar via Apps Script (${res.status}).`)
+        const json = (await res.json()) as { csv?: string }
+        text = String(json?.csv ?? '')
+      } else if (spreadsheetId) {
+        const call = getCallable<{ sheetUrlOrId: string; tab: string }, { csv: string }>('fetchPublicSheetCsv')
+        const r = await call({ sheetUrlOrId: sheetUrl, tab: tab || DEFAULT_TAB })
+        text = String(r.data?.csv ?? '')
+      } else if (publishedCsv) {
         const res = await fetch(publishedCsv)
         if (!res.ok) throw new Error(`Falha ao carregar o CSV (${res.status}).`)
         text = await res.text()
       } else {
-        // Sem CSV publicado, o browser vai bloquear por CORS. Orientamos o utilizador a publicar.
-        if (!spreadsheetId) throw new Error('Link/ID da planilha inválido.')
         throw new Error(
-          'Para o sistema consumir sem complicação, publique a aba no Google Sheets como CSV (Arquivo → Publicar na Web → Aba "Cadastro nativo" → CSV) e cole aqui o link gerado (ele contém "output=csv").'
+          'Cole o link de edição da planilha (docs.google.com/.../edit) ou o ID. Com Blaze + Functions deployadas, o sistema lê automaticamente. Alternativa: upload CSV.'
         )
       }
       if (!text.trim()) throw new Error('CSV vazio.')
@@ -114,6 +139,8 @@ export function LeadsMetaSheetPage() {
       try {
         localStorage.setItem(LS_SHEET_URL, sheetUrl)
         localStorage.setItem(LS_SHEET_TAB, tab)
+        localStorage.setItem(LS_SCRIPT_URL, scriptUrl)
+        localStorage.setItem(LS_AUTO_REFRESH, autoRefresh ? '1' : '0')
       } catch {
         /* ignore */
       }
@@ -124,11 +151,35 @@ export function LeadsMetaSheetPage() {
     } finally {
       setLoading(false)
     }
-  }, [publishedCsv, sheetUrl, spreadsheetId, tab])
+  }, [autoRefresh, effectiveScriptUrl, publishedCsv, scriptUrl, sheetUrl, spreadsheetId, tab, uploadedCsvText])
+
+  const onUploadCsv = useCallback(async (file: File | null) => {
+    if (!file) return
+    try {
+      const text = await file.text()
+      setUploadedCsvName(file.name)
+      setUploadedCsvText(text)
+      setErr(null)
+      setLastLoadedAt(new Date().toISOString())
+    } catch (e) {
+      setUploadedCsvName('')
+      setUploadedCsvText('')
+      setErr(formatFirebaseOrUnknownError(e) || 'Erro ao ler o arquivo CSV')
+    }
+  }, [])
 
   useEffect(() => {
     void reload()
   }, [reload])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    if (!effectiveScriptUrl && !publishedCsv && !spreadsheetId) return
+    const id = window.setInterval(() => {
+      void reload()
+    }, DEFAULT_AUTO_REFRESH_SEC * 1000)
+    return () => window.clearInterval(id)
+  }, [autoRefresh, effectiveScriptUrl, publishedCsv, reload, spreadsheetId])
 
   const fatCol = useMemo(() => {
     const idx = pickColIndex(headers, [
@@ -191,7 +242,9 @@ export function LeadsMetaSheetPage() {
         </button>
       </div>
       <p style={{ color: 'var(--text2)', marginBottom: 18, maxWidth: 820 }}>
-        Lê a Google Sheets (export CSV) e calcula a % de MQL pela coluna de faturamento. MQL = faturamento acima de R$ 20 mil.
+        Com o projeto no Blaze e a function <strong>fetchPublicSheetCsv</strong> deployada, basta o link normal da planilha + nome
+        da aba: o CRM lê via servidor (sem CORS) e calcula a % de MQL (faturamento acima de R$ 20 mil). Opcional: Apps Script ou upload
+        CSV.
       </p>
 
       <div className="card mb" style={{ marginBottom: 16 }}>
@@ -200,15 +253,66 @@ export function LeadsMetaSheetPage() {
         </div>
         <div style={{ padding: 16, display: 'grid', gap: 12 }}>
           <div className="fg" style={{ marginBottom: 0 }}>
-            <label>Link do CSV publicado (recomendado) ou link da planilha</label>
+            <label>Apps Script (opcional) — URL /exec</label>
+            <input
+              className="di"
+              value={scriptUrl}
+              onChange={(e) => setScriptUrl(e.target.value)}
+              placeholder="https://script.google.com/macros/s/XXXX/exec"
+            />
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>
+              {effectiveScriptUrl ? (
+                <>
+                  Apps Script detectado · <span style={{ color: 'var(--text2)' }}>OK</span>
+                </>
+              ) : (
+                <>Cole aqui o link do Web App do Apps Script (termina com /exec) para atualizar automaticamente.</>
+              )}
+            </div>
+          </div>
+          <div className="fg" style={{ marginBottom: 0 }}>
+            <label>Upload CSV (recomendado)</label>
+            <input
+              className="di"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => void onUploadCsv(e.target.files?.[0] ?? null)}
+            />
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>
+              {uploadedCsvName ? (
+                <>
+                  A usar arquivo: <span style={{ color: 'var(--text2)' }}>{uploadedCsvName}</span>
+                  {' · '}Clique em “Recarregar” para recalcular.
+                </>
+              ) : (
+                <>Baixe do Google Sheets: Arquivo → Fazer download → CSV (aba {tab || 'Cadastro nativo'}).</>
+              )}
+            </div>
+          </div>
+          <div className="fg" style={{ marginBottom: 0 }}>
+            <label>Link da planilha (edit) ou CSV público</label>
             <input className="di" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} placeholder={DEFAULT_SHEET_URL} />
           </div>
           <div className="fg" style={{ marginBottom: 0 }}>
             <label>Aba (tab)</label>
             <input className="di" value={tab} onChange={(e) => setTab(e.target.value)} placeholder={DEFAULT_TAB} />
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text2)' }}>
+            <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
+            Atualizar automaticamente (a cada {DEFAULT_AUTO_REFRESH_SEC}s)
+          </label>
           <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-            {publishedCsv ? (
+            {uploadedCsvText.trim() ? (
+              <>
+                A usar CSV enviado (sem CORS) · <span style={{ color: 'var(--text2)' }}>OK</span>
+                {lastLoadedAt ? ` · Última carga: ${new Date(lastLoadedAt).toLocaleString('pt-BR')}` : null}
+              </>
+            ) : effectiveScriptUrl ? (
+              <>
+                A usar Apps Script (sem CORS) · <span style={{ color: 'var(--text2)' }}>OK</span>
+                {lastLoadedAt ? ` · Última carga: ${new Date(lastLoadedAt).toLocaleString('pt-BR')}` : null}
+              </>
+            ) : publishedCsv ? (
               <>
                 A usar CSV publicado (sem CORS) ·{' '}
                 <span style={{ color: 'var(--text2)' }}>OK</span>
@@ -216,7 +320,8 @@ export function LeadsMetaSheetPage() {
               </>
             ) : spreadsheetId ? (
               <>
-                Planilha detectada: <span style={{ color: 'var(--text2)' }}>{spreadsheetId}</span>
+                A ler via Firebase (proxy) · ID{' '}
+                <span style={{ color: 'var(--text2)' }}>{spreadsheetId}</span>
                 {lastLoadedAt ? ` · Última carga: ${new Date(lastLoadedAt).toLocaleString('pt-BR')}` : null}
               </>
             ) : (
