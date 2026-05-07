@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { parseCsv } from '../lib/csv'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
-import { getCallable } from '../firebase/functionsClient'
 
 const LS_SHEET_URL = 'leadsMetaSheetUrl'
 const LS_SHEET_TAB = 'leadsMetaSheetTab'
@@ -38,6 +37,11 @@ function extractSpreadsheetId(urlOrId: string): string | null {
   return m?.[1] ?? null
 }
 
+function isPublishedCsvUrl(url: string): boolean {
+  const u = String(url ?? '')
+  return u.includes('docs.google.com') && u.includes('output=csv')
+}
+
 function pickColIndex(headers: string[], wanted: string[]): number {
   const hn = headers.map((h) => normKey(h))
   for (const w of wanted) {
@@ -69,19 +73,24 @@ export function LeadsMetaSheetPage() {
   const [lastLoadedAt, setLastLoadedAt] = useState<string>('')
 
   const spreadsheetId = useMemo(() => extractSpreadsheetId(sheetUrl), [sheetUrl])
+  const publishedCsv = useMemo(() => (isPublishedCsvUrl(sheetUrl) ? sheetUrl.trim() : ''), [sheetUrl])
 
   const reload = useCallback(async () => {
-    if (!spreadsheetId) {
-      setErr('Link/ID da planilha inválido.')
-      setLoading(false)
-      return
-    }
     setLoading(true)
     setErr(null)
     try {
-      const call = getCallable<{ sheetUrlOrId: string; tab: string }, { csv: string }>('fetchPublicSheetCsv')
-      const r = await call({ sheetUrlOrId: sheetUrl, tab })
-      const text = String(r.data?.csv ?? '')
+      let text = ''
+      if (publishedCsv) {
+        const res = await fetch(publishedCsv)
+        if (!res.ok) throw new Error(`Falha ao carregar o CSV (${res.status}).`)
+        text = await res.text()
+      } else {
+        // Sem CSV publicado, o browser vai bloquear por CORS. Orientamos o utilizador a publicar.
+        if (!spreadsheetId) throw new Error('Link/ID da planilha inválido.')
+        throw new Error(
+          'Para o sistema consumir sem complicação, publique a aba no Google Sheets como CSV (Arquivo → Publicar na Web → Aba "Cadastro nativo" → CSV) e cole aqui o link gerado (ele contém "output=csv").'
+        )
+      }
       if (!text.trim()) throw new Error('CSV vazio.')
       const grid = parseCsv(text)
       if (!grid.length) throw new Error('Planilha vazia (CSV sem linhas).')
@@ -102,7 +111,7 @@ export function LeadsMetaSheetPage() {
     } finally {
       setLoading(false)
     }
-  }, [spreadsheetId, sheetUrl, tab])
+  }, [publishedCsv, sheetUrl, spreadsheetId, tab])
 
   useEffect(() => {
     void reload()
@@ -178,7 +187,7 @@ export function LeadsMetaSheetPage() {
         </div>
         <div style={{ padding: 16, display: 'grid', gap: 12 }}>
           <div className="fg" style={{ marginBottom: 0 }}>
-            <label>Link/ID da planilha</label>
+            <label>Link do CSV publicado (recomendado) ou link da planilha</label>
             <input className="di" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} placeholder={DEFAULT_SHEET_URL} />
           </div>
           <div className="fg" style={{ marginBottom: 0 }}>
@@ -186,7 +195,13 @@ export function LeadsMetaSheetPage() {
             <input className="di" value={tab} onChange={(e) => setTab(e.target.value)} placeholder={DEFAULT_TAB} />
           </div>
           <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-            {spreadsheetId ? (
+            {publishedCsv ? (
+              <>
+                A usar CSV publicado (sem CORS) ·{' '}
+                <span style={{ color: 'var(--text2)' }}>OK</span>
+                {lastLoadedAt ? ` · Última carga: ${new Date(lastLoadedAt).toLocaleString('pt-BR')}` : null}
+              </>
+            ) : spreadsheetId ? (
               <>
                 Planilha detectada: <span style={{ color: 'var(--text2)' }}>{spreadsheetId}</span>
                 {lastLoadedAt ? ` · Última carga: ${new Date(lastLoadedAt).toLocaleString('pt-BR')}` : null}
@@ -195,6 +210,13 @@ export function LeadsMetaSheetPage() {
               <>Cole o link do Google Sheets acima.</>
             )}
           </div>
+          {!publishedCsv && (
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+              Dica rápida: no Google Sheets vá em <strong>Arquivo → Publicar na Web</strong>, escolha a aba{' '}
+              <strong>{tab || 'Cadastro nativo'}</strong> e formato <strong>CSV</strong>. Cole aqui o link que contém{' '}
+              <strong>output=csv</strong>.
+            </div>
+          )}
         </div>
       </div>
 
