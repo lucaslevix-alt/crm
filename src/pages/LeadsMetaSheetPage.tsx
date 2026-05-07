@@ -42,6 +42,19 @@ function isPublishedCsvUrl(url: string): boolean {
   return u.includes('docs.google.com') && u.includes('output=csv')
 }
 
+function toPublishedCsvUrl(url: string): string {
+  const u = String(url ?? '').trim()
+  if (!u) return ''
+  if (isPublishedCsvUrl(u)) return u
+  // Link publicado em HTML (pubhtml) → CSV
+  if (u.includes('docs.google.com') && u.includes('/spreadsheets/d/e/') && u.includes('/pubhtml')) {
+    // ex.: .../pubhtml?gid=...&single=true  -> .../pub?gid=...&single=true&output=csv
+    const next = u.replace('/pubhtml', '/pub')
+    return next.includes('output=') ? next : `${next}${next.includes('?') ? '&' : '?'}output=csv`
+  }
+  return ''
+}
+
 function pickColIndex(headers: string[], wanted: string[]): number {
   const hn = headers.map((h) => normKey(h))
   for (const w of wanted) {
@@ -73,7 +86,7 @@ export function LeadsMetaSheetPage() {
   const [lastLoadedAt, setLastLoadedAt] = useState<string>('')
 
   const spreadsheetId = useMemo(() => extractSpreadsheetId(sheetUrl), [sheetUrl])
-  const publishedCsv = useMemo(() => (isPublishedCsvUrl(sheetUrl) ? sheetUrl.trim() : ''), [sheetUrl])
+  const publishedCsv = useMemo(() => toPublishedCsvUrl(sheetUrl), [sheetUrl])
 
   const reload = useCallback(async () => {
     setLoading(true)
