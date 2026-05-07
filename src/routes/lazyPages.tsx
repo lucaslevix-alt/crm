@@ -50,6 +50,9 @@ export const GestaoOpPage = lazy(() =>
 export const SquadsPage = lazy(() => import('../pages/SquadsPage').then((m) => ({ default: m.SquadsPage })))
 export const MetaAdsPage = lazy(() => import('../pages/MetaAdsPage').then((m) => ({ default: m.MetaAdsPage })))
 export const MetaLeadsPage = lazy(() => import('../pages/MetaLeadsPage').then((m) => ({ default: m.MetaLeadsPage })))
+export const LeadsMetaSheetPage = lazy(() =>
+  import('../pages/LeadsMetaSheetPage').then((m) => ({ default: m.LeadsMetaSheetPage }))
+)
 export const PropostasFechamentoPage = lazy(() =>
   import('../pages/PropostasFechamentoPage').then((m) => ({ default: m.PropostasFechamentoPage }))
 )

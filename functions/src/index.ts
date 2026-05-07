@@ -150,3 +150,53 @@ export const metaGraphProxy = onCall(async (request) => {
 
   return await graphApiPost(path, params)
 })
+
+function extractSpreadsheetId(urlOrId: string): string | null {
+  const raw = String(urlOrId ?? '').trim()
+  if (!raw) return null
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(raw) && !raw.includes('/')) return raw
+  const m = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)
+  return m?.[1] ?? null
+}
+
+function buildSheetCsvUrl(spreadsheetId: string, tabName: string): string {
+  const sheet = encodeURIComponent(tabName)
+  return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/gviz/tq?tqx=out:csv&sheet=${sheet}`
+}
+
+/** Proxy autenticado para Google Sheets (evita CORS no browser). */
+export const fetchPublicSheetCsv = onCall(async (request) => {
+  const email = request.auth?.token?.email
+  if (!email) throw new HttpsError('unauthenticated', 'Login necessário.')
+
+  const cargo = await getCrmCargo(email)
+  if (!canUseMetaAds(cargo)) throw new HttpsError('permission-denied', 'Sem permissão.')
+
+  const sheetUrlOrId = String(request.data?.sheetUrlOrId ?? '').trim()
+  const tab = String(request.data?.tab ?? '').trim()
+  if (!sheetUrlOrId) throw new HttpsError('invalid-argument', 'sheetUrlOrId em falta.')
+  if (!tab) throw new HttpsError('invalid-argument', 'tab em falta.')
+  if (tab.length > 120) throw new HttpsError('invalid-argument', 'tab demasiado longo.')
+
+  const spreadsheetId = extractSpreadsheetId(sheetUrlOrId)
+  if (!spreadsheetId) throw new HttpsError('invalid-argument', 'Link/ID da planilha inválido.')
+
+  const url = buildSheetCsvUrl(spreadsheetId, tab)
+  logger.info('fetchPublicSheetCsv', { spreadsheetId, tab })
+  let res: Response
+  try {
+    res = await fetch(url, { method: 'GET' })
+  } catch {
+    throw new HttpsError('internal', 'Falha ao contactar o Google Sheets.')
+  }
+  if (!res.ok) {
+    throw new HttpsError(
+      'failed-precondition',
+      `Falha ao carregar a planilha (${res.status}). Verifique se está partilhada (qualquer um com link).`
+    )
+  }
+  const csv = await res.text()
+  if (!csv.trim()) throw new HttpsError('failed-precondition', 'Planilha vazia.')
+  if (csv.length > 4_000_000) throw new HttpsError('failed-precondition', 'CSV demasiado grande.')
+  return { csv, spreadsheetId, tab }
+})

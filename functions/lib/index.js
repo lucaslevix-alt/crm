@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.metaGraphProxy = exports.getMetaAdsStatus = exports.clearMetaAdsToken = exports.setMetaAdsToken = void 0;
+exports.fetchPublicSheetCsv = exports.metaGraphProxy = exports.getMetaAdsStatus = exports.clearMetaAdsToken = exports.setMetaAdsToken = void 0;
 const v2_1 = require("firebase-functions/v2");
 const https_1 = require("firebase-functions/v2/https");
 const logger = __importStar(require("firebase-functions/logger"));
@@ -171,5 +171,56 @@ exports.metaGraphProxy = (0, https_1.onCall)(async (request) => {
         params[k] = s;
     }
     return await graphApiPost(path, params);
+});
+function extractSpreadsheetId(urlOrId) {
+    const raw = String(urlOrId ?? '').trim();
+    if (!raw)
+        return null;
+    if (/^[a-zA-Z0-9-_]{20,}$/.test(raw) && !raw.includes('/'))
+        return raw;
+    const m = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    return m?.[1] ?? null;
+}
+function buildSheetCsvUrl(spreadsheetId, tabName) {
+    const sheet = encodeURIComponent(tabName);
+    return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/gviz/tq?tqx=out:csv&sheet=${sheet}`;
+}
+/** Proxy autenticado para Google Sheets (evita CORS no browser). */
+exports.fetchPublicSheetCsv = (0, https_1.onCall)(async (request) => {
+    const email = request.auth?.token?.email;
+    if (!email)
+        throw new https_1.HttpsError('unauthenticated', 'Login necessário.');
+    const cargo = await getCrmCargo(email);
+    if (!canUseMetaAds(cargo))
+        throw new https_1.HttpsError('permission-denied', 'Sem permissão.');
+    const sheetUrlOrId = String(request.data?.sheetUrlOrId ?? '').trim();
+    const tab = String(request.data?.tab ?? '').trim();
+    if (!sheetUrlOrId)
+        throw new https_1.HttpsError('invalid-argument', 'sheetUrlOrId em falta.');
+    if (!tab)
+        throw new https_1.HttpsError('invalid-argument', 'tab em falta.');
+    if (tab.length > 120)
+        throw new https_1.HttpsError('invalid-argument', 'tab demasiado longo.');
+    const spreadsheetId = extractSpreadsheetId(sheetUrlOrId);
+    if (!spreadsheetId)
+        throw new https_1.HttpsError('invalid-argument', 'Link/ID da planilha inválido.');
+    const url = buildSheetCsvUrl(spreadsheetId, tab);
+    logger.info('fetchPublicSheetCsv', { spreadsheetId, tab });
+    let res;
+    try {
+        res = await fetch(url, { method: 'GET' });
+    }
+    catch {
+        throw new https_1.HttpsError('internal', 'Falha ao contactar o Google Sheets.');
+    }
+    if (!res.ok) {
+        throw new https_1.HttpsError('failed-precondition', `Falha ao carregar a planilha (${res.status}). Verifique se está partilhada (qualquer um com link).`);
+    }
+    const csv = await res.text();
+    if (!csv.trim())
+        throw new https_1.HttpsError('failed-precondition', 'Planilha vazia.');
+    if (csv.length > 4_000_000)
+        throw new https_1.HttpsError('failed-precondition', 'CSV demasiado grande.');
+    return { csv, spreadsheetId, tab };
 });
 //# sourceMappingURL=index.js.map

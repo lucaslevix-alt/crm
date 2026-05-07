@@ -11,7 +11,7 @@ import {
   DashboardPage,
   FunilPage,
   MetaAdsPage,
-  MetaLeadsPage,
+  LeadsMetaSheetPage,
   MetasPage,
   ProdutosPage,
   PropostasFechamentoPage,
@@ -204,7 +204,7 @@ export default function App() {
                 }
               />
               <Route path="meta-ads" element={<MetaAdsPage />} />
-              <Route path="leads-meta" element={<MetaLeadsPage />} />
+              <Route path="leads-meta" element={<LeadsMetaSheetPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

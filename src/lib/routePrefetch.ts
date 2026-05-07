@@ -26,7 +26,7 @@ export function prefetchPath(raw: string) {
     return
   }
   if (a === 'leads-meta') {
-    runOnce('p:leads-meta', () => import('../pages/MetaLeadsPage'))
+    runOnce('p:leads-meta', () => import('../pages/LeadsMetaSheetPage'))
     return
   }
   if (a === 'registros') {
