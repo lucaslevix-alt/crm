@@ -66,7 +66,14 @@ function loadSlideKeys(): TvSlideKey[] {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed) || parsed.length === 0) return all
     const filtered = parsed.filter((k): k is TvSlideKey => typeof k === 'string' && (all as readonly string[]).includes(k))
-    return filtered.length ? filtered : all
+    if (!filtered.length) return all
+    // Se o utilizador já escolheu slides no passado, mas adicionámos um slide novo (ex.: "Avisos"),
+    // inclui-o por padrão para não "sumir" na TV por causa do localStorage antigo.
+    const next = [...filtered]
+    for (const k of all) {
+      if (!next.includes(k)) next.push(k)
+    }
+    return next
   } catch {
     return all
   }
