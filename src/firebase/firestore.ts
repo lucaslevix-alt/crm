@@ -16,7 +16,7 @@ import {
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore'
-import { getDownloadURL, getStorage, ref as storageRef, uploadBytes } from 'firebase/storage'
+import { getDownloadURL, getStorage, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
 import { initFirebaseApp } from './config'
 import type { CrmUser } from '../store/useAppStore'
 import type { LeadBudgetOp, QualificacaoSdr } from '../lib/qualificacaoSdr'
@@ -219,11 +219,44 @@ export async function uploadAvisoFoto(params: {
 
   const path = `avisos/${avisoId}/${finalName}`
   const r = storageRef(storage, path)
-  const snap = await uploadBytes(r, file, {
-    contentType: file.type,
-    cacheControl: 'public,max-age=86400'
+  const task = uploadBytesResumable(
+    r,
+    file,
+    { contentType: file.type, cacheControl: 'public,max-age=86400' }
+  )
+
+  const timeoutMs = 25_000
+  const url = await new Promise<string>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      try {
+        task.cancel()
+      } catch {
+        /* ignore */
+      }
+      reject(new Error('Timeout ao enviar a foto. Verifique Firebase Storage (bucket/regras) e tente novamente.'))
+    }, timeoutMs)
+
+    task.on(
+      'state_changed',
+      () => {
+        /* progresso opcional */
+      },
+      (err) => {
+        window.clearTimeout(timeoutId)
+        reject(err)
+      },
+      async () => {
+        window.clearTimeout(timeoutId)
+        try {
+          resolve(await getDownloadURL(task.snapshot.ref))
+        } catch (err) {
+          reject(err)
+        }
+      }
+    )
   })
-  return await getDownloadURL(snap.ref)
+
+  return url
 }
 
 export async function deleteAviso(id: string): Promise<void> {
