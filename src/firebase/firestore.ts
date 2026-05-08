@@ -16,7 +16,6 @@ import {
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore'
-import { getDownloadURL, getStorage, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
 import { initFirebaseApp } from './config'
 import type { CrmUser } from '../store/useAppStore'
 import type { LeadBudgetOp, QualificacaoSdr } from '../lib/qualificacaoSdr'
@@ -27,7 +26,6 @@ export type LinhaPrecoRole = 'ideal' | 'desconto'
 
 const app = initFirebaseApp()
 export const db = getFirestore(app)
-const storage = getStorage(app)
 
 export type AvisoTipo = 'recado' | 'comunicado' | 'operacao'
 export type AvisoPrioridade = 'normal' | 'alta' | 'urgente'
@@ -196,67 +194,6 @@ export async function setAvisoFotoUrl(id: string, fotoUrl: string | null): Promi
     fotoUrl: normalized,
     atualizadoEm: serverTimestamp()
   })
-}
-
-export async function uploadAvisoFoto(params: {
-  avisoId: string
-  file: File
-}): Promise<string> {
-  const { avisoId, file } = params
-  if (!avisoId.trim()) throw new Error('Aviso inválido.')
-  if (!(file instanceof File)) throw new Error('Arquivo inválido.')
-  if (!file.type.startsWith('image/')) throw new Error('Selecione uma imagem.')
-  if (file.size > 3_000_000) throw new Error('Imagem muito grande (máx. 3MB).')
-
-  const safeName = (file.name || 'foto')
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/[^a-z0-9._-]/g, '')
-    .slice(0, 80)
-  const ext = safeName.includes('.') ? safeName.split('.').pop() : ''
-  const base = safeName.replace(/\.[a-z0-9]+$/i, '') || 'foto'
-  const finalName = `${base}_${Date.now()}${ext ? `.${ext}` : ''}`
-
-  const path = `avisos/${avisoId}/${finalName}`
-  const r = storageRef(storage, path)
-  const task = uploadBytesResumable(
-    r,
-    file,
-    { contentType: file.type, cacheControl: 'public,max-age=86400' }
-  )
-
-  const timeoutMs = 25_000
-  const url = await new Promise<string>((resolve, reject) => {
-    const timeoutId = window.setTimeout(() => {
-      try {
-        task.cancel()
-      } catch {
-        /* ignore */
-      }
-      reject(new Error('Timeout ao enviar a foto. Verifique Firebase Storage (bucket/regras) e tente novamente.'))
-    }, timeoutMs)
-
-    task.on(
-      'state_changed',
-      () => {
-        /* progresso opcional */
-      },
-      (err) => {
-        window.clearTimeout(timeoutId)
-        reject(err)
-      },
-      async () => {
-        window.clearTimeout(timeoutId)
-        try {
-          resolve(await getDownloadURL(task.snapshot.ref))
-        } catch (err) {
-          reject(err)
-        }
-      }
-    )
-  })
-
-  return url
 }
 
 export async function deleteAviso(id: string): Promise<void> {

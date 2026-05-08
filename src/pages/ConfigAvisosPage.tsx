@@ -7,7 +7,6 @@ import {
   isAvisoAtivoAgora,
   listAvisosRecentes,
   setAvisoFotoUrl,
-  uploadAvisoFoto,
   updateAviso,
   type AvisoPrioridade,
   type AvisoRow,
@@ -68,13 +67,11 @@ export function ConfigAvisosPage() {
   const { showToast, currentUser } = useAppStore()
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [uploadingFoto, setUploadingFoto] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<AvisoRow[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<AvisoForm>({ ...EMPTY_FORM })
-  const [fotoFile, setFotoFile] = useState<File | null>(null)
-  const [fotoPreviewUrl, setFotoPreviewUrl] = useState<string | null>(null)
+  const [fotoUrlDraft, setFotoUrlDraft] = useState('')
   const [removeFoto, setRemoveFoto] = useState(false)
 
   const canEdit = currentUser?.cargo === 'admin'
@@ -117,7 +114,7 @@ export function ConfigAvisosPage() {
   function startNew() {
     setEditingId(null)
     setForm({ ...EMPTY_FORM })
-    setFotoFile(null)
+    setFotoUrlDraft('')
     setRemoveFoto(false)
   }
 
@@ -132,23 +129,9 @@ export function ConfigAvisosPage() {
       fixo: r.fixo,
       expiraEm: toDatetimeLocalValue(r.expiraEm)
     })
-    setFotoFile(null)
+    setFotoUrlDraft(r.fotoUrl ?? '')
     setRemoveFoto(false)
   }
-
-  useEffect(() => {
-    if (!fotoFile) {
-      if (fotoPreviewUrl) URL.revokeObjectURL(fotoPreviewUrl)
-      setFotoPreviewUrl(null)
-      return
-    }
-    const url = URL.createObjectURL(fotoFile)
-    setFotoPreviewUrl(url)
-    return () => {
-      URL.revokeObjectURL(url)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fotoFile])
 
   async function handleSave() {
     if (!canEdit) return
@@ -166,25 +149,15 @@ export function ConfigAvisosPage() {
       }
       if (editingId) {
         await updateAviso(editingId, payload)
-        if (removeFoto) {
-          await setAvisoFotoUrl(editingId, null)
-        }
-        if (fotoFile) {
-          setUploadingFoto(true)
-          const url = await uploadAvisoFoto({ avisoId: editingId, file: fotoFile })
-          await setAvisoFotoUrl(editingId, url)
-        }
+        if (removeFoto) await setAvisoFotoUrl(editingId, null)
+        else await setAvisoFotoUrl(editingId, fotoUrlDraft)
         showToast('Aviso atualizado.')
       } else {
         const uid = currentUser?.id ?? ''
         const nome = currentUser?.nome ?? 'Admin'
         if (!uid) throw new Error('Utilizador inválido.')
         const id = await addAviso({ ...payload, criadoPor: { id: uid, nome } })
-        if (fotoFile) {
-          setUploadingFoto(true)
-          const url = await uploadAvisoFoto({ avisoId: id, file: fotoFile })
-          await setAvisoFotoUrl(id, url)
-        }
+        if (!removeFoto && fotoUrlDraft.trim()) await setAvisoFotoUrl(id, fotoUrlDraft)
         showToast('Aviso criado.')
       }
       startNew()
@@ -193,7 +166,6 @@ export function ConfigAvisosPage() {
       showToast(formatFirebaseOrUnknownError(err) || 'Erro ao salvar', 'err')
     } finally {
       setBusy(false)
-      setUploadingFoto(false)
     }
   }
 
@@ -242,7 +214,7 @@ export function ConfigAvisosPage() {
               type="button"
               className="btn btn-primary btn-sm"
               onClick={handleSave}
-              disabled={busy || uploadingFoto || !canEdit}
+              disabled={busy || !canEdit}
             >
               Salvar
             </button>
@@ -311,15 +283,15 @@ export function ConfigAvisosPage() {
 
           <div style={{ gridColumn: 'span 12', display: 'grid', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-                Foto (opcional)
+              <label style={{ gridColumn: 'span 12', display: 'grid', gap: 6, fontSize: 13, flex: 1, minWidth: 260 }}>
+                URL da foto (opcional)
                 <input
-                  type="file"
-                  accept="image/*"
-                  disabled={busy || uploadingFoto || !canEdit}
+                  className="di"
+                  value={fotoUrlDraft}
+                  disabled={busy || !canEdit || removeFoto}
+                  placeholder="https://..."
                   onChange={(e) => {
-                    const f = e.target.files?.[0] ?? null
-                    setFotoFile(f)
+                    setFotoUrlDraft(e.target.value)
                     setRemoveFoto(false)
                   }}
                 />
@@ -329,19 +301,18 @@ export function ConfigAvisosPage() {
                   <input
                     type="checkbox"
                     checked={removeFoto}
-                    disabled={busy || uploadingFoto || !canEdit}
+                    disabled={busy || !canEdit}
                     onChange={(e) => setRemoveFoto(e.target.checked)}
                   />
-                  Remover foto atual
+                  Remover foto
                 </label>
               )}
-              {uploadingFoto && <span style={{ color: 'var(--text3)', fontSize: 12 }}>A enviar foto…</span>}
             </div>
 
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              {(fotoPreviewUrl || editingRow?.fotoUrl) && (
+              {!removeFoto && (fotoUrlDraft.trim() || editingRow?.fotoUrl) && (
                 <img
-                  src={fotoPreviewUrl ?? editingRow?.fotoUrl ?? ''}
+                  src={(fotoUrlDraft.trim() || editingRow?.fotoUrl) ?? ''}
                   alt=""
                   style={{
                     width: 84,
@@ -353,7 +324,7 @@ export function ConfigAvisosPage() {
                 />
               )}
               <div style={{ color: 'var(--text3)', fontSize: 12, maxWidth: 560 }}>
-                Sugestão: use para <b>Aniversariante</b> e <b>Novos colaboradores</b>. Limite: <b>3MB</b>.
+                Sugestão: use para <b>Aniversariante</b> e <b>Novos colaboradores</b>. Cole um link público (https).
               </div>
             </div>
           </div>
