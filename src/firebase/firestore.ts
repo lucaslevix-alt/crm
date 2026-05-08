@@ -126,11 +126,12 @@ function normalizeAvisoPayload(params: {
 export async function listAvisosRecentes(params?: { limitCount?: number; includeInactive?: boolean }): Promise<AvisoRow[]> {
   const limitCount = Math.max(1, Math.min(200, params?.limitCount ?? 80))
   const includeInactive = params?.includeInactive === true
-  const q = includeInactive
-    ? query(collection(db, 'avisos'), orderBy('criadoEm', 'desc'), limit(limitCount))
-    : query(collection(db, 'avisos'), where('ativo', '==', true), orderBy('criadoEm', 'desc'), limit(limitCount))
+  // Evita exigir índice composto (where + orderBy em campos diferentes).
+  // Pegamos os mais recentes e filtramos `ativo` no cliente quando necessário.
+  const q = query(collection(db, 'avisos'), orderBy('criadoEm', 'desc'), limit(limitCount))
   const snap = await getDocs(q)
-  return snap.docs.map((d) => docToAviso({ id: d.id, data: () => d.data() as Record<string, unknown> }))
+  const rows = snap.docs.map((d) => docToAviso({ id: d.id, data: () => d.data() as Record<string, unknown> }))
+  return includeInactive ? rows : rows.filter((r) => r.ativo)
 }
 
 export function isAvisoAtivoAgora(row: AvisoRow, now = new Date()): boolean {
