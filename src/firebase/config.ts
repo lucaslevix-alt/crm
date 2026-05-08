@@ -25,6 +25,7 @@ function buildConfig(): FirebaseOptions {
   const apiKey = import.meta.env.VITE_FIREBASE_API_KEY as string | undefined
   const authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined
   const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined
+  const storageBucketEnv = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined
 
   const missing: string[] = []
   if (!apiKey?.trim()) missing.push('VITE_FIREBASE_API_KEY')
@@ -40,7 +41,8 @@ function buildConfig(): FirebaseOptions {
   const options: FirebaseOptions = {
     apiKey,
     authDomain,
-    projectId
+    projectId,
+    storageBucket: storageBucketEnv?.trim() ? storageBucketEnv.trim() : `${projectId}.appspot.com`
   }
   return options
 }

@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Trophy } from 'lucide-react'
 import { prefetchPath } from '../lib/routePrefetch'
+import { useAppStore } from '../store/useAppStore'
 
 const TABS = [
   { to: '/rankings/sdr', label: 'SDRs' },
@@ -14,6 +15,9 @@ const TABS = [
 
 export function RankingsPage() {
   const { pathname } = useLocation()
+  const { currentUser } = useAppStore()
+  const isAdmin = currentUser?.cargo === 'admin'
+
   if (pathname === '/rankings/tv') {
     return (
       <div className="rankings-tv-root">
@@ -21,6 +25,8 @@ export function RankingsPage() {
       </div>
     )
   }
+
+  const tabs = isAdmin ? [...TABS, { to: '/config/avisos', label: 'Avisos' }] : [...TABS]
 
   return (
     <div className="content">
@@ -35,7 +41,7 @@ export function RankingsPage() {
           </p>
         </div>
         <nav className="rankings-tabs" aria-label="Tipo de ranking">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <NavLink
               key={t.to}
               to={t.to}

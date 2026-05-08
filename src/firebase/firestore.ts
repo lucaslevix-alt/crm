@@ -16,6 +16,7 @@ import {
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore'
+import { getDownloadURL, getStorage, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { initFirebaseApp } from './config'
 import type { CrmUser } from '../store/useAppStore'
 import type { LeadBudgetOp, QualificacaoSdr } from '../lib/qualificacaoSdr'
@@ -26,6 +27,207 @@ export type LinhaPrecoRole = 'ideal' | 'desconto'
 
 const app = initFirebaseApp()
 export const db = getFirestore(app)
+const storage = getStorage(app)
+
+export type AvisoTipo = 'recado' | 'comunicado' | 'operacao'
+export type AvisoPrioridade = 'normal' | 'alta' | 'urgente'
+
+export interface AvisoRow {
+  id: string
+  tipo: AvisoTipo
+  prioridade: AvisoPrioridade
+  titulo: string
+  mensagem: string
+  ativo: boolean
+  fixo: boolean
+  /** ISO string; vazio = sem expiração */
+  expiraEm: string | null
+  /** URL pública (Firebase Storage) */
+  fotoUrl?: string | null
+  criadoPorId: string
+  criadoPorNome: string
+  criadoEm?: { seconds: number } | null
+}
+
+function parseAvisoTipo(raw: unknown): AvisoTipo {
+  const t = String(raw ?? '').trim()
+  if (t === 'comunicado') return 'comunicado'
+  if (t === 'operacao') return 'operacao'
+  return 'recado'
+}
+
+function parseAvisoPrioridade(raw: unknown): AvisoPrioridade {
+  const p = String(raw ?? '').trim()
+  if (p === 'urgente') return 'urgente'
+  if (p === 'alta') return 'alta'
+  return 'normal'
+}
+
+function docToAviso(d: { id: string; data: () => Record<string, unknown> }): AvisoRow {
+  const x = d.data()
+  const ts = x.criadoEm as Timestamp | undefined
+  const exp = x.expiraEm
+  const expiraEm =
+    exp instanceof Timestamp
+      ? exp.toDate().toISOString()
+      : exp != null && String(exp).trim()
+        ? String(exp).trim()
+        : null
+  return {
+    id: d.id,
+    tipo: parseAvisoTipo(x.tipo),
+    prioridade: parseAvisoPrioridade(x.prioridade),
+    titulo: String(x.titulo ?? '').trim(),
+    mensagem: String(x.mensagem ?? '').trim(),
+    ativo: x.ativo !== false,
+    fixo: x.fixo === true,
+    expiraEm,
+    fotoUrl:
+      x.fotoUrl != null && String(x.fotoUrl).trim() !== ''
+        ? String(x.fotoUrl).trim()
+        : null,
+    criadoPorId: String(x.criadoPorId ?? '').trim(),
+    criadoPorNome: String(x.criadoPorNome ?? '').trim() || '—',
+    criadoEm: ts ? { seconds: ts.seconds } : null
+  }
+}
+
+function normalizeAvisoPayload(params: {
+  tipo: AvisoTipo
+  prioridade: AvisoPrioridade
+  titulo: string
+  mensagem: string
+  ativo: boolean
+  fixo: boolean
+  expiraEm?: string | null
+}) {
+  const titulo = params.titulo.trim()
+  const mensagem = params.mensagem.trim()
+  if (!titulo) throw new Error('Informe um título.')
+  if (!mensagem) throw new Error('Informe a mensagem.')
+  const expRaw = params.expiraEm != null ? String(params.expiraEm).trim() : ''
+  let expiraEm: string | null = null
+  if (expRaw) {
+    const d = new Date(expRaw)
+    if (!Number.isFinite(d.getTime())) throw new Error('Data de expiração inválida.')
+    expiraEm = d.toISOString()
+  }
+  return {
+    tipo: params.tipo,
+    prioridade: params.prioridade,
+    titulo,
+    mensagem,
+    ativo: params.ativo,
+    fixo: params.fixo,
+    expiraEm
+  }
+}
+
+export async function listAvisosRecentes(params?: { limitCount?: number; includeInactive?: boolean }): Promise<AvisoRow[]> {
+  const limitCount = Math.max(1, Math.min(200, params?.limitCount ?? 80))
+  const includeInactive = params?.includeInactive === true
+  const q = includeInactive
+    ? query(collection(db, 'avisos'), orderBy('criadoEm', 'desc'), limit(limitCount))
+    : query(collection(db, 'avisos'), where('ativo', '==', true), orderBy('criadoEm', 'desc'), limit(limitCount))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => docToAviso({ id: d.id, data: () => d.data() as Record<string, unknown> }))
+}
+
+export function isAvisoAtivoAgora(row: AvisoRow, now = new Date()): boolean {
+  if (!row.ativo) return false
+  if (!row.expiraEm) return true
+  const t = new Date(row.expiraEm).getTime()
+  if (!Number.isFinite(t)) return true
+  return t > now.getTime()
+}
+
+export async function addAviso(params: {
+  tipo: AvisoTipo
+  prioridade: AvisoPrioridade
+  titulo: string
+  mensagem: string
+  ativo?: boolean
+  fixo?: boolean
+  expiraEm?: string | null
+  criadoPor: { id: string; nome: string }
+}): Promise<string> {
+  const payload = normalizeAvisoPayload({
+    tipo: params.tipo,
+    prioridade: params.prioridade,
+    titulo: params.titulo,
+    mensagem: params.mensagem,
+    ativo: params.ativo !== false,
+    fixo: params.fixo === true,
+    expiraEm: params.expiraEm ?? null
+  })
+  const ref = await addDoc(collection(db, 'avisos'), {
+    ...payload,
+    fotoUrl: null,
+    criadoPorId: params.criadoPor.id,
+    criadoPorNome: params.criadoPor.nome,
+    criadoEm: serverTimestamp()
+  })
+  return ref.id
+}
+
+export async function updateAviso(
+  id: string,
+  params: {
+    tipo: AvisoTipo
+    prioridade: AvisoPrioridade
+    titulo: string
+    mensagem: string
+    ativo: boolean
+    fixo: boolean
+    expiraEm?: string | null
+  }
+): Promise<void> {
+  const payload = normalizeAvisoPayload(params)
+  await updateDoc(doc(db, 'avisos', id), {
+    ...payload,
+    atualizadoEm: serverTimestamp()
+  })
+}
+
+export async function setAvisoFotoUrl(id: string, fotoUrl: string | null): Promise<void> {
+  const normalized = fotoUrl != null && String(fotoUrl).trim() ? String(fotoUrl).trim() : null
+  await updateDoc(doc(db, 'avisos', id), {
+    fotoUrl: normalized,
+    atualizadoEm: serverTimestamp()
+  })
+}
+
+export async function uploadAvisoFoto(params: {
+  avisoId: string
+  file: File
+}): Promise<string> {
+  const { avisoId, file } = params
+  if (!avisoId.trim()) throw new Error('Aviso inválido.')
+  if (!(file instanceof File)) throw new Error('Arquivo inválido.')
+  if (!file.type.startsWith('image/')) throw new Error('Selecione uma imagem.')
+  if (file.size > 3_000_000) throw new Error('Imagem muito grande (máx. 3MB).')
+
+  const safeName = (file.name || 'foto')
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9._-]/g, '')
+    .slice(0, 80)
+  const ext = safeName.includes('.') ? safeName.split('.').pop() : ''
+  const base = safeName.replace(/\.[a-z0-9]+$/i, '') || 'foto'
+  const finalName = `${base}_${Date.now()}${ext ? `.${ext}` : ''}`
+
+  const path = `avisos/${avisoId}/${finalName}`
+  const r = storageRef(storage, path)
+  const snap = await uploadBytes(r, file, {
+    contentType: file.type,
+    cacheControl: 'public,max-age=86400'
+  })
+  return await getDownloadURL(snap.ref)
+}
+
+export async function deleteAviso(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'avisos', id))
+}
 
 /** Valores persistidos no Firestore para vendas */
 export const FORMAS_PAGAMENTO_VENDA = [

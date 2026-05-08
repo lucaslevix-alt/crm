@@ -270,6 +270,19 @@ export function Sidebar() {
                       <span className="nav-label">Comissões</span>
                     </NavLink>
                     <NavLink
+                      to="/config/avisos"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Avisos (modo TV)"
+                      {...navPrefetch('/config/avisos')}
+                    >
+                      <span className="nav-icon">
+                        <Megaphone size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Avisos</span>
+                    </NavLink>
+                    <NavLink
                       to="/config/metas"
                       className={({ isActive }) =>
                         `nav-item nav-item--sub${isActive ? ' active' : ''}`

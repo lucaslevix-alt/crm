@@ -4,6 +4,7 @@ import {
   Database,
   Factory,
   FileSpreadsheet,
+  Megaphone,
   Package,
   Settings,
   Target,
@@ -57,6 +58,21 @@ export function ConfigHubPage() {
             <span className="config-hub-card-body">
               <span className="config-hub-card-title">Configuração de metas</span>
               <span className="config-hub-card-text">Metas mensais globais e aparência (claro / escuro).</span>
+            </span>
+            <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
+          </Link>
+        )}
+
+        {isAdmin && (
+          <Link to="/config/avisos" className="config-hub-card">
+            <span className="config-hub-card-ic">
+              <Megaphone size={22} strokeWidth={1.65} aria-hidden />
+            </span>
+            <span className="config-hub-card-body">
+              <span className="config-hub-card-title">Avisos</span>
+              <span className="config-hub-card-text">
+                Recados, comunicados e operação — aparecem como ticker/destaque no modo TV da Classificação.
+              </span>
             </span>
             <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
           </Link>

@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import {
   AuditoriaPage,
   ConfigHubPage,
+  ConfigAvisosPage,
   ConfigMetasPage,
   RelatoriosComissoesPage,
   DashboardPage,
@@ -128,6 +129,14 @@ export default function App() {
               <Route path="squads" element={<Navigate to="/config/squads" replace />} />
               <Route path="config" element={<ConfigOutlet />}>
                 <Route index element={<ConfigHubPage />} />
+                <Route
+                  path="avisos"
+                  element={
+                    <AdminOnlyRoute>
+                      <ConfigAvisosPage />
+                    </AdminOnlyRoute>
+                  }
+                />
                 <Route
                   path="metas"
                   element={

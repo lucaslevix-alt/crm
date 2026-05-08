@@ -68,6 +68,9 @@ export const ConfigHubPage = lazy(() =>
 export const ConfigMetasPage = lazy(() =>
   import('../pages/ConfigMetasPage').then((m) => ({ default: m.ConfigMetasPage }))
 )
+export const ConfigAvisosPage = lazy(() =>
+  import('../pages/ConfigAvisosPage').then((m) => ({ default: m.ConfigAvisosPage }))
+)
 export const RelatoriosComissoesPage = lazy(() =>
   import('../pages/RelatoriosComissoesPage').then((m) => ({ default: m.RelatoriosComissoesPage }))
 )
