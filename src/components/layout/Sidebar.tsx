@@ -13,6 +13,7 @@ import {
   CalendarClock,
   LogOut,
   Megaphone,
+  Timer,
   Package,
   Search,
   Settings,
@@ -281,6 +282,19 @@ export function Sidebar() {
                         <Megaphone size={16} strokeWidth={1.5} aria-hidden />
                       </span>
                       <span className="nav-label">Avisos</span>
+                    </NavLink>
+                    <NavLink
+                      to="/config/tv"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Temporizadores do modo TV"
+                      {...navPrefetch('/config/tv')}
+                    >
+                      <span className="nav-icon">
+                        <Timer size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">TV</span>
                     </NavLink>
                     <NavLink
                       to="/config/metas"

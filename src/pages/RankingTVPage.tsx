@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
-import { isAvisoAtivoAgora, listAvisosRecentes, type AvisoPrioridade, type AvisoRow, type AvisoTipo } from '../firebase/firestore'
+import {
+  getTvTimersConfig,
+  isAvisoAtivoAgora,
+  listAvisosRecentes,
+  type AvisoPrioridade,
+  type AvisoRow,
+  type AvisoTipo
+} from '../firebase/firestore'
 import { RankingSDRPage } from './RankingSDRPage'
 import { RankingCloserPage } from './RankingCloserPage'
 import { RankingSquadsPage } from './RankingSquadsPage'
@@ -10,7 +17,6 @@ import { RankingBasePage } from './RankingBasePage'
 import { RankingGTsPage } from './RankingGTsPage'
 import { RankingsAvisosTVSlide } from './RankingsAvisosTVSlide'
 
-const ROTATE_MS = 30_000
 const REFRESH_MS = 60_000
 const TV_SLIDES_STORAGE = 'rankingsTvSlideKeys'
 
@@ -85,6 +91,8 @@ export function RankingTVPage() {
   const [slide, setSlide] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
   const [avisos, setAvisos] = useState<AvisoRow[]>([])
+  const [rankingsRotateMs, setRankingsRotateMs] = useState(30_000)
+  const [avisosRotateMs, setAvisosRotateMs] = useState(10_000)
 
   const slides = useMemo(() => ALL_TV_SLIDES.filter((s) => slideKeys.includes(s.key)), [slideKeys])
 
@@ -94,11 +102,12 @@ export function RankingTVPage() {
 
   useEffect(() => {
     if (slides.length <= 1) return
+    const ms = Math.max(5000, rankingsRotateMs)
     const id = window.setInterval(() => {
       setSlide((sl) => (sl + 1) % slides.length)
-    }, ROTATE_MS)
+    }, ms)
     return () => window.clearInterval(id)
-  }, [slides.length])
+  }, [slides.length, rankingsRotateMs])
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -111,6 +120,10 @@ export function RankingTVPage() {
     let alive = true
     ;(async () => {
       try {
+        const cfg = await getTvTimersConfig()
+        if (!alive) return
+        setRankingsRotateMs(cfg.rankingsRotateMs)
+        setAvisosRotateMs(cfg.avisosRotateMs)
         const rows = await listAvisosRecentes({ includeInactive: false, limitCount: 80 })
         if (!alive) return
         setAvisos(rows)
@@ -208,6 +221,7 @@ export function RankingTVPage() {
         )}
         {slides.map((s, i) => {
           const Cmp = s.Component
+          const avisoProps = s.key === 'avisos' ? { rotateMs: avisosRotateMs } : null
           return (
             <div
               key={s.key}
@@ -215,7 +229,7 @@ export function RankingTVPage() {
               hidden={i !== activeIndex}
               aria-hidden={i !== activeIndex}
             >
-              <Cmp tvMode tvRefreshKey={refreshTick} />
+              <Cmp tvMode tvRefreshKey={refreshTick} {...(avisoProps ?? {})} />
             </div>
           )
         })}

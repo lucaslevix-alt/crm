@@ -8,6 +8,7 @@ import {
   Package,
   Settings,
   Target,
+  Timer,
   Trophy,
   Users,
   UsersRound
@@ -72,6 +73,21 @@ export function ConfigHubPage() {
               <span className="config-hub-card-title">Avisos</span>
               <span className="config-hub-card-text">
                 Recados, comunicados e operação — aparecem como ticker/destaque no modo TV da Classificação.
+              </span>
+            </span>
+            <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
+          </Link>
+        )}
+
+        {isAdmin && (
+          <Link to="/config/tv" className="config-hub-card">
+            <span className="config-hub-card-ic">
+              <Timer size={22} strokeWidth={1.65} aria-hidden />
+            </span>
+            <span className="config-hub-card-body">
+              <span className="config-hub-card-title">TV</span>
+              <span className="config-hub-card-text">
+                Temporizadores do modo TV: troca de rankings e troca de avisos.
               </span>
             </span>
             <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />

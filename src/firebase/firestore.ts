@@ -200,6 +200,37 @@ export async function deleteAviso(id: string): Promise<void> {
   await deleteDoc(doc(db, 'avisos', id))
 }
 
+export interface TvTimersConfig {
+  /** Intervalo de troca de ranking no modo TV, em milissegundos */
+  rankingsRotateMs: number
+  /** Intervalo de troca de aviso no slide "Avisos", em milissegundos */
+  avisosRotateMs: number
+}
+
+const tvTimersConfigRef = doc(db, 'config', 'tv_timers')
+
+function clampMs(raw: unknown, fallback: number, minMs: number, maxMs: number): number {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(minMs, Math.min(maxMs, Math.floor(n)))
+}
+
+export async function getTvTimersConfig(): Promise<TvTimersConfig> {
+  const snap = await getDoc(tvTimersConfigRef)
+  const raw = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
+  return {
+    rankingsRotateMs: clampMs(raw.rankingsRotateMs, 30_000, 5_000, 300_000),
+    avisosRotateMs: clampMs(raw.avisosRotateMs, 10_000, 3_000, 120_000)
+  }
+}
+
+export async function setTvTimersConfig(params: Partial<TvTimersConfig>): Promise<void> {
+  const body: Record<string, number> = {}
+  if (params.rankingsRotateMs != null) body.rankingsRotateMs = clampMs(params.rankingsRotateMs, 30_000, 5_000, 300_000)
+  if (params.avisosRotateMs != null) body.avisosRotateMs = clampMs(params.avisosRotateMs, 10_000, 3_000, 120_000)
+  await setDoc(tvTimersConfigRef, body, { merge: true })
+}
+
 /** Valores persistidos no Firestore para vendas */
 export const FORMAS_PAGAMENTO_VENDA = [
   { value: 'a_vista', label: 'À vista' },

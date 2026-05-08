@@ -7,6 +7,7 @@ import {
   AuditoriaPage,
   ConfigHubPage,
   ConfigAvisosPage,
+  ConfigTvTimersPage,
   ConfigMetasPage,
   RelatoriosComissoesPage,
   DashboardPage,
@@ -134,6 +135,14 @@ export default function App() {
                   element={
                     <AdminOnlyRoute>
                       <ConfigAvisosPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="tv"
+                  element={
+                    <AdminOnlyRoute>
+                      <ConfigTvTimersPage />
                     </AdminOnlyRoute>
                   }
                 />

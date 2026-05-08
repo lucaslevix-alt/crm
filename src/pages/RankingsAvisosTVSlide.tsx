@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { isAvisoAtivoAgora, listAvisosRecentes, type AvisoRow } from '../firebase/firestore'
 
-const ROTATE_MS = 10_000
-
 function pickActive(rows: AvisoRow[]): AvisoRow[] {
   const now = new Date()
   return rows.filter((r) => isAvisoAtivoAgora(r, now))
 }
 
-export function RankingsAvisosTVSlide({ tvRefreshKey }: { tvRefreshKey?: number } = {}) {
+export function RankingsAvisosTVSlide({ tvRefreshKey, rotateMs }: { tvRefreshKey?: number; rotateMs?: number } = {}) {
   const [rows, setRows] = useState<AvisoRow[]>([])
   const [idx, setIdx] = useState(0)
 
@@ -38,9 +36,10 @@ export function RankingsAvisosTVSlide({ tvRefreshKey }: { tvRefreshKey?: number 
 
   useEffect(() => {
     if (active.length <= 1) return
-    const id = window.setInterval(() => setIdx((i) => i + 1), ROTATE_MS)
+    const ms = typeof rotateMs === 'number' && Number.isFinite(rotateMs) ? Math.max(3000, rotateMs) : 10_000
+    const id = window.setInterval(() => setIdx((i) => i + 1), ms)
     return () => window.clearInterval(id)
-  }, [active.length])
+  }, [active.length, rotateMs])
 
   if (!current) {
     return (
