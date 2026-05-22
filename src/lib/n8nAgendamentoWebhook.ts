@@ -18,6 +18,8 @@ export type N8nAgendamentoPayload = {
   registroAgendadaId: string
   data: string
   emailsLead?: string[]
+  /** Todos os convidados do evento (LVX, lead, closer) — para criar o Google Agenda via N8N. */
+  guestEmails?: string[]
   closerUserId?: string
   closerUserName?: string
   closerEmail?: string

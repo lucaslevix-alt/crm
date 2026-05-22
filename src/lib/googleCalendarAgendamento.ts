@@ -33,14 +33,31 @@ export function buildAgendamentoGoogleCalendarTitle(nomeLead: string, date: stri
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** Convidados pré-preenchidos (e-mails separados por vírgula em `VITE_GOOGLE_CALENDAR_DEFAULT_GUESTS`). */
+/** Convidado LVX incluído em todos os eventos do Google Agenda (SDR). */
+export const LVX_CALENDAR_GUEST_EMAIL = 'contato@lvxdigital.com.br'
+
+/** Convidados fixos LVX + extras opcionais (`VITE_GOOGLE_CALENDAR_DEFAULT_GUESTS`, vírgula). */
 export function getDefaultGoogleCalendarGuests(): string[] {
+  const fixed = [LVX_CALENDAR_GUEST_EMAIL]
   const raw = (import.meta.env.VITE_GOOGLE_CALENDAR_DEFAULT_GUESTS as string | undefined)?.trim()
-  if (!raw) return []
-  return raw
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter((e) => EMAIL_RE.test(e))
+  const fromEnv = raw
+    ? raw
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => EMAIL_RE.test(e))
+    : []
+  return [...new Set([...fixed, ...fromEnv].filter((e) => EMAIL_RE.test(e)))]
+}
+
+/** E-mails do lead + closer + convidados LVX (sem duplicar). */
+export function buildAgendamentoGuestEmails(options?: {
+  leadEmails?: string[]
+  closerEmail?: string
+}): string[] {
+  const extra: string[] = [...(options?.leadEmails ?? [])]
+  const ce = options?.closerEmail?.trim().toLowerCase()
+  if (ce && EMAIL_RE.test(ce) && !extra.includes(ce)) extra.push(ce)
+  return mergeGoogleCalendarGuestEmails(extra)
 }
 
 /** Vários e-mails no mesmo campo (vírgula, ponto e vírgula ou linha). */
@@ -110,19 +127,20 @@ export function buildGoogleCalendarAgendamentoUrlForSdr(params: {
   date: string
   time?: string
   durationMinutes?: number
-  /** E-mails do lead e do closer (além de `VITE_GOOGLE_CALENDAR_DEFAULT_GUESTS`). */
+  /** E-mails do lead e do closer (além do convidado LVX fixo). */
   leadEmails?: string[]
   closerEmail?: string
 }): string {
-  const extra: string[] = [...(params.leadEmails ?? [])]
-  const ce = params.closerEmail?.trim().toLowerCase()
-  if (ce && EMAIL_RE.test(ce) && !extra.includes(ce)) extra.push(ce)
+  const guests = buildAgendamentoGuestEmails({
+    leadEmails: params.leadEmails,
+    closerEmail: params.closerEmail
+  })
   return buildGoogleCalendarAgendamentoUrl({
     title: buildAgendamentoGoogleCalendarTitle(params.nomeLead, params.date, params.time),
     date: params.date,
     time: params.time,
     durationMinutes: params.durationMinutes,
     details: AGENDAMENTO_GOOGLE_CALENDAR_DESCRIPTION,
-    guestEmails: extra.length > 0 ? extra : undefined
+    guestEmails: guests
   })
 }

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { createAgendamentoFromSdr, listClosersParaAgendamentoSdr } from '../../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import {
+  buildAgendamentoGuestEmails,
   buildGoogleCalendarAgendamentoUrlForSdr,
   parseLeadEmailsInput
 } from '../../lib/googleCalendarAgendamento'
@@ -109,11 +110,14 @@ export function AgendeiReuniaoModal({ open, user, onClose }: AgendeiReuniaoModal
         closerUserName: closerSel.nome
       })
 
+      const guestEmails = buildAgendamentoGuestEmails({ leadEmails, closerEmail })
+
       triggerN8nAgendamentoWebhook({
         event: 'reuniao_agendada_sdr',
         origemLead: origem,
         nomeLead: nome,
         emailsLead: leadEmails.length > 0 ? leadEmails : undefined,
+        guestEmails,
         closerUserId: closerSel.id,
         closerUserName: closerSel.nome,
         closerEmail,
