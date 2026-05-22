@@ -9,7 +9,6 @@ import {
   Filter,
   Factory,
   LayoutDashboard,
-  Link2,
   CalendarClock,
   LogOut,
   Megaphone,
@@ -165,19 +164,6 @@ export function Sidebar() {
                   <CalendarClock {...icNavStripe} />
                 </span>
                 <span className="nav-label">Agenda</span>
-              </NavLink>
-            )}
-            {(currentUser?.cargo === 'admin' || currentUser?.cargo === 'closer') && (
-              <NavLink
-                to="/propostas-fechamento"
-                className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-                title="Propostas de fechamento"
-                {...navPrefetch('/propostas-fechamento')}
-              >
-                <span className="nav-icon">
-                  <Link2 {...icNavStripe} />
-                </span>
-                <span className="nav-label">Propostas de fechamento</span>
               </NavLink>
             )}
             <NavLink

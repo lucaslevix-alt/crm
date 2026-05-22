@@ -67,10 +67,6 @@ export function prefetchPath(raw: string) {
     )
     return
   }
-  if (a === 'propostas-fechamento') {
-    runOnce('p:propostas', () => import('../pages/PropostasFechamentoPage'))
-    return
-  }
   if (a === 'config') {
     runOnce('p:config-bundle', () =>
       Promise.all([

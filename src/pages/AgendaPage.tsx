@@ -1,23 +1,30 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, CircleDollarSign, UserX } from 'lucide-react'
+import { CalendarClock, LayoutGrid, List } from 'lucide-react'
 import {
   listAgendamentos,
   marcarAgendamentoNoShow,
+  redefinirDesfechoAgendamentoAdmin,
   resolveSquadForUserId,
   type AgendamentoRow,
   type AgendamentoStatus
 } from '../firebase/firestore'
-import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
-import { useAppStore } from '../store/useAppStore'
+import { AgendaCalendarView } from '../components/agenda/AgendaCalendarView'
+import { AgendaRowActions } from '../components/agenda/AgendaRowActions'
 import { AgendaVendaModal } from '../components/agenda/AgendaVendaModal'
 import { AgendaRealizadaModal } from '../components/agenda/AgendaRealizadaModal'
 import { AgendaReagendarModal } from '../components/agenda/AgendaReagendarModal'
-import { QUALIFICACAO_SDR_LABELS, type QualificacaoSdr } from '../lib/qualificacaoSdr'
+import {
+  AGENDAMENTO_QUAL_BADGE,
+  AGENDAMENTO_STATUS_BADGE,
+  AGENDAMENTO_STATUS_LABEL,
+  QUALIFICACAO_SDR_LABELS
+} from '../lib/agendaConstants'
+import { monthRange, todayIso, ymFromIso } from '../lib/agendaCalendar'
+import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
+import { useAppStore } from '../store/useAppStore'
 
-function today(): string {
-  return new Date().toISOString().split('T')[0]
-}
+type ViewMode = 'lista' | 'calendario'
 
 function mRange(): { start: string; end: string } {
   const n = new Date()
@@ -31,7 +38,7 @@ function mRange(): { start: string; end: string } {
 type RegPeriod = '7d' | '14d' | 'mes' | 'todos' | 'custom'
 
 function getRegRange(period: RegPeriod, customDate?: string): { start: string; end: string } {
-  const td = today()
+  const td = todayIso()
   if (period === '7d') {
     const d = new Date()
     d.setDate(d.getDate() - 6)
@@ -53,178 +60,6 @@ function fdt(s: string): string {
   return `${d}/${m}/${y}`
 }
 
-const STATUS_LABEL: Record<AgendamentoStatus, string> = {
-  agendada: 'Agendada',
-  realizada: 'Realizada',
-  venda: 'Venda',
-  no_show: 'No show',
-  reagendada: 'Reagendada'
-}
-
-const STATUS_BADGE: Record<AgendamentoStatus, string> = {
-  agendada: 'b-sdr',
-  realizada: 'b-green',
-  venda: 'b-amber',
-  no_show: 'b-no-show',
-  reagendada: 'b-closer'
-}
-
-const QUAL_BADGE: Record<QualificacaoSdr, string> = {
-  qualificada: 'b-green',
-  pendente: 'b-amber',
-  nao_qualificada: 'b-no-show'
-}
-
-type MenuRect = { top: number; right: number; minWidth: number }
-
-function AgendaCloserOutcomeMenu({
-  disabled,
-  variant,
-  onPick
-}: {
-  disabled: boolean
-  variant: 'agendada' | 'realizada'
-  onPick: (action: 'realizada' | 'no_show' | 'venda') => void
-}) {
-  const [open, setOpen] = useState(false)
-  const [menuRect, setMenuRect] = useState<MenuRect | null>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  const placeMenu = useCallback(() => {
-    const el = wrapRef.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    const minWidth = Math.max(176, Math.ceil(r.width))
-    const right = Math.max(8, window.innerWidth - r.right)
-    setMenuRect({ top: Math.round(r.bottom + 4), right, minWidth })
-  }, [])
-
-  useLayoutEffect(() => {
-    if (!open) {
-      setMenuRect(null)
-      return
-    }
-    placeMenu()
-  }, [open, placeMenu])
-
-  useEffect(() => {
-    if (!open) return
-    const onScrollOrResize = () => placeMenu()
-    window.addEventListener('resize', onScrollOrResize)
-    window.addEventListener('scroll', onScrollOrResize, true)
-    return () => {
-      window.removeEventListener('resize', onScrollOrResize)
-      window.removeEventListener('scroll', onScrollOrResize, true)
-    }
-  }, [open, placeMenu])
-
-  useEffect(() => {
-    if (!open) return
-    const onDocDown = (e: MouseEvent) => {
-      const t = e.target as Node
-      if (wrapRef.current?.contains(t) || menuRef.current?.contains(t)) return
-      setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDocDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDocDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  const menuBody =
-    variant === 'agendada' ? (
-      <>
-        <button
-          type="button"
-          className="agenda-dd-item"
-          role="menuitem"
-          onClick={() => {
-            setOpen(false)
-            onPick('realizada')
-          }}
-        >
-          <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
-          Realizada
-        </button>
-        <button
-          type="button"
-          className="agenda-dd-item"
-          role="menuitem"
-          onClick={() => {
-            setOpen(false)
-            onPick('no_show')
-          }}
-        >
-          <UserX size={16} strokeWidth={1.65} aria-hidden />
-          No show
-        </button>
-        <button
-          type="button"
-          className="agenda-dd-item agenda-dd-item--primary"
-          role="menuitem"
-          onClick={() => {
-            setOpen(false)
-            onPick('venda')
-          }}
-        >
-          Venda
-        </button>
-      </>
-    ) : (
-      <button
-        type="button"
-        className="agenda-dd-item agenda-dd-item--primary"
-        role="menuitem"
-        onClick={() => {
-          setOpen(false)
-          onPick('venda')
-        }}
-      >
-        <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
-        Registrar venda
-      </button>
-    )
-
-  return (
-    <div className="agenda-dd" ref={wrapRef}>
-      <button
-        type="button"
-        className="btn btn-ghost btn-sm agenda-dd-trigger"
-        disabled={disabled}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => setOpen((v) => !v)}
-      >
-        Desfecho
-        <ChevronDown size={14} strokeWidth={2} aria-hidden className="agenda-dd-chevron" />
-      </button>
-      {open &&
-        menuRect &&
-        createPortal(
-          <div
-            ref={menuRef}
-            className="agenda-dd-menu"
-            style={{
-              top: menuRect.top,
-              right: menuRect.right,
-              minWidth: menuRect.minWidth
-            }}
-            role="menu"
-          >
-            {menuBody}
-          </div>,
-          document.body
-        )}
-    </div>
-  )
-}
-
 export function AgendaPage() {
   const { currentUser, registrosVersion, showToast, incrementRegistrosVersion } = useAppStore()
   const [regPeriod, setRegPeriod] = useState<RegPeriod>('14d')
@@ -239,76 +74,164 @@ export function AgendaPage() {
   const [realizadaPara, setRealizadaPara] = useState<AgendamentoRow | null>(null)
   const [reagendarPara, setReagendarPara] = useState<AgendamentoRow | null>(null)
   const [marcandoId, setMarcandoId] = useState<string | null>(null)
+  const [adminDesfechoEdit, setAdminDesfechoEdit] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('calendario')
+  const [calendarYm, setCalendarYm] = useState(() => ymFromIso(todayIso()))
+  const [selectedAgendamento, setSelectedAgendamento] = useState<AgendamentoRow | null>(null)
 
   const isAdmin = currentUser?.cargo === 'admin'
   const isCloser = currentUser?.cargo === 'closer'
+  const isSdrRole = currentUser?.cargo === 'sdr'
 
-  const load = useCallback(async () => {
-    if (!currentUser) return
-    setLoading(true)
-    setError(null)
-    try {
-      const squad = await resolveSquadForUserId(currentUser.id)
-      setMySquadId(squad?.squadId ?? null)
-      const list = await listAgendamentos({
-        squadId: squad?.squadId ?? null,
-        admin: isAdmin
-      })
-      setRows(list)
-    } catch (e) {
-      setError(formatFirebaseOrUnknownError(e) || 'Erro ao carregar')
-      setRows([])
-    } finally {
-      setLoading(false)
-    }
-  }, [currentUser, isAdmin])
+  const hasLoadedOnceRef = useRef(false)
+
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!currentUser) return
+      const silent = opts?.silent === true && hasLoadedOnceRef.current
+      if (!silent) {
+        setLoading(true)
+        setError(null)
+      }
+      try {
+        const squad = await resolveSquadForUserId(currentUser.id)
+        setMySquadId(squad?.squadId ?? null)
+        const list = await listAgendamentos({
+          squadId: squad?.squadId ?? null,
+          admin: isAdmin
+        })
+        setRows(list)
+        setSelectedAgendamento((prev) => {
+          if (!prev) return null
+          return list.find((r) => r.id === prev.id) ?? null
+        })
+      } catch (e) {
+        if (!silent) {
+          setError(formatFirebaseOrUnknownError(e) || 'Erro ao carregar')
+          setRows([])
+        }
+      } finally {
+        hasLoadedOnceRef.current = true
+        setLoading(false)
+      }
+    },
+    [currentUser, isAdmin]
+  )
 
   useEffect(() => {
-    void load()
+    void load({ silent: hasLoadedOnceRef.current })
   }, [load, registrosVersion])
 
   const { start, end } = getRegRange(regPeriod, customDate)
+  const calRange = monthRange(calendarYm)
 
-  const filtered = rows.filter((r) => {
-    if (r.data < start || r.data > end) return false
-    if (fStatus && r.status !== fStatus) return false
-    const q = busca.trim().toLowerCase()
-    if (q) {
-      const match =
-        r.grupoWpp.toLowerCase().includes(q) ||
-        (r.origemLead ?? '').toLowerCase().includes(q) ||
-        r.sdrUserName.toLowerCase().includes(q) ||
-        r.squadNome.toLowerCase().includes(q) ||
-        (r.closerUserName ?? '').toLowerCase().includes(q)
-      if (!match) return false
-    }
-    return true
-  })
+  const matchesFilters = useCallback(
+    (r: AgendamentoRow) => {
+      if (fStatus && r.status !== fStatus) return false
+      const q = busca.trim().toLowerCase()
+      if (q) {
+        const match =
+          r.grupoWpp.toLowerCase().includes(q) ||
+          (r.origemLead ?? '').toLowerCase().includes(q) ||
+          r.sdrUserName.toLowerCase().includes(q) ||
+          r.squadNome.toLowerCase().includes(q) ||
+          (r.closerUserName ?? '').toLowerCase().includes(q)
+        if (!match) return false
+      }
+      return true
+    },
+    [fStatus, busca]
+  )
+
+  const filteredLista = useMemo(
+    () => rows.filter((r) => r.data >= start && r.data <= end && matchesFilters(r)),
+    [rows, start, end, matchesFilters]
+  )
+
+  const filteredCalendario = useMemo(
+    () => rows.filter((r) => r.data >= calRange.start && r.data <= calRange.end && matchesFilters(r)),
+    [rows, calRange.start, calRange.end, matchesFilters]
+  )
+
+  const filtered = viewMode === 'lista' ? filteredLista : filteredCalendario
 
   function podeAgirNoItem(a: AgendamentoRow): boolean {
     if (!currentUser) return false
-    if (!(isAdmin || isCloser)) return false
     if (isAdmin) return true
+    if (!isCloser) return false
+    if (a.closerUserId && a.closerUserId === currentUser.id) return true
     return a.squadId === mySquadId
   }
 
-  async function handleNoShow(a: AgendamentoRow) {
+  const handleSelectAgendamento = useCallback(
+    (row: AgendamentoRow | null) => {
+      if (!row) {
+        setSelectedAgendamento(null)
+        return
+      }
+      setSelectedAgendamento(rows.find((r) => r.id === row.id) ?? row)
+    },
+    [rows]
+  )
+
+  useEffect(() => {
+    if (!selectedAgendamento || viewMode !== 'calendario') return
+    document.getElementById('agenda-cal-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [selectedAgendamento?.id, viewMode])
+
+  async function handleNoShow(a: AgendamentoRow, adminOverride = false) {
     if (!currentUser) return
-    if (!window.confirm('Marcar como no show? O lead não compareceu — será criado um registo para métricas (SDR).')) return
+    const msg = adminOverride
+      ? 'Alterar o desfecho para no show? Os registos do desfecho anterior serão substituídos.'
+      : 'Marcar como no show? O lead não compareceu — será criado um registo para métricas (SDR).'
+    if (!window.confirm(msg)) return
     setMarcandoId(a.id)
     try {
-      await marcarAgendamentoNoShow({
-        agendamentoId: a.id,
-        closer: { id: currentUser.id, nome: currentUser.nome, cargo: currentUser.cargo }
-      })
-      showToast('Marcado como no show.')
+      const closer = { id: currentUser.id, nome: currentUser.nome, cargo: currentUser.cargo }
+      if (adminOverride) {
+        await redefinirDesfechoAgendamentoAdmin({
+          agendamentoId: a.id,
+          novoStatus: 'no_show',
+          closer
+        })
+      } else {
+        await marcarAgendamentoNoShow({ agendamentoId: a.id, closer })
+      }
+      showToast(adminOverride ? 'Desfecho atualizado para no show.' : 'Marcado como no show.')
       incrementRegistrosVersion()
-      void load()
     } catch (e) {
       showToast('Erro: ' + formatFirebaseOrUnknownError(e), 'err')
     } finally {
       setMarcandoId(null)
     }
+  }
+
+  function abrirDesfechoAdmin(a: AgendamentoRow, action: 'realizada' | 'no_show' | 'venda') {
+    if (action === 'no_show') {
+      if (a.status === 'no_show') return
+      void handleNoShow(a, true)
+      return
+    }
+    setAdminDesfechoEdit(true)
+    if (action === 'realizada') setRealizadaPara(a)
+    else setVendaPara(a)
+  }
+
+  function renderActions(a: AgendamentoRow) {
+    if (!currentUser) return null
+    return (
+      <AgendaRowActions
+        a={a}
+        podeAgir={podeAgirNoItem(a)}
+        isAdmin={isAdmin}
+        disabled={marcandoId === a.id}
+        onRealizada={() => setRealizadaPara(a)}
+        onNoShow={() => void handleNoShow(a)}
+        onVenda={() => setVendaPara(a)}
+        onReagendar={() => setReagendarPara(a)}
+        onAdminDesfecho={(action) => abrirDesfechoAdmin(a, action)}
+      />
+    )
   }
 
   return (
@@ -317,12 +240,44 @@ export function AgendaPage() {
         <CalendarClock size={26} strokeWidth={1.65} aria-hidden />
         <h1 className="page-title">Agenda do squad</h1>
       </div>
-      <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 16, maxWidth: 720 }}>
-        Reuniões agendadas pelo SDR (barra rápida «Agendei reunião»). O closer usa o menu{' '}
-        <strong>Desfecho</strong> na linha para escolher realizada, no show ou venda. Após{' '}
-        <strong>no show</strong>, pode <strong>reagendar</strong> com nova data — não cria outra reunião agendada; ao
-        marcar realizada depois, conta como realizada. Administradores veem todos os squads.
-      </p>
+      {isSdrRole ? (
+        <div
+          className="card"
+          style={{
+            padding: 14,
+            marginBottom: 16,
+            maxWidth: 720,
+            borderColor: 'rgba(34,197,94,.28)',
+            color: 'var(--text2)',
+            fontSize: 13,
+            lineHeight: 1.5
+          }}
+        >
+          <p style={{ margin: 0 }}>
+            Use a barra rápida <strong>«Agendei reunião»</strong> para colocar o lead na agenda do squad.{' '}
+            <strong>Não precisa cadastrar «reunião realizada»</strong>: quando o closer marcar o desfecho aqui
+            (realizada, no show ou venda), o seu registro de realizada é criado automaticamente em{' '}
+            <strong>Registros</strong>, com qualificação para comissão.
+          </p>
+          <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text3)' }}>
+            Acompanhe abaixo o status de cada lead que você agendou.
+          </p>
+        </div>
+      ) : (
+        <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 16, maxWidth: 720 }}>
+          Reuniões agendadas pelo SDR (barra rápida «Agendei reunião»). O closer usa o menu{' '}
+          <strong>Desfecho</strong> na linha para escolher realizada, no show ou venda. Após{' '}
+          <strong>no show</strong>, pode <strong>reagendar</strong> com nova data — não cria outra reunião agendada; ao
+          marcar realizada depois, conta como realizada.
+          {isAdmin && (
+            <>
+              {' '}
+              Administradores veem todos os squads e podem <strong>editar o desfecho</strong> mesmo depois de finalizado
+              (realizada, venda ou no show).
+            </>
+          )}
+        </p>
+      )}
 
       {!isAdmin && !mySquadId && (
         <div className="card" style={{ padding: 14, marginBottom: 16, borderColor: 'rgba(234,179,8,.35)', color: 'var(--text2)' }}>
@@ -330,34 +285,7 @@ export function AgendaPage() {
         </div>
       )}
 
-      <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-        <span className="ctrl-label">Período:</span>
-        <button type="button" className={`prd-btn ${regPeriod === '7d' ? 'active' : ''}`} onClick={() => setRegPeriod('7d')}>
-          7 dias
-        </button>
-        <button type="button" className={`prd-btn ${regPeriod === '14d' ? 'active' : ''}`} onClick={() => setRegPeriod('14d')}>
-          14 dias
-        </button>
-        <button type="button" className={`prd-btn ${regPeriod === 'mes' ? 'active' : ''}`} onClick={() => setRegPeriod('mes')}>
-          Mês
-        </button>
-        <button type="button" className={`prd-btn ${regPeriod === 'todos' ? 'active' : ''}`} onClick={() => setRegPeriod('todos')}>
-          Todos
-        </button>
-        <input
-          type="date"
-          className="di"
-          style={{ width: 140 }}
-          value={customDate}
-          onChange={(e) => {
-            setCustomDate(e.target.value)
-            if (e.target.value) setRegPeriod('custom')
-          }}
-          title="Data específica"
-        />
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
         <div style={{ flex: 1, minWidth: 140 }}>
           <div className="fg" style={{ margin: 0 }}>
             <label>Status</label>
@@ -383,19 +311,133 @@ export function AgendaPage() {
             />
           </div>
         </div>
+        <div className="agenda-view-toggle">
+          <button
+            type="button"
+            className={`agenda-tab${viewMode === 'calendario' ? ' active' : ''}`}
+            onClick={() => setViewMode('calendario')}
+            title="Visualização em calendário"
+          >
+            <LayoutGrid size={14} strokeWidth={2} aria-hidden style={{ marginRight: 6, verticalAlign: -2 }} />
+            Calendário
+          </button>
+          <button
+            type="button"
+            className={`agenda-tab${viewMode === 'lista' ? ' active' : ''}`}
+            onClick={() => setViewMode('lista')}
+            title="Visualização em lista"
+          >
+            <List size={14} strokeWidth={2} aria-hidden style={{ marginRight: 6, verticalAlign: -2 }} />
+            Lista
+          </button>
+        </div>
       </div>
 
+      {viewMode === 'lista' && (
+      <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <span className="ctrl-label">Período:</span>
+        <button type="button" className={`prd-btn ${regPeriod === '7d' ? 'active' : ''}`} onClick={() => setRegPeriod('7d')}>
+          7 dias
+        </button>
+        <button type="button" className={`prd-btn ${regPeriod === '14d' ? 'active' : ''}`} onClick={() => setRegPeriod('14d')}>
+          14 dias
+        </button>
+        <button type="button" className={`prd-btn ${regPeriod === 'mes' ? 'active' : ''}`} onClick={() => { setRegPeriod('mes'); setCalendarYm(ymFromIso(todayIso())) }}>
+          Mês
+        </button>
+        <button type="button" className={`prd-btn ${regPeriod === 'todos' ? 'active' : ''}`} onClick={() => setRegPeriod('todos')}>
+          Todos
+        </button>
+        <input
+          type="date"
+          className="di"
+          style={{ width: 140 }}
+          value={customDate}
+          onChange={(e) => {
+            setCustomDate(e.target.value)
+            if (e.target.value) {
+              setRegPeriod('custom')
+              setCalendarYm(ymFromIso(e.target.value))
+            }
+          }}
+          title="Data específica"
+        />
+      </div>
+      )}
+
       <div className="card">
-        {loading && (
+        {loading && rows.length === 0 && (
           <div className="loading">
             <div className="spin" />
             A carregar…
           </div>
         )}
         {error && <div style={{ color: 'var(--red)', padding: 16 }}>Erro: {error}</div>}
-        {!loading && !error && (
+        {!error && viewMode === 'calendario' && (rows.length > 0 || !loading) && (
+          <div style={{ padding: '12px 12px 20px' }}>
+            {filteredCalendario.length === 0 ? (
+              <div className="agenda-empty">
+                <div className="agenda-empty-icon" aria-hidden>
+                  <CalendarClock size={40} strokeWidth={1.4} />
+                </div>
+                <p>{busca || fStatus ? 'Nenhum item para os filtros neste mês.' : 'Nenhum agendamento neste mês.'}</p>
+              </div>
+            ) : (
+              <AgendaCalendarView
+                items={filteredCalendario}
+                calendarYm={calendarYm}
+                onCalendarYmChange={setCalendarYm}
+                selectedId={selectedAgendamento?.id ?? null}
+                onSelect={handleSelectAgendamento}
+              />
+            )}
+            {selectedAgendamento && (
+              <div id="agenda-cal-detail" className="agenda-cal-detail">
+                <div className="agenda-cal-detail-head">
+                  <div>
+                    <h3 className="agenda-cal-detail-title">{selectedAgendamento.grupoWpp}</h3>
+                    <p className="agenda-cal-detail-meta">
+                      {fdt(selectedAgendamento.data)} · {selectedAgendamento.origemLead || '—'} · SDR:{' '}
+                      {selectedAgendamento.sdrUserName}
+                      {selectedAgendamento.closerUserName
+                        ? ` · Closer: ${selectedAgendamento.closerUserName}`
+                        : ''}{' '}
+                      · {selectedAgendamento.squadNome}
+                    </p>
+                  </div>
+                  <span
+                    className={`badge ${AGENDAMENTO_STATUS_BADGE[selectedAgendamento.status]}`}
+                    title={AGENDAMENTO_STATUS_LABEL[selectedAgendamento.status]}
+                  >
+                    {AGENDAMENTO_STATUS_LABEL[selectedAgendamento.status]}
+                  </span>
+                </div>
+                {(selectedAgendamento.status === 'realizada' || selectedAgendamento.status === 'venda') &&
+                  selectedAgendamento.qualificacaoSdr && (
+                    <p style={{ fontSize: 12, marginBottom: 12 }}>
+                      Qualif. SDR:{' '}
+                      <span className={`badge ${AGENDAMENTO_QUAL_BADGE[selectedAgendamento.qualificacaoSdr]}`}>
+                        {QUALIFICACAO_SDR_LABELS[selectedAgendamento.qualificacaoSdr]}
+                      </span>
+                    </p>
+                  )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  {renderActions(selectedAgendamento)}
+                  {!podeAgirNoItem(selectedAgendamento) && (
+                    <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+                      {isSdrRole
+                        ? 'O closer do squad regista o desfecho neste painel.'
+                        : 'Sem permissão para alterar este agendamento.'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {!error && viewMode === 'lista' && (rows.length > 0 || !loading) && (
           <div className="tw">
-            {filtered.length === 0 ? (
+            {filteredLista.length === 0 ? (
               <div className="empty">
                 <div className="empty-icon" aria-hidden>
                   <CalendarClock size={40} strokeWidth={1.4} />
@@ -427,7 +469,7 @@ export function AgendaPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((a) => (
+                  {filteredLista.map((a) => (
                     <tr key={a.id}>
                       <td className="mono" style={{ fontSize: 12 }}>
                         {fdt(a.data)}
@@ -458,20 +500,20 @@ export function AgendaPage() {
                       </td>
                       <td className="agenda-td-status">
                         <span
-                          className={`badge ${STATUS_BADGE[a.status]}`}
+                          className={`badge ${AGENDAMENTO_STATUS_BADGE[a.status]}`}
                           title={
                             a.closerUserName
-                              ? `${STATUS_LABEL[a.status]} · Closer: ${a.closerUserName}`
-                              : STATUS_LABEL[a.status]
+                              ? `${AGENDAMENTO_STATUS_LABEL[a.status]} · Closer: ${a.closerUserName}`
+                              : AGENDAMENTO_STATUS_LABEL[a.status]
                           }
                         >
-                          {STATUS_LABEL[a.status]}
+                          {AGENDAMENTO_STATUS_LABEL[a.status]}
                         </span>
                       </td>
                       <td className="agenda-td-qual" style={{ fontSize: 12 }}>
                         {(a.status === 'realizada' || a.status === 'venda') && a.qualificacaoSdr ? (
                           <span
-                            className={`badge ${QUAL_BADGE[a.qualificacaoSdr]}`}
+                            className={`badge ${AGENDAMENTO_QUAL_BADGE[a.qualificacaoSdr]}`}
                             title={QUALIFICACAO_SDR_LABELS[a.qualificacaoSdr]}
                           >
                             {QUALIFICACAO_SDR_LABELS[a.qualificacaoSdr]}
@@ -480,40 +522,7 @@ export function AgendaPage() {
                           <span style={{ color: 'var(--text3)' }}>—</span>
                         )}
                       </td>
-                      <td className="agenda-td-actions">
-                        {(a.status === 'agendada' || a.status === 'reagendada') && podeAgirNoItem(a) && currentUser && (
-                          <AgendaCloserOutcomeMenu
-                            variant="agendada"
-                            disabled={marcandoId === a.id}
-                            onPick={(action) => {
-                              if (action === 'realizada') setRealizadaPara(a)
-                              else if (action === 'no_show') void handleNoShow(a)
-                              else setVendaPara(a)
-                            }}
-                          />
-                        )}
-                        {a.status === 'no_show' && podeAgirNoItem(a) && currentUser && (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm agenda-dd-trigger"
-                            disabled={marcandoId === a.id}
-                            onClick={() => setReagendarPara(a)}
-                            title="Nova data da reunião — não duplica agendada do SDR"
-                          >
-                            <CalendarPlus size={14} strokeWidth={1.75} aria-hidden style={{ marginRight: 4 }} />
-                            Reagendar
-                          </button>
-                        )}
-                        {a.status === 'realizada' && podeAgirNoItem(a) && currentUser && (
-                          <AgendaCloserOutcomeMenu
-                            variant="realizada"
-                            disabled={marcandoId === a.id}
-                            onPick={(action) => {
-                              if (action === 'venda') setVendaPara(a)
-                            }}
-                          />
-                        )}
-                      </td>
+                      <td className="agenda-td-actions">{renderActions(a)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -526,7 +535,15 @@ export function AgendaPage() {
       {vendaPara &&
         currentUser &&
         createPortal(
-          <AgendaVendaModal agendamento={vendaPara} closer={currentUser} onClose={() => setVendaPara(null)} />,
+          <AgendaVendaModal
+            agendamento={vendaPara}
+            closer={currentUser}
+            adminOverride={adminDesfechoEdit}
+            onClose={() => {
+              setVendaPara(null)
+              setAdminDesfechoEdit(false)
+            }}
+          />,
           document.body
         )}
       {realizadaPara &&
@@ -535,7 +552,11 @@ export function AgendaPage() {
           <AgendaRealizadaModal
             agendamento={realizadaPara}
             closer={currentUser}
-            onClose={() => setRealizadaPara(null)}
+            adminOverride={adminDesfechoEdit}
+            onClose={() => {
+              setRealizadaPara(null)
+              setAdminDesfechoEdit(false)
+            }}
           />,
           document.body
         )}

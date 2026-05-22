@@ -5086,6 +5086,387 @@ input.di:-webkit-autofill:focus {
     margin-left: 8px
 }
 
+.agenda-view-toggle {
+    display: flex;
+    gap: 4px;
+    margin-left: auto
+}
+
+.agenda-cal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 420px
+}
+
+.agenda-cal-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border2)
+}
+
+.agenda-cal-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap
+}
+
+.agenda-cal-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--border2);
+    background: var(--bg4);
+    color: var(--text2);
+    cursor: pointer
+}
+
+.agenda-cal-nav-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent2)
+}
+
+.agenda-cal-today-btn {
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer
+}
+
+.agenda-cal-today-btn:hover {
+    background: rgba(248, 74, 8, .1);
+    border-color: var(--accent);
+    color: var(--accent2)
+}
+
+.agenda-cal-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    min-width: 160px
+}
+
+.agenda-cal-view-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--bg4);
+    padding: 4px;
+    border-radius: 10px;
+    border: 1px solid var(--border2)
+}
+
+.agenda-cal-view-tab {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text2);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer
+}
+
+.agenda-cal-view-tab.active {
+    background: rgba(248, 74, 8, .15);
+    color: var(--accent2)
+}
+
+.agenda-cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    font-size: 11px;
+    color: var(--text3)
+}
+
+.agenda-cal-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px
+}
+
+.agenda-cal-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px
+}
+
+.agenda-cal-month {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg3)
+}
+
+.agenda-cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: var(--bg4);
+    border-bottom: 1px solid var(--border2)
+}
+
+.agenda-cal-weekday {
+    padding: 10px 4px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: .04em
+}
+
+.agenda-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    flex: 1
+}
+
+.agenda-cal-cell {
+    min-height: 108px;
+    border-right: 1px solid var(--border2);
+    border-bottom: 1px solid var(--border2);
+    padding: 6px;
+    vertical-align: top;
+    cursor: default
+}
+
+.agenda-cal-cell:nth-child(7n) {
+    border-right: none
+}
+
+.agenda-cal-cell--muted {
+    background: rgba(0, 0, 0, .12)
+}
+
+.agenda-cal-cell--today {
+    background: rgba(248, 74, 8, .06)
+}
+
+.agenda-cal-cell-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text2);
+    margin-bottom: 4px;
+    line-height: 1
+}
+
+.agenda-cal-cell--today .agenda-cal-cell-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff
+}
+
+.agenda-cal-cell-events {
+    display: flex;
+    flex-direction: column;
+    gap: 3px
+}
+
+.agenda-cal-ev {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    text-align: left;
+    padding: 3px 6px;
+    border: none;
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.25;
+    cursor: pointer;
+    border-left: 3px solid transparent
+}
+
+.agenda-cal-ev-title {
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%
+}
+
+.agenda-cal-ev-meta {
+    font-size: 10px;
+    opacity: .85;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%
+}
+
+.agenda-cal-ev--selected {
+    outline: 2px solid var(--text);
+    outline-offset: 1px
+}
+
+.agenda-cal-ev--agendada {
+    background: rgba(59, 130, 246, .2);
+    border-left-color: #3b82f6;
+    color: #93c5fd
+}
+
+.agenda-cal-ev--reagendada {
+    background: rgba(168, 85, 247, .18);
+    border-left-color: #a855f7;
+    color: #d8b4fe
+}
+
+.agenda-cal-ev--realizada {
+    background: rgba(34, 197, 94, .18);
+    border-left-color: var(--green);
+    color: var(--green)
+}
+
+.agenda-cal-ev--venda {
+    background: rgba(245, 158, 11, .2);
+    border-left-color: var(--amber);
+    color: var(--amber)
+}
+
+.agenda-cal-ev--no-show {
+    background: rgba(239, 68, 68, .15);
+    border-left-color: var(--red);
+    color: #fca5a5
+}
+
+.agenda-cal-more {
+    font-size: 10px;
+    color: var(--text3);
+    padding: 2px 4px
+}
+
+.agenda-cal-week {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0;
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    overflow: hidden;
+    min-height: 320px;
+    background: var(--bg3)
+}
+
+.agenda-cal-week-col {
+    border-right: 1px solid var(--border2);
+    display: flex;
+    flex-direction: column;
+    min-width: 0
+}
+
+.agenda-cal-week-col:last-child {
+    border-right: none
+}
+
+.agenda-cal-week-col--today {
+    background: rgba(248, 74, 8, .05)
+}
+
+.agenda-cal-week-head {
+    padding: 10px 8px;
+    text-align: center;
+    border-bottom: 1px solid var(--border2);
+    background: var(--bg4)
+}
+
+.agenda-cal-week-wd {
+    display: block;
+    font-size: 11px;
+    color: var(--text3);
+    text-transform: capitalize
+}
+
+.agenda-cal-week-d {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2
+}
+
+.agenda-cal-week-col--today .agenda-cal-week-d {
+    color: var(--accent2)
+}
+
+.agenda-cal-week-body {
+    flex: 1;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto
+}
+
+.agenda-cal-week-empty {
+    font-size: 12px;
+    color: var(--text3);
+    text-align: center;
+    padding: 16px 4px
+}
+
+.agenda-cal-detail {
+    margin-top: 16px;
+    padding: 16px 18px;
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    background: var(--bg3)
+}
+
+.agenda-cal-detail-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px
+}
+
+.agenda-cal-detail-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0 0 4px
+}
+
+.agenda-cal-detail-meta {
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.5
+}
+
+@media (max-width: 900px) {
+    .agenda-cal-grid .agenda-cal-cell {
+        min-height: 72px
+    }
+
+    .agenda-cal-week {
+        grid-template-columns: 1fr;
+    }
+
+    .agenda-cal-week-col {
+        border-right: none;
+        border-bottom: 1px solid var(--border2)
+    }
+}
+
 #modal-edit-reg .modal {
     width: 560px
 }

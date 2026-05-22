@@ -16,7 +16,6 @@ import {
   LeadsMetaSheetPage,
   MetasPage,
   ProdutosPage,
-  PropostasFechamentoPage,
   RankingCloserPage,
   RankingSquadsPage,
   RankingMetasPage,
@@ -56,13 +55,6 @@ function ProtectedShell() {
 function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAppStore()
   if (currentUser?.cargo !== 'admin') return <Navigate to="/dashboard" replace />
-  return <>{children}</>
-}
-
-function AdminOrCloserRoute({ children }: { children: React.ReactNode }) {
-  const { currentUser } = useAppStore()
-  const ok = currentUser?.cargo === 'admin' || currentUser?.cargo === 'closer'
-  if (!ok) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -213,14 +205,6 @@ export default function App() {
               </Route>
               <Route path="produtos" element={<Navigate to="/config/produtos" replace />} />
               <Route path="auditoria" element={<AuditoriaPage />} />
-              <Route
-                path="propostas-fechamento"
-                element={
-                  <AdminOrCloserRoute>
-                    <PropostasFechamentoPage />
-                  </AdminOrCloserRoute>
-                }
-              />
               <Route path="meta-ads" element={<MetaAdsPage />} />
               <Route path="leads-meta" element={<LeadsMetaSheetPage />} />
             </Route>

@@ -5,6 +5,7 @@ import {
   getLinhasNegociacaoAll,
   getProdutos,
   marcarAgendamentoVenda,
+  redefinirDesfechoAgendamentoAdmin,
   parseFormaPagamentoVenda,
   produtoPrecoReferencia,
   type AgendamentoRow,
@@ -32,10 +33,11 @@ interface ProdutoSelecionadoItem {
 interface AgendaVendaModalProps {
   agendamento: AgendamentoRow
   closer: CrmUser
+  adminOverride?: boolean
   onClose: () => void
 }
 
-export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaModalProps) {
+export function AgendaVendaModal({ agendamento, closer, adminOverride, onClose }: AgendaVendaModalProps) {
   const { showToast, incrementRegistrosVersion } = useAppStore()
   const [produtos, setProdutos] = useState<ProdutoRow[]>([])
   const [linhas, setLinhas] = useState<LinhaNegociacaoRow[]>([])
@@ -130,9 +132,10 @@ export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaMo
     })
     setSaving(true)
     try {
-      await marcarAgendamentoVenda({
+      const closerPayload = { id: closer.id, nome: closer.nome, cargo: closer.cargo }
+      const vendaPayload = {
         agendamentoId: agendamento.id,
-        closer: { id: closer.id, nome: closer.nome, cargo: closer.cargo },
+        closer: closerPayload,
         nomeCliente: nomeCliente.trim(),
         valor: parseFloat(valor) || 0,
         cashCollected: parseFloat(cashCollected) || 0,
@@ -141,8 +144,13 @@ export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaMo
         produtosDetalhes,
         valorReferenciaVenda: descCalc.valorReferencia,
         descontoCloser: descCalc.desconto
-      })
-      showToast('Venda registrada e agendamento atualizado.')
+      }
+      if (adminOverride) {
+        await redefinirDesfechoAgendamentoAdmin({ ...vendaPayload, novoStatus: 'venda' as const })
+      } else {
+        await marcarAgendamentoVenda(vendaPayload)
+      }
+      showToast(adminOverride ? 'Desfecho atualizado para venda.' : 'Venda registrada e agendamento atualizado.')
       incrementRegistrosVersion()
       onClose()
     } catch (err) {
@@ -163,7 +171,7 @@ export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaMo
       <div className="qrb-meet-panel" style={{ maxWidth: 520, maxHeight: '90vh', overflow: 'auto' }} role="dialog" aria-modal="true">
         <h2 className="qrb-meet-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <CircleDollarSign size={22} strokeWidth={1.65} aria-hidden />
-          Venda — lead: {agendamento.grupoWpp.slice(0, 40)}
+          {adminOverride ? 'Editar desfecho — venda' : 'Venda'} — lead: {agendamento.grupoWpp.slice(0, 40)}
           {agendamento.grupoWpp.length > 40 ? '…' : ''}
         </h2>
         <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
@@ -311,7 +319,7 @@ export function AgendaVendaModal({ agendamento, closer, onClose }: AgendaVendaMo
               Cancelar
             </button>
             <button type="submit" className="qrb-meet-btn qrb-meet-btn--primary" disabled={saving}>
-              {saving ? 'A guardar…' : 'Confirmar venda'}
+              {saving ? 'A guardar…' : adminOverride ? 'Guardar desfecho' : 'Confirmar venda'}
             </button>
           </div>
         </form>

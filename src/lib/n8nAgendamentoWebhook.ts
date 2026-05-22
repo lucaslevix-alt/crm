@@ -17,6 +17,11 @@ export type N8nAgendamentoPayload = {
   agendamentoId: string
   registroAgendadaId: string
   data: string
+  emailsLead?: string[]
+  closerUserId?: string
+  closerUserName?: string
+  closerEmail?: string
+  horaReuniao?: string
   source: 'crm_quick_bar'
 }
 

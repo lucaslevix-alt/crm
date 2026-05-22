@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { CheckCircle2 } from 'lucide-react'
-import { marcarAgendamentoRealizada, type AgendamentoRow } from '../../firebase/firestore'
+import {
+  marcarAgendamentoRealizada,
+  redefinirDesfechoAgendamentoAdmin,
+  type AgendamentoRow
+} from '../../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import type { CrmUser } from '../../store/useAppStore'
 import { useAppStore } from '../../store/useAppStore'
@@ -9,13 +13,14 @@ import { LEAD_BUDGET_OPTIONS, type LeadBudgetOp } from '../../lib/qualificacaoSd
 interface AgendaRealizadaModalProps {
   agendamento: AgendamentoRow
   closer: CrmUser
+  adminOverride?: boolean
   onClose: () => void
 }
 
-export function AgendaRealizadaModal({ agendamento, closer, onClose }: AgendaRealizadaModalProps) {
+export function AgendaRealizadaModal({ agendamento, closer, adminOverride, onClose }: AgendaRealizadaModalProps) {
   const { showToast, incrementRegistrosVersion } = useAppStore()
-  const [leadBudget, setLeadBudget] = useState<LeadBudgetOp | ''>('')
-  const [callRecordingUrl, setCallRecordingUrl] = useState('')
+  const [leadBudget, setLeadBudget] = useState<LeadBudgetOp | ''>(agendamento.leadBudget ?? '')
+  const [callRecordingUrl, setCallRecordingUrl] = useState(agendamento.callRecordingUrl ?? '')
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -41,13 +46,24 @@ export function AgendaRealizadaModal({ agendamento, closer, onClose }: AgendaRea
     }
     setSaving(true)
     try {
-      await marcarAgendamentoRealizada({
-        agendamentoId: agendamento.id,
-        closer: { id: closer.id, nome: closer.nome, cargo: closer.cargo },
-        leadBudget,
-        callRecordingUrl: url
-      })
-      showToast('Marcado como realizada.')
+      const closerPayload = { id: closer.id, nome: closer.nome, cargo: closer.cargo }
+      if (adminOverride) {
+        await redefinirDesfechoAgendamentoAdmin({
+          agendamentoId: agendamento.id,
+          novoStatus: 'realizada',
+          closer: closerPayload,
+          leadBudget,
+          callRecordingUrl: url
+        })
+      } else {
+        await marcarAgendamentoRealizada({
+          agendamentoId: agendamento.id,
+          closer: closerPayload,
+          leadBudget,
+          callRecordingUrl: url
+        })
+      }
+      showToast(adminOverride ? 'Desfecho atualizado para realizada.' : 'Marcado como realizada.')
       incrementRegistrosVersion()
       onClose()
     } catch (err) {
@@ -68,7 +84,7 @@ export function AgendaRealizadaModal({ agendamento, closer, onClose }: AgendaRea
       <div className="qrb-meet-panel" style={{ maxWidth: 480, maxHeight: '90vh', overflow: 'auto' }} role="dialog" aria-modal="true">
         <h2 className="qrb-meet-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <CheckCircle2 size={22} strokeWidth={1.65} aria-hidden />
-          Reunião realizada — {agendamento.grupoWpp.slice(0, 36)}
+          {adminOverride ? 'Editar desfecho — realizada' : 'Reunião realizada'} — {agendamento.grupoWpp.slice(0, 36)}
           {agendamento.grupoWpp.length > 36 ? '…' : ''}
         </h2>
         <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
@@ -113,7 +129,7 @@ export function AgendaRealizadaModal({ agendamento, closer, onClose }: AgendaRea
               Cancelar
             </button>
             <button type="submit" className="qrb-meet-btn qrb-meet-btn--primary" disabled={saving}>
-              {saving ? 'A guardar…' : 'Confirmar realizada'}
+              {saving ? 'A guardar…' : adminOverride ? 'Guardar desfecho' : 'Confirmar realizada'}
             </button>
           </div>
         </form>

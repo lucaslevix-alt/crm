@@ -1,35 +1,25 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarCheck, CalendarPlus, CircleDollarSign, Handshake, Target, Zap } from 'lucide-react'
+import { CalendarPlus, CircleDollarSign, Handshake, Target, Zap } from 'lucide-react'
+import { AgendeiReuniaoModal } from '../agenda/AgendeiReuniaoModal'
 import { useAppStore } from '../../store/useAppStore'
-import { addRegistro, createAgendamentoFromSdr } from '../../firebase/firestore'
+import { addRegistro } from '../../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import { icSm } from '../../lib/icon-sizes'
-import { getN8nAgendamentoWebhookUrl, triggerN8nAgendamentoWebhook } from '../../lib/n8nAgendamentoWebhook'
 
 function today(): string {
   return new Date().toISOString().split('T')[0]
 }
 
 const tipoLabels: Record<string, string> = {
-  reuniao_agendada: 'Agendei reunião',
-  reuniao_realizada: 'Realizei reunião',
   reuniao_closer: 'Reunião closer'
-}
-
-function isRealizeiReuniaoSdr(tipo: string): boolean {
-  return tipo === 'reuniao_realizada'
-}
-
-function isAgendeiReuniaoSdr(tipo: string): boolean {
-  return tipo === 'reuniao_agendada'
 }
 
 export function QuickRegBar() {
   const { currentUser, quickBarHidden, showToast, incrementRegistrosVersion } = useAppStore()
+  const [agendeiOpen, setAgendeiOpen] = useState(false)
   const [pendingTipo, setPendingTipo] = useState<string | null>(null)
   const [origemLead, setOrigemLead] = useState('')
-  const [grupoWpp, setGrupoWpp] = useState('')
 
   const isSdr = currentUser && (currentUser.cargo === 'sdr' || currentUser.cargo === 'admin')
   const isCloser = currentUser && (currentUser.cargo === 'closer' || currentUser.cargo === 'admin')
@@ -37,96 +27,35 @@ export function QuickRegBar() {
   const showSdr = isSdr && !quickBarHidden
   const showCloser = isCloser && !quickBarHidden
 
-  async function quickReg(tipo: string, origemLeadVal?: string, grupoWppVal?: string | null) {
+  async function quickRegCloser(origemLeadVal?: string) {
     if (!currentUser) return
     try {
-      if (tipo === 'reuniao_agendada') {
-        const created = await createAgendamentoFromSdr({
-          sdrUserId: currentUser.id,
-          sdrUserName: currentUser.nome,
-          sdrCargo: currentUser.cargo,
-          origemLead: (origemLeadVal ?? '').trim(),
-          grupoWpp: (grupoWppVal ?? '').trim()
-        })
-        const dataStr = today()
-        triggerN8nAgendamentoWebhook({
-          event: 'reuniao_agendada_sdr',
-          origemLead: (origemLeadVal ?? '').trim(),
-          nomeLead: (grupoWppVal ?? '').trim(),
-          sdrUserId: currentUser.id,
-          sdrUserName: currentUser.nome,
-          sdrCargo: currentUser.cargo,
-          squadId: created.squadId,
-          squadNome: created.squadNome,
-          agendamentoId: created.agendamentoId,
-          registroAgendadaId: created.registroAgendadaId,
-          data: dataStr,
-          source: 'crm_quick_bar'
-        })
-        const n8nOn = Boolean(getN8nAgendamentoWebhookUrl())
-        showToast(
-          n8nOn
-            ? 'Reunião agendada. Automação N8N notificada (criação do grupo no WhatsApp).'
-            : 'Reunião agendada (registro + agenda do squad).'
-        )
-      } else {
-        await addRegistro({
-          data: today(),
-          tipo,
-          userId: currentUser.id,
-          userName: currentUser.nome,
-          userCargo: currentUser.cargo,
-          anuncio: origemLeadVal?.trim() || null,
-          grupoWpp: isRealizeiReuniaoSdr(tipo) ? grupoWppVal?.trim() || null : null
-        })
-        const msg =
-          tipo === 'reuniao_realizada'
-            ? 'Reunião realizada.'
-            : tipo === 'reuniao_closer'
-              ? 'Reunião closer registrada.'
-              : 'Registro salvo.'
-        showToast(msg)
-      }
+      await addRegistro({
+        data: today(),
+        tipo: 'reuniao_closer',
+        userId: currentUser.id,
+        userName: currentUser.nome,
+        userCargo: currentUser.cargo,
+        anuncio: origemLeadVal?.trim() || null,
+        grupoWpp: null
+      })
+      showToast('Reunião closer registrada.')
       incrementRegistrosVersion()
     } catch (err) {
       showToast('Erro: ' + formatFirebaseOrUnknownError(err), 'err')
     }
   }
 
-  function handleQuickAction(tipo: string) {
-    setPendingTipo(tipo)
-    setOrigemLead('')
-    setGrupoWpp('')
-  }
-
   function confirmCampanha() {
     if (!pendingTipo) return
-    if (isAgendeiReuniaoSdr(pendingTipo)) {
-      if (!origemLead.trim()) {
-        showToast('Informe a origem do lead', 'err')
-        return
-      }
-      if (!grupoWpp.trim()) {
-        showToast('Informe o nome do lead', 'err')
-        return
-      }
-    }
-    if (isRealizeiReuniaoSdr(pendingTipo) && !grupoWpp.trim()) {
-      showToast('Informe o grupo de WhatsApp', 'err')
-      return
-    }
-    const gw =
-      isAgendeiReuniaoSdr(pendingTipo) || isRealizeiReuniaoSdr(pendingTipo) ? grupoWpp : null
-    void quickReg(pendingTipo, origemLead, gw)
+    void quickRegCloser(origemLead)
     setPendingTipo(null)
     setOrigemLead('')
-    setGrupoWpp('')
   }
 
   function cancelCampanha() {
     setPendingTipo(null)
     setOrigemLead('')
-    setGrupoWpp('')
   }
 
   function openModalRegistroVenda() {
@@ -149,13 +78,9 @@ export function QuickRegBar() {
           <Zap size={14} strokeWidth={2} style={{ opacity: 0.85 }} />
           SDR
         </span>
-        <button type="button" className="qrb-btn qrb-ag" onClick={() => handleQuickAction('reuniao_agendada')}>
+        <button type="button" className="qrb-btn qrb-ag" onClick={() => setAgendeiOpen(true)}>
           <CalendarPlus {...icSm} />
           Agendei reunião
-        </button>
-        <button type="button" className="qrb-btn qrb-re" onClick={() => handleQuickAction('reuniao_realizada')}>
-          <CalendarCheck {...icSm} />
-          Realizei reunião
         </button>
         <button
           type="button"
@@ -166,6 +91,10 @@ export function QuickRegBar() {
           <Target {...icSm} />
           Registrar leads
         </button>
+        <span className="qrb-sep">|</span>
+        <span style={{ fontSize: 11, color: 'var(--text3)', maxWidth: 200, lineHeight: 1.35 }}>
+          Realizada: closer marca na <strong style={{ color: 'var(--text2)' }}>Agenda</strong>
+        </span>
         <span className="qrb-sep">|</span>
         <span style={{ fontSize: 11, color: 'var(--text3)' }}>
           <span className="kbd">N</span> completo
@@ -180,7 +109,7 @@ export function QuickRegBar() {
           <Zap size={14} strokeWidth={2} style={{ opacity: 0.85 }} />
           Closer
         </span>
-        <button type="button" className="qrb-btn qrb-cl" onClick={() => handleQuickAction('reuniao_closer')}>
+        <button type="button" className="qrb-btn qrb-cl" onClick={() => setPendingTipo('reuniao_closer')}>
           <Handshake {...icSm} />
           Reunião realizada
         </button>
@@ -193,6 +122,10 @@ export function QuickRegBar() {
           <span className="kbd">N</span> completo
         </span>
       </div>
+
+      {currentUser && (
+        <AgendeiReuniaoModal open={agendeiOpen} user={currentUser} onClose={() => setAgendeiOpen(false)} />
+      )}
 
       {pendingTipo &&
         createPortal(
@@ -210,12 +143,7 @@ export function QuickRegBar() {
               <div className="qrb-meet-fields">
                 <div className="qrb-meet-field">
                   <label htmlFor="qrb-origem-lead">
-                    Origem do lead{' '}
-                    {isAgendeiReuniaoSdr(pendingTipo) ? (
-                      <span className="qrb-meet-req">*</span>
-                    ) : (
-                      <span className="qrb-meet-hint">(opcional)</span>
-                    )}
+                    Origem do lead <span className="qrb-meet-hint">(opcional)</span>
                   </label>
                   <input
                     id="qrb-origem-lead"
@@ -231,50 +159,11 @@ export function QuickRegBar() {
                     autoComplete="off"
                   />
                 </div>
-                {(isRealizeiReuniaoSdr(pendingTipo) || isAgendeiReuniaoSdr(pendingTipo)) && (
-                  <div className="qrb-meet-field">
-                    <label htmlFor="qrb-grupo-wpp">
-                      {isAgendeiReuniaoSdr(pendingTipo) ? (
-                        <>
-                          Nome do lead <span className="qrb-meet-req">*</span>
-                        </>
-                      ) : (
-                        <>
-                          Grupo Wpp <span className="qrb-meet-req">*</span>
-                        </>
-                      )}
-                    </label>
-                    <input
-                      id="qrb-grupo-wpp"
-                      type="text"
-                      className="qrb-meet-input"
-                      value={grupoWpp}
-                      onChange={(e) => setGrupoWpp(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') confirmCampanha()
-                      }}
-                      placeholder={
-                        isAgendeiReuniaoSdr(pendingTipo)
-                          ? 'Nome para identificar o lead (o N8N pode usar para criar o grupo)'
-                          : 'Identificação ou link do grupo'
-                      }
-                      autoComplete="off"
-                    />
-                  </div>
-                )}
                 <div className="qrb-meet-actions">
                   <button type="button" className="qrb-meet-btn qrb-meet-btn--secondary" onClick={cancelCampanha}>
                     Cancelar
                   </button>
-                  <button
-                    type="button"
-                    className="qrb-meet-btn qrb-meet-btn--primary"
-                    onClick={confirmCampanha}
-                    disabled={
-                      (isAgendeiReuniaoSdr(pendingTipo) && (!origemLead.trim() || !grupoWpp.trim())) ||
-                      (isRealizeiReuniaoSdr(pendingTipo) && !grupoWpp.trim())
-                    }
-                  >
+                  <button type="button" className="qrb-meet-btn qrb-meet-btn--primary" onClick={confirmCampanha}>
                     OK
                   </button>
                 </div>

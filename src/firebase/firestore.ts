@@ -2260,19 +2260,46 @@ export async function resolveSquadForUserId(userId: string): Promise<{ squadId: 
   return null
 }
 
+/** Closers disponíveis ao SDR agendar: do mesmo squad; admin vê todos os closers. */
+export async function listClosersParaAgendamentoSdr(
+  sdrUserId: string,
+  sdrCargo: string
+): Promise<CrmUser[]> {
+  const users = await listUsers()
+  const closers = users.filter((u) => u.cargo === 'closer')
+  if (sdrCargo === 'admin') {
+    return closers.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  }
+  const squad = await resolveSquadForUserId(sdrUserId)
+  if (!squad) return []
+  const squads = await listSquads()
+  const row = squads.find((s) => s.id === squad.squadId)
+  if (!row) return []
+  const memberIds = new Set(row.memberIds)
+  return closers.filter((u) => memberIds.has(u.id)).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+}
+
 export async function createAgendamentoFromSdr(params: {
   sdrUserId: string
   sdrUserName: string
   sdrCargo: string
   origemLead: string
   grupoWpp: string
+  /** Data da reunião (AAAA-MM-DD). Por omissão: hoje. */
+  data?: string
+  obs?: string | null
+  closerUserId: string
+  closerUserName: string
 }): Promise<{ agendamentoId: string; registroAgendadaId: string; squadId: string; squadNome: string }> {
   const squad = await resolveSquadForUserId(params.sdrUserId)
   if (!squad) throw new Error('O utilizador precisa estar num squad para agendar na agenda do squad.')
   const origem = params.origemLead.trim()
   const grupo = params.grupoWpp.trim()
   if (!origem || !grupo) throw new Error('Origem do lead e nome do lead são obrigatórios.')
-  const data = new Date().toISOString().split('T')[0]
+  const data = (params.data?.trim() || new Date().toISOString().split('T')[0]).slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+    throw new Error('Data da reunião inválida. Use o formato AAAA-MM-DD.')
+  }
   const registroAgendadaId = await addRegistro({
     data,
     tipo: 'reuniao_agendada',
@@ -2280,7 +2307,8 @@ export async function createAgendamentoFromSdr(params: {
     userName: params.sdrUserName,
     userCargo: params.sdrCargo,
     anuncio: origem,
-    grupoWpp: grupo
+    grupoWpp: grupo,
+    obs: params.obs?.trim() || null
   })
   const ref = await addDoc(collection(db, 'agendamentos'), {
     squadId: squad.squadId,
@@ -2297,8 +2325,8 @@ export async function createAgendamentoFromSdr(params: {
     registroCloserId: null,
     registroVendaId: null,
     registroNoShowId: null,
-    closerUserId: null,
-    closerUserName: null,
+    closerUserId: params.closerUserId,
+    closerUserName: params.closerUserName,
     criadoEm: serverTimestamp()
   })
   return { agendamentoId: ref.id, registroAgendadaId, squadId: squad.squadId, squadNome: squad.squadNome }
@@ -2555,5 +2583,140 @@ export async function marcarAgendamentoVenda(params: {
     patch.qualificacaoSdr = 'nao_qualificada'
   }
   await updateDoc(ref, patch)
+}
+
+async function limparRegistrosDesfechoAgendamento(row: AgendamentoRow): Promise<void> {
+  const ids = [
+    row.registroRealizadaSdrId,
+    row.registroCloserId,
+    row.registroVendaId,
+    row.registroNoShowId
+  ].filter((id): id is string => !!id)
+  for (const id of ids) {
+    await deleteRegistro(id)
+  }
+}
+
+/** Admin: altera o desfecho (realizada / no show / venda) mesmo após finalizado. */
+export async function redefinirDesfechoAgendamentoAdmin(
+  params:
+    | {
+        agendamentoId: string
+        novoStatus: 'realizada'
+        closer: { id: string; nome: string; cargo: string }
+        leadBudget: LeadBudgetOp
+        callRecordingUrl: string
+      }
+    | {
+        agendamentoId: string
+        novoStatus: 'no_show'
+        closer: { id: string; nome: string; cargo: string }
+      }
+    | {
+        agendamentoId: string
+        novoStatus: 'venda'
+        closer: { id: string; nome: string; cargo: string }
+        nomeCliente: string
+        valor: number
+        cashCollected?: number
+        formaPagamento: FormaPagamentoVenda
+        produtosIds: string[]
+        produtosDetalhes: RegistroProdutoItem[]
+        valorReferenciaVenda: number
+        descontoCloser: number
+      }
+): Promise<void> {
+  const ref = doc(db, 'agendamentos', params.agendamentoId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Agendamento não encontrado.')
+  const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
+  const finalizados: AgendamentoStatus[] = ['realizada', 'venda', 'no_show']
+  if (!finalizados.includes(row.status)) {
+    throw new Error('Só é possível redefinir o desfecho quando o evento já está finalizado (realizada, venda ou no show).')
+  }
+
+  if (params.novoStatus === 'realizada' && row.status === 'realizada' && row.registroRealizadaSdrId) {
+    const url = params.callRecordingUrl.trim()
+    if (!url.startsWith('https://')) throw new Error('O link da gravação deve começar por https://')
+    try {
+      const u = new URL(url)
+      if (u.protocol !== 'https:') throw new Error('invalid')
+    } catch {
+      throw new Error('Indique uma URL https válida para a gravação.')
+    }
+    const qualificacaoSdr = calcularQualificacaoSdr({
+      leadBudget: params.leadBudget,
+      callRecordingUrl: url
+    })
+    await updateRegistro(row.registroRealizadaSdrId, {
+      data: row.data,
+      tipo: 'reuniao_realizada',
+      userId: row.sdrUserId,
+      userName: row.sdrUserName,
+      userCargo: row.sdrUserCargo,
+      anuncio: row.origemLead,
+      grupoWpp: row.grupoWpp,
+      obs: `Agenda · closer ${params.closer.nome}`,
+      leadBudget: params.leadBudget,
+      callRecordingUrl: url,
+      qualificacaoSdr
+    })
+    await updateDoc(ref, {
+      leadBudget: params.leadBudget,
+      callRecordingUrl: url,
+      qualificacaoSdr,
+      closerUserId: params.closer.id,
+      closerUserName: params.closer.nome,
+      atualizadoEm: serverTimestamp()
+    })
+    return
+  }
+
+  if (params.novoStatus === row.status) {
+    throw new Error('O desfecho já está neste estado. Escolha outro desfecho ou edite os dados de realizada.')
+  }
+
+  await limparRegistrosDesfechoAgendamento(row)
+  const statusIntermediario: AgendamentoStatus = row.status === 'no_show' ? 'reagendada' : 'agendada'
+  await updateDoc(ref, {
+    status: statusIntermediario,
+    registroRealizadaSdrId: null,
+    registroCloserId: null,
+    registroVendaId: null,
+    registroNoShowId: null,
+    leadBudget: null,
+    callRecordingUrl: null,
+    qualificacaoSdr: null,
+    atualizadoEm: serverTimestamp()
+  })
+
+  if (params.novoStatus === 'realizada') {
+    await marcarAgendamentoRealizada({
+      agendamentoId: params.agendamentoId,
+      closer: params.closer,
+      leadBudget: params.leadBudget,
+      callRecordingUrl: params.callRecordingUrl
+    })
+    return
+  }
+  if (params.novoStatus === 'no_show') {
+    await marcarAgendamentoNoShow({
+      agendamentoId: params.agendamentoId,
+      closer: params.closer
+    })
+    return
+  }
+  await marcarAgendamentoVenda({
+    agendamentoId: params.agendamentoId,
+    closer: params.closer,
+    nomeCliente: params.nomeCliente,
+    valor: params.valor,
+    cashCollected: params.cashCollected,
+    formaPagamento: params.formaPagamento,
+    produtosIds: params.produtosIds,
+    produtosDetalhes: params.produtosDetalhes,
+    valorReferenciaVenda: params.valorReferenciaVenda,
+    descontoCloser: params.descontoCloser
+  })
 }
 
