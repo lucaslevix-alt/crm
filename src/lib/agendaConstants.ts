@@ -18,6 +18,15 @@ export const AGENDAMENTO_STATUS_BADGE: Record<AgendamentoStatus, string> = {
   reagendada: 'b-closer'
 }
 
+/** Cor de destaque no calendário e resumo */
+export const AGENDAMENTO_STATUS_COLOR: Record<AgendamentoStatus, string> = {
+  agendada: '#40E0D0',
+  reagendada: '#1E90FF',
+  realizada: '#9370DB',
+  venda: '#008000',
+  no_show: '#4B0082'
+}
+
 /** Classe CSS do chip no calendário */
 export const AGENDAMENTO_STATUS_CAL_CLASS: Record<AgendamentoStatus, string> = {
   agendada: 'agenda-cal-ev--agendada',

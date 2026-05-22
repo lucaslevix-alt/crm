@@ -1,10 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import type { AgendamentoRow, AgendamentoStatus } from '../../firebase/firestore'
-import {
-  AGENDAMENTO_STATUS_CAL_CLASS,
-  AGENDAMENTO_STATUS_LABEL
-} from '../../lib/agendaConstants'
+import type { AgendamentoRow } from '../../firebase/firestore'
+import { AGENDAMENTO_STATUS_CAL_CLASS, AGENDAMENTO_STATUS_LABEL } from '../../lib/agendaConstants'
 import {
   addMonthsYm,
   buildMonthGrid,
@@ -18,7 +15,7 @@ import {
   ymFromIso
 } from '../../lib/agendaCalendar'
 
-const MAX_EVENTS_MONTH = 3
+const MAX_EVENTS_MONTH = 4
 
 export interface AgendaCalendarViewProps {
   items: AgendamentoRow[]
@@ -37,7 +34,7 @@ export function AgendaCalendarView({
   onEventClick,
   onClearSelection
 }: AgendaCalendarViewProps) {
-  const [subView, setSubView] = useState<'mes' | 'semana'>('mes')
+  const [subView, setSubView] = useState<'mes' | 'semana'>('semana')
   const [weekStart, setWeekStart] = useState(() => mondayWeekStart(todayIso()))
 
   const byDate = useMemo(() => {
@@ -89,52 +86,47 @@ export function AgendaCalendarView({
       ? formatMonthTitle(calendarYm)
       : `${dayLabelShort(weekDays[0])} – ${dayLabelShort(weekDays[6])}`
 
-  function renderEventChip(a: AgendamentoRow, compact?: boolean) {
+  function renderEvent(a: AgendamentoRow, compact?: boolean) {
     const sel = selectedId === a.id
-    const closer = a.closerUserName ? ` · ${a.closerUserName}` : ''
+    const label = compact ? a.grupoWpp : a.grupoWpp
     return (
       <button
         key={a.id}
         type="button"
-        className={`agenda-cal-ev ${AGENDAMENTO_STATUS_CAL_CLASS[a.status]}${sel ? ' agenda-cal-ev--selected' : ''}`}
-        title={`${a.grupoWpp} · ${AGENDAMENTO_STATUS_LABEL[a.status]}${closer}`}
+        className={`agenda-gcal-ev ${AGENDAMENTO_STATUS_CAL_CLASS[a.status]}${sel ? ' is-selected' : ''}`}
+        title={`${a.grupoWpp} · ${AGENDAMENTO_STATUS_LABEL[a.status]}${a.closerUserName ? ` · ${a.closerUserName}` : ''}`}
         onClick={(e) => {
           e.stopPropagation()
           onEventClick(a, (e.currentTarget as HTMLElement).getBoundingClientRect())
         }}
       >
-        <span className="agenda-cal-ev-title">{a.grupoWpp}</span>
-        {!compact && a.closerUserName && <span className="agenda-cal-ev-meta">{a.closerUserName}</span>}
+        <span className="agenda-gcal-ev-text">{label}</span>
+        {!compact && a.closerUserName && (
+          <span className="agenda-gcal-ev-sub">{a.closerUserName}</span>
+        )}
       </button>
     )
   }
 
   return (
-    <div className="agenda-cal">
-      <div className="agenda-cal-toolbar">
-        <div className="agenda-cal-nav">
-          <button type="button" className="agenda-cal-nav-btn" onClick={navPrev} aria-label="Anterior">
-            <ChevronLeft size={18} strokeWidth={2} />
+    <div className="agenda-gcal">
+      <header className="agenda-gcal-header">
+        <div className="agenda-gcal-header-left">
+          <button type="button" className="agenda-gcal-icon-btn" onClick={navPrev} aria-label="Anterior">
+            <ChevronLeft size={20} strokeWidth={2} />
           </button>
-          <button type="button" className="agenda-cal-nav-btn" onClick={navNext} aria-label="Seguinte">
-            <ChevronRight size={18} strokeWidth={2} />
+          <button type="button" className="agenda-gcal-icon-btn" onClick={navNext} aria-label="Seguinte">
+            <ChevronRight size={20} strokeWidth={2} />
           </button>
-          <button type="button" className="agenda-cal-today-btn" onClick={goToday}>
+          <button type="button" className="agenda-gcal-today" onClick={goToday}>
             Hoje
           </button>
-          <h2 className="agenda-cal-title">{headerTitle}</h2>
+          <h2 className="agenda-gcal-period">{headerTitle}</h2>
         </div>
-        <div className="agenda-cal-view-tabs">
+        <div className="agenda-gcal-seg">
           <button
             type="button"
-            className={`agenda-cal-view-tab${subView === 'mes' ? ' active' : ''}`}
-            onClick={() => setSubView('mes')}
-          >
-            Mês
-          </button>
-          <button
-            type="button"
-            className={`agenda-cal-view-tab${subView === 'semana' ? ' active' : ''}`}
+            className={`agenda-gcal-seg-btn${subView === 'semana' ? ' is-on' : ''}`}
             onClick={() => {
               setSubView('semana')
               setWeekStart(mondayWeekStart(`${calendarYm}-15`))
@@ -142,42 +134,41 @@ export function AgendaCalendarView({
           >
             Semana
           </button>
+          <button
+            type="button"
+            className={`agenda-gcal-seg-btn${subView === 'mes' ? ' is-on' : ''}`}
+            onClick={() => setSubView('mes')}
+          >
+            Mês
+          </button>
         </div>
-      </div>
-
-      <div className="agenda-cal-legend">
-        {(Object.keys(AGENDAMENTO_STATUS_LABEL) as AgendamentoStatus[]).map((st) => (
-          <span key={st} className="agenda-cal-legend-item">
-            <span className={`agenda-cal-legend-dot ${AGENDAMENTO_STATUS_CAL_CLASS[st]}`} />
-            {AGENDAMENTO_STATUS_LABEL[st]}
-          </span>
-        ))}
-      </div>
+      </header>
 
       {subView === 'mes' ? (
-        <div className="agenda-cal-month">
-          <div className="agenda-cal-weekdays">
+        <div className="agenda-gcal-month">
+          <div className="agenda-gcal-month-head">
             {weekdayLabels().map((w) => (
-              <div key={w} className="agenda-cal-weekday">
+              <div key={w} className="agenda-gcal-month-wd">
                 {w}
               </div>
             ))}
           </div>
-          <div className="agenda-cal-grid">
+          <div className="agenda-gcal-month-grid">
             {monthCells.map((cell) => {
               const dayItems = byDate.get(cell.iso) ?? []
               const visible = dayItems.slice(0, MAX_EVENTS_MONTH)
               const more = dayItems.length - visible.length
+              const dayNum = parseInt(cell.iso.split('-')[2], 10)
               return (
                 <div
                   key={cell.iso}
-                  className={`agenda-cal-cell${cell.inMonth ? '' : ' agenda-cal-cell--muted'}${cell.isToday ? ' agenda-cal-cell--today' : ''}`}
+                  className={`agenda-gcal-month-cell${cell.inMonth ? '' : ' is-other'}${cell.isToday ? ' is-today' : ''}`}
                   onClick={() => onClearSelection()}
                 >
-                  <div className="agenda-cal-cell-num">{parseInt(cell.iso.split('-')[2], 10)}</div>
-                  <div className="agenda-cal-cell-events">
-                    {visible.map((a) => renderEventChip(a, true))}
-                    {more > 0 && <span className="agenda-cal-more">+{more} mais</span>}
+                  <span className={`agenda-gcal-month-num${cell.isToday ? ' is-today' : ''}`}>{dayNum}</span>
+                  <div className="agenda-gcal-month-evs">
+                    {visible.map((a) => renderEvent(a, true))}
+                    {more > 0 && <span className="agenda-gcal-more">mais {more}</span>}
                   </div>
                 </div>
               )
@@ -185,27 +176,31 @@ export function AgendaCalendarView({
           </div>
         </div>
       ) : (
-        <div className="agenda-cal-week">
+        <div className="agenda-gcal-week">
           {weekDays.map((iso) => {
             const dayItems = byDate.get(iso) ?? []
             const isToday = iso === todayIso()
             const [, , d] = iso.split('-')
-            const wd = new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' })
+            const wd = new Date(`${iso}T12:00:00`)
+              .toLocaleDateString('pt-BR', { weekday: 'short' })
+              .replace('.', '')
+              .slice(0, 3)
+              .toUpperCase()
             return (
               <div
                 key={iso}
-                className={`agenda-cal-week-col${isToday ? ' agenda-cal-week-col--today' : ''}`}
+                className={`agenda-gcal-week-col${isToday ? ' is-today' : ''}`}
                 onClick={() => onClearSelection()}
               >
-                <div className="agenda-cal-week-head">
-                  <span className="agenda-cal-week-wd">{wd}</span>
-                  <span className="agenda-cal-week-d">{d}</span>
+                <div className="agenda-gcal-dayhead">
+                  <span className="agenda-gcal-daywd">{wd}</span>
+                  <span className={`agenda-gcal-daynum${isToday ? ' is-today' : ''}`}>{d}</span>
                 </div>
-                <div className="agenda-cal-week-body">
+                <div className="agenda-gcal-daybody">
                   {dayItems.length === 0 ? (
-                    <span className="agenda-cal-week-empty">—</span>
+                    <div className="agenda-gcal-dayempty" />
                   ) : (
-                    dayItems.map((a) => renderEventChip(a))
+                    dayItems.map((a) => renderEvent(a))
                   )}
                 </div>
               </div>

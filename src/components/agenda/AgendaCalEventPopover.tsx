@@ -5,6 +5,7 @@ import type { AgendamentoRow, AgendamentoStatus } from '../../firebase/firestore
 import {
   AGENDAMENTO_QUAL_BADGE,
   AGENDAMENTO_STATUS_BADGE,
+  AGENDAMENTO_STATUS_CAL_CLASS,
   AGENDAMENTO_STATUS_LABEL,
   QUALIFICACAO_SDR_LABELS
 } from '../../lib/agendaConstants'
@@ -228,7 +229,7 @@ export function AgendaCalEventPopover({
       <div className="agenda-cal-pop-backdrop" onClick={onClose} aria-hidden />
       <div
         ref={popRef}
-        className="agenda-cal-pop"
+        className={`agenda-cal-pop ${AGENDAMENTO_STATUS_CAL_CLASS[a.status]}`}
         style={{ top: pos.top, left: pos.left }}
         role="dialog"
         aria-labelledby="agenda-cal-pop-title"

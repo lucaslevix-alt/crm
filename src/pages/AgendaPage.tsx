@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarClock, LayoutGrid, List } from 'lucide-react'
+import { CalendarClock, LayoutGrid, List, Search } from 'lucide-react'
 import {
   listAgendamentos,
   marcarAgendamentoNoShow,
@@ -18,6 +18,8 @@ import { AgendaReagendarModal } from '../components/agenda/AgendaReagendarModal'
 import {
   AGENDAMENTO_QUAL_BADGE,
   AGENDAMENTO_STATUS_BADGE,
+  AGENDAMENTO_STATUS_CAL_CLASS,
+  AGENDAMENTO_STATUS_COLOR,
   AGENDAMENTO_STATUS_LABEL,
   QUALIFICACAO_SDR_LABELS
 } from '../lib/agendaConstants'
@@ -26,6 +28,14 @@ import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { useAppStore } from '../store/useAppStore'
 
 type ViewMode = 'lista' | 'calendario'
+
+const STATUS_SUMMARY_ORDER: AgendamentoStatus[] = [
+  'agendada',
+  'reagendada',
+  'realizada',
+  'venda',
+  'no_show'
+]
 
 function mRange(): { start: string; end: string } {
   const n = new Date()
@@ -155,6 +165,26 @@ export function AgendaPage() {
     [rows, calRange.start, calRange.end, matchesFilters]
   )
 
+  const summarySource = viewMode === 'calendario' ? filteredCalendario : filteredLista
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<AgendamentoStatus, number> = {
+      agendada: 0,
+      reagendada: 0,
+      realizada: 0,
+      venda: 0,
+      no_show: 0
+    }
+    for (const r of summarySource) counts[r.status] += 1
+    return counts
+  }, [summarySource])
+
+  const summaryTotal = summarySource.length
+
+  function toggleStatusFilter(st: AgendamentoStatus) {
+    setFStatus((prev) => (prev === st ? '' : st))
+  }
+
   function podeAgirNoItem(a: AgendamentoRow): boolean {
     if (!currentUser) return false
     if (isAdmin) return true
@@ -247,7 +277,7 @@ export function AgendaPage() {
         <CalendarClock size={26} strokeWidth={1.65} aria-hidden />
         <h1 className="page-title">Agenda do squad</h1>
       </div>
-      {isSdrRole ? (
+      {isSdrRole && (
         <div
           className="card"
           style={{
@@ -270,20 +300,6 @@ export function AgendaPage() {
             Acompanhe abaixo o status de cada lead que você agendou.
           </p>
         </div>
-      ) : (
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 16, maxWidth: 720 }}>
-          Reuniões agendadas pelo SDR (barra rápida «Agendei reunião»). O closer usa o menu{' '}
-          <strong>Desfecho</strong> na linha para escolher realizada, no show ou venda. Após{' '}
-          <strong>no show</strong>, pode <strong>reagendar</strong> com nova data — não cria outra reunião agendada; ao
-          marcar realizada depois, conta como realizada.
-          {isAdmin && (
-            <>
-              {' '}
-              Administradores veem todos os squads e podem <strong>editar o desfecho</strong> mesmo depois de finalizado
-              (realizada, venda ou no show).
-            </>
-          )}
-        </p>
       )}
 
       {!isAdmin && !mySquadId && (
@@ -292,49 +308,62 @@ export function AgendaPage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
-        <div style={{ flex: 1, minWidth: 140 }}>
-          <div className="fg" style={{ margin: 0 }}>
-            <label>Status</label>
-            <select className="di" value={fStatus} onChange={(e) => setFStatus((e.target.value as AgendamentoStatus | '') || '')}>
-              <option value="">Todos</option>
-              <option value="agendada">Agendada</option>
-              <option value="realizada">Realizada</option>
-              <option value="venda">Venda</option>
-              <option value="no_show">No show</option>
-              <option value="reagendada">Reagendada</option>
-            </select>
-          </div>
+      <div className="agenda-topbar">
+        <div className="agenda-topbar-search">
+          <Search size={18} strokeWidth={2} className="agenda-topbar-search-icon" aria-hidden />
+          <input
+            type="text"
+            className="agenda-topbar-input"
+            placeholder="Pesquisar"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
         </div>
-        <div style={{ flex: 1, minWidth: 180 }}>
-          <div className="fg" style={{ margin: 0 }}>
-            <label>Busca</label>
-            <input
-              type="text"
-              className="di"
-              placeholder="Nome do lead, origem, SDR…"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-            />
+        {viewMode === 'calendario' && summaryTotal > 0 && (
+          <div className="agenda-topbar-filters" role="group" aria-label="Filtrar por status">
+            <button
+              type="button"
+              className={`agenda-gcal-chip${!fStatus ? ' is-on' : ''}`}
+              onClick={() => setFStatus('')}
+            >
+              Todos
+            </button>
+            {STATUS_SUMMARY_ORDER.map((st) => {
+              const n = statusCounts[st]
+              if (n === 0 && fStatus !== st) return null
+              return (
+                <button
+                  key={st}
+                  type="button"
+                  className={`agenda-gcal-chip ${AGENDAMENTO_STATUS_CAL_CLASS[st]}${fStatus === st ? ' is-on' : ''}`}
+                  style={{ '--ev-color': AGENDAMENTO_STATUS_COLOR[st] } as CSSProperties}
+                  onClick={() => toggleStatusFilter(st)}
+                >
+                  <span className="agenda-gcal-chip-dot" aria-hidden />
+                  {AGENDAMENTO_STATUS_LABEL[st]}
+                  {n > 0 && <span className="agenda-gcal-chip-n">{n}</span>}
+                </button>
+              )
+            })}
           </div>
-        </div>
+        )}
         <div className="agenda-view-toggle">
           <button
             type="button"
             className={`agenda-tab${viewMode === 'calendario' ? ' active' : ''}`}
             onClick={() => setViewMode('calendario')}
-            title="Visualização em calendário"
+            title="Calendário"
           >
-            <LayoutGrid size={14} strokeWidth={2} aria-hidden style={{ marginRight: 6, verticalAlign: -2 }} />
+            <LayoutGrid size={16} strokeWidth={2} aria-hidden />
             Calendário
           </button>
           <button
             type="button"
             className={`agenda-tab${viewMode === 'lista' ? ' active' : ''}`}
             onClick={() => setViewMode('lista')}
-            title="Visualização em lista"
+            title="Lista"
           >
-            <List size={14} strokeWidth={2} aria-hidden style={{ marginRight: 6, verticalAlign: -2 }} />
+            <List size={16} strokeWidth={2} aria-hidden />
             Lista
           </button>
         </div>
@@ -372,7 +401,7 @@ export function AgendaPage() {
       </div>
       )}
 
-      <div className="card">
+      <div className={`card${viewMode === 'calendario' ? ' agenda-gcal-card' : ''}`}>
         {loading && rows.length === 0 && (
           <div className="loading">
             <div className="spin" />
@@ -381,7 +410,7 @@ export function AgendaPage() {
         )}
         {error && <div style={{ color: 'var(--red)', padding: 16 }}>Erro: {error}</div>}
         {!error && viewMode === 'calendario' && (rows.length > 0 || !loading) && (
-          <div style={{ padding: '12px 12px 20px' }}>
+          <div className="agenda-gcal-wrap">
             {filteredCalendario.length === 0 ? (
               <div className="agenda-empty">
                 <div className="agenda-empty-icon" aria-hidden>
