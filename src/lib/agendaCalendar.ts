@@ -91,6 +91,6 @@ export function buildMonthGrid(ym: string): AgendaCalendarCell[] {
 }
 
 export function dayLabelShort(iso: string): string {
-  const [y, m, d] = iso.split('-')
+  const [, m, d] = iso.split('-')
   return `${d}/${m}`
 }

@@ -1,5 +1,6 @@
 import { CalendarPlus, CheckCircle2, ChevronDown, CircleDollarSign, UserX } from 'lucide-react'
-import { createPortal, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { AgendamentoRow, AgendamentoStatus } from '../../firebase/firestore'
 
 type MenuRect = { top: number; right: number; minWidth: number }

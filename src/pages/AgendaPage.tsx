@@ -153,8 +153,6 @@ export function AgendaPage() {
     [rows, calRange.start, calRange.end, matchesFilters]
   )
 
-  const filtered = viewMode === 'lista' ? filteredLista : filteredCalendario
-
   function podeAgirNoItem(a: AgendamentoRow): boolean {
     if (!currentUser) return false
     if (isAdmin) return true
