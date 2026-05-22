@@ -1,20 +1,18 @@
-import { CalendarPlus, CheckCircle2, ChevronDown, CircleDollarSign, UserX } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { CalendarPlus, CheckCircle2, ChevronDown, CircleDollarSign, Trash2, UserX } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { AgendamentoRow, AgendamentoStatus } from '../../firebase/firestore'
+import type { AgendamentoRow } from '../../firebase/firestore'
 
 type MenuRect = { top: number; right: number; minWidth: number }
 
-function AgendaCloserOutcomeMenu({
+function AgendaActionsMenu({
+  label,
   disabled,
-  variant,
-  currentStatus,
-  onPick
+  children
 }: {
+  label: string
   disabled: boolean
-  variant: 'agendada' | 'realizada' | 'admin-finalizado'
-  currentStatus?: AgendamentoStatus
-  onPick: (action: 'realizada' | 'no_show' | 'venda') => void
+  children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [menuRect, setMenuRect] = useState<MenuRect | null>(null)
@@ -67,55 +65,6 @@ function AgendaCloserOutcomeMenu({
     }
   }, [open])
 
-  const menuBody =
-    variant === 'admin-finalizado' ? (
-      <>
-        <button type="button" className="agenda-dd-item" role="menuitem" onClick={() => { setOpen(false); onPick('realizada') }}>
-          <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
-          Realizada
-        </button>
-        <button
-          type="button"
-          className="agenda-dd-item"
-          role="menuitem"
-          disabled={currentStatus === 'no_show'}
-          onClick={() => { setOpen(false); onPick('no_show') }}
-        >
-          <UserX size={16} strokeWidth={1.65} aria-hidden />
-          No show
-        </button>
-        <button
-          type="button"
-          className="agenda-dd-item agenda-dd-item--primary"
-          role="menuitem"
-          disabled={currentStatus === 'venda'}
-          onClick={() => { setOpen(false); onPick('venda') }}
-        >
-          <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
-          Venda
-        </button>
-      </>
-    ) : variant === 'agendada' ? (
-      <>
-        <button type="button" className="agenda-dd-item" role="menuitem" onClick={() => { setOpen(false); onPick('realizada') }}>
-          <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
-          Realizada
-        </button>
-        <button type="button" className="agenda-dd-item" role="menuitem" onClick={() => { setOpen(false); onPick('no_show') }}>
-          <UserX size={16} strokeWidth={1.65} aria-hidden />
-          No show
-        </button>
-        <button type="button" className="agenda-dd-item agenda-dd-item--primary" role="menuitem" onClick={() => { setOpen(false); onPick('venda') }}>
-          Venda
-        </button>
-      </>
-    ) : (
-      <button type="button" className="agenda-dd-item agenda-dd-item--primary" role="menuitem" onClick={() => { setOpen(false); onPick('venda') }}>
-        <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
-        Registrar venda
-      </button>
-    )
-
   return (
     <div className="agenda-dd" ref={wrapRef}>
       <button
@@ -126,7 +75,7 @@ function AgendaCloserOutcomeMenu({
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
       >
-        {variant === 'admin-finalizado' ? 'Editar desfecho' : 'Desfecho'}
+        {label}
         <ChevronDown size={14} strokeWidth={2} aria-hidden className="agenda-dd-chevron" />
       </button>
       {open &&
@@ -138,11 +87,41 @@ function AgendaCloserOutcomeMenu({
             style={{ top: menuRect.top, right: menuRect.right, minWidth: menuRect.minWidth }}
             role="menu"
           >
-            {menuBody}
+            {children}
           </div>,
           document.body
         )}
     </div>
+  )
+}
+
+function MenuDivider() {
+  return <div className="agenda-dd-divider" role="separator" />
+}
+
+function MenuItem({
+  children,
+  onClick,
+  disabled: itemDisabled,
+  primary,
+  danger
+}: {
+  children: ReactNode
+  onClick: () => void
+  disabled?: boolean
+  primary?: boolean
+  danger?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      className={`agenda-dd-item${primary ? ' agenda-dd-item--primary' : ''}${danger ? ' agenda-dd-item--danger' : ''}`}
+      role="menuitem"
+      disabled={itemDisabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -156,6 +135,10 @@ export interface AgendaRowActionsProps {
   onVenda: () => void
   onReagendar: () => void
   onAdminDesfecho: (action: 'realizada' | 'no_show' | 'venda') => void
+  onAdminQualificacao?: () => void
+  onAdminEditRegistro?: () => void
+  podeExcluir?: boolean
+  onExcluir?: () => void
 }
 
 export function AgendaRowActions({
@@ -167,44 +150,186 @@ export function AgendaRowActions({
   onNoShow,
   onVenda,
   onReagendar,
-  onAdminDesfecho
+  onAdminDesfecho,
+  onAdminQualificacao,
+  onAdminEditRegistro,
+  podeExcluir,
+  onExcluir
 }: AgendaRowActionsProps) {
-  if (!podeAgir) return null
+  const showAdminQual =
+    isAdmin &&
+    (a.status === 'realizada' || a.status === 'venda') &&
+    a.registroRealizadaSdrId &&
+    (onAdminQualificacao || onAdminEditRegistro)
+
+  const close = (fn: () => void) => () => fn()
+
+  function renderMenu(): { label: string; body: ReactNode } | null {
+    const st = a.status
+
+    if (podeAgir && (st === 'agendada' || st === 'reagendada')) {
+      return {
+        label: 'Desfecho',
+        body: (
+          <>
+            <MenuItem onClick={close(onRealizada)}>
+              <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
+              Realizada
+            </MenuItem>
+            <MenuItem onClick={close(onNoShow)}>
+              <UserX size={16} strokeWidth={1.65} aria-hidden />
+              No show
+            </MenuItem>
+            <MenuItem onClick={close(onVenda)} primary>
+              Venda
+            </MenuItem>
+            {podeExcluir && onExcluir && (
+              <>
+                <MenuDivider />
+                <MenuItem onClick={close(onExcluir)} danger>
+                  <Trash2 size={16} strokeWidth={1.75} aria-hidden />
+                  Remover
+                </MenuItem>
+              </>
+            )}
+          </>
+        )
+      }
+    }
+
+    if (st === 'no_show' && (podeAgir || (isAdmin && podeExcluir && onExcluir))) {
+      const label = isAdmin ? 'Editar desfecho' : 'Ações'
+      return {
+        label,
+        body: (
+          <>
+            {podeAgir && (
+              <MenuItem onClick={close(onReagendar)}>
+                <CalendarPlus size={16} strokeWidth={1.75} aria-hidden />
+                Reagendar
+              </MenuItem>
+            )}
+            {isAdmin && podeAgir && (
+              <>
+                <MenuDivider />
+                <MenuItem onClick={close(() => onAdminDesfecho('realizada'))}>
+                  <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
+                  Realizada
+                </MenuItem>
+                <MenuItem onClick={close(() => onAdminDesfecho('no_show'))} disabled>
+                  <UserX size={16} strokeWidth={1.65} aria-hidden />
+                  No show
+                </MenuItem>
+                <MenuItem onClick={close(() => onAdminDesfecho('venda'))} primary>
+                  <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
+                  Venda
+                </MenuItem>
+              </>
+            )}
+            {podeExcluir && onExcluir && (
+              <>
+                <MenuDivider />
+                <MenuItem onClick={close(onExcluir)} danger>
+                  <Trash2 size={16} strokeWidth={1.75} aria-hidden />
+                  Remover
+                </MenuItem>
+              </>
+            )}
+          </>
+        )
+      }
+    }
+
+    if (podeAgir && st === 'realizada' && !isAdmin) {
+      return {
+        label: 'Desfecho',
+        body: (
+          <MenuItem onClick={close(onVenda)} primary>
+            <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
+            Registrar venda
+          </MenuItem>
+        )
+      }
+    }
+
+    if (podeAgir && isAdmin && (st === 'realizada' || st === 'venda')) {
+      return {
+        label: 'Editar desfecho',
+        body: (
+          <>
+            <MenuItem onClick={close(() => onAdminDesfecho('realizada'))}>
+              <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
+              Realizada
+            </MenuItem>
+            <MenuItem onClick={close(() => onAdminDesfecho('no_show'))}>
+              <UserX size={16} strokeWidth={1.65} aria-hidden />
+              No show
+            </MenuItem>
+            <MenuItem onClick={close(() => onAdminDesfecho('venda'))} disabled={st === 'venda'} primary>
+              <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
+              Venda
+            </MenuItem>
+            {podeExcluir && onExcluir && (
+              <>
+                <MenuDivider />
+                <MenuItem onClick={close(onExcluir)} danger>
+                  <Trash2 size={16} strokeWidth={1.75} aria-hidden />
+                  Remover
+                </MenuItem>
+              </>
+            )}
+          </>
+        )
+      }
+    }
+
+    if (podeExcluir && onExcluir) {
+      return {
+        label: 'Ações',
+        body: (
+          <MenuItem onClick={close(onExcluir)} danger>
+            <Trash2 size={16} strokeWidth={1.75} aria-hidden />
+            Remover
+          </MenuItem>
+        )
+      }
+    }
+
+    return null
+  }
+
+  const menu = renderMenu()
+
+  if (!menu && !showAdminQual) return null
+
   return (
     <>
-      {(a.status === 'agendada' || a.status === 'reagendada') && (
-        <AgendaCloserOutcomeMenu
-          variant="agendada"
-          disabled={disabled}
-          onPick={(action) => {
-            if (action === 'realizada') onRealizada()
-            else if (action === 'no_show') onNoShow()
-            else onVenda()
-          }}
-        />
+      {menu && (
+        <AgendaActionsMenu label={menu.label} disabled={disabled}>
+          {menu.body}
+        </AgendaActionsMenu>
       )}
-      {a.status === 'no_show' && (
+      {showAdminQual && onAdminQualificacao && (
         <button
           type="button"
           className="btn btn-ghost btn-sm agenda-dd-trigger"
           disabled={disabled}
-          onClick={onReagendar}
-          title="Nova data da reunião"
+          onClick={onAdminQualificacao}
+          title="Ajustar qualificação SDR (admin)"
         >
-          <CalendarPlus size={14} strokeWidth={1.75} aria-hidden style={{ marginRight: 4 }} />
-          Reagendar
+          Qualif. SDR
         </button>
       )}
-      {a.status === 'realizada' && !isAdmin && (
-        <AgendaCloserOutcomeMenu variant="realizada" disabled={disabled} onPick={(action) => { if (action === 'venda') onVenda() }} />
-      )}
-      {isAdmin && (a.status === 'realizada' || a.status === 'venda' || a.status === 'no_show') && (
-        <AgendaCloserOutcomeMenu
-          variant="admin-finalizado"
-          currentStatus={a.status}
+      {showAdminQual && onAdminEditRegistro && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm agenda-dd-trigger"
           disabled={disabled}
-          onPick={onAdminDesfecho}
-        />
+          onClick={onAdminEditRegistro}
+          title="Editar registo de reunião realizada"
+        >
+          Editar registo
+        </button>
       )}
     </>
   )

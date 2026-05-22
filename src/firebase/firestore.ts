@@ -389,6 +389,12 @@ export async function listUsers(): Promise<CrmUser[]> {
   })
 }
 
+export async function getRegistroById(id: string): Promise<RegistroRow | null> {
+  const snap = await getDoc(doc(db, 'registros', id))
+  if (!snap.exists()) return null
+  return docToRegistro({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
+}
+
 export async function getRegistrosByRange(start: string, end: string): Promise<RegistroRow[]> {
   const q = query(
     collection(db, 'registros'),
@@ -2595,6 +2601,76 @@ async function limparRegistrosDesfechoAgendamento(row: AgendamentoRow): Promise<
   for (const id of ids) {
     await deleteRegistro(id)
   }
+}
+
+/** Remove o agendamento e todos os registos CRM ligados (agendada, realizada, closer, venda, no show). */
+export async function excluirAgendamento(agendamentoId: string): Promise<void> {
+  const ref = doc(db, 'agendamentos', agendamentoId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Agendamento não encontrado.')
+  const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
+  const ids = [
+    row.registroAgendadaId,
+    row.registroRealizadaSdrId,
+    row.registroCloserId,
+    row.registroVendaId,
+    row.registroNoShowId
+  ].filter((id): id is string => !!id)
+  const seen = new Set<string>()
+  for (const id of ids) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    await deleteRegistro(id)
+  }
+  await deleteDoc(ref)
+}
+
+/** Admin: ajusta qualificação SDR no agendamento e no registo `reuniao_realizada` ligado. */
+export async function adminAtualizarQualificacaoAgendamento(params: {
+  agendamentoId: string
+  qualificacaoSdr: QualificacaoSdr
+  leadBudget?: LeadBudgetOp | null
+  callRecordingUrl?: string | null
+}): Promise<void> {
+  const ref = doc(db, 'agendamentos', params.agendamentoId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Agendamento não encontrado.')
+  const row = docToAgendamento({ id: snap.id, data: () => snap.data() as Record<string, unknown> })
+  if (row.status !== 'realizada' && row.status !== 'venda') {
+    throw new Error('Só é possível ajustar a qualificação em reuniões realizadas ou vendas.')
+  }
+  if (!row.registroRealizadaSdrId) {
+    throw new Error('Este agendamento não tem registo de reunião realizada (SDR) ligado.')
+  }
+
+  const leadBudget = params.leadBudget !== undefined ? params.leadBudget : row.leadBudget
+  const callRecordingUrl =
+    params.callRecordingUrl !== undefined
+      ? params.callRecordingUrl != null && String(params.callRecordingUrl).trim() !== ''
+        ? String(params.callRecordingUrl).trim()
+        : null
+      : row.callRecordingUrl
+
+  const regSnap = await getDoc(doc(db, 'registros', row.registroRealizadaSdrId))
+  if (!regSnap.exists()) throw new Error('Registo de reunião realizada não encontrado.')
+  const reg = docToRegistro({ id: regSnap.id, data: () => regSnap.data() as Record<string, unknown> })
+  if (reg.tipo !== 'reuniao_realizada') {
+    throw new Error('O registo ligado não é do tipo reunião realizada (SDR).')
+  }
+
+  await updateRegistro(row.registroRealizadaSdrId, {
+    data: reg.data,
+    tipo: reg.tipo,
+    userId: reg.userId,
+    userName: reg.userName,
+    userCargo: reg.userCargo,
+    anuncio: reg.anuncio,
+    grupoWpp: reg.grupoWpp,
+    obs: reg.obs,
+    leadBudget,
+    callRecordingUrl,
+    qualificacaoSdr: params.qualificacaoSdr
+  })
 }
 
 /** Admin: altera o desfecho (realizada / no show / venda) mesmo após finalizado. */

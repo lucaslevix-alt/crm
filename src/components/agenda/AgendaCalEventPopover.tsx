@@ -1,4 +1,4 @@
-import { CalendarPlus, CheckCircle2, CircleDollarSign, UserX, X } from 'lucide-react'
+import { CalendarPlus, CheckCircle2, CircleDollarSign, Trash2, UserX, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { AgendamentoRow, AgendamentoStatus } from '../../firebase/firestore'
@@ -29,6 +29,10 @@ export interface AgendaCalEventPopoverProps {
   onVenda: () => void
   onReagendar: () => void
   onAdminDesfecho: (action: 'realizada' | 'no_show' | 'venda') => void
+  onAdminQualificacao?: () => void
+  onAdminEditRegistro?: () => void
+  podeExcluir: boolean
+  onExcluir: () => void
 }
 
 function OutcomeBtn({
@@ -54,25 +58,35 @@ function OutcomeBtn({
   )
 }
 
+function PopDivider() {
+  return <div className="agenda-cal-pop-divider" role="separator" />
+}
+
 function PopoverActions({
   a,
   isAdmin,
+  podeAgir,
+  podeExcluir,
   disabled,
   onRealizada,
   onNoShow,
   onVenda,
   onReagendar,
   onAdminDesfecho,
+  onExcluir,
   onClose
 }: {
   a: AgendamentoRow
   isAdmin: boolean
+  podeAgir: boolean
+  podeExcluir: boolean
   disabled: boolean
   onRealizada: () => void
   onNoShow: () => void
   onVenda: () => void
   onReagendar: () => void
   onAdminDesfecho: (action: 'realizada' | 'no_show' | 'venda') => void
+  onExcluir: () => void
   onClose: () => void
 }) {
   const pick = (fn: () => void) => {
@@ -80,90 +94,95 @@ function PopoverActions({
     fn()
   }
 
-  if (a.status === 'agendada' || a.status === 'reagendada') {
-    return (
-      <div className="agenda-cal-pop-actions">
-        <span className="agenda-cal-pop-actions-label">Desfecho</span>
-        <OutcomeBtn onClick={() => pick(onRealizada)} disabled={disabled}>
-          <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
-          Realizada
-        </OutcomeBtn>
-        <OutcomeBtn onClick={() => pick(onNoShow)} disabled={disabled}>
-          <UserX size={16} strokeWidth={1.65} aria-hidden />
-          No show
-        </OutcomeBtn>
-        <OutcomeBtn onClick={() => pick(onVenda)} disabled={disabled} primary>
-          <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
-          Venda
-        </OutcomeBtn>
-      </div>
-    )
-  }
+  const st = a.status
+  const label =
+    st === 'agendada' || st === 'reagendada' || (st === 'realizada' && !isAdmin)
+      ? 'Desfecho'
+      : 'Editar desfecho'
 
-  if (a.status === 'no_show') {
-    return (
-      <div className="agenda-cal-pop-actions">
+  const showDesfechoBlock =
+    (podeAgir && (st === 'agendada' || st === 'reagendada' || (st === 'realizada' && !isAdmin))) ||
+    (isAdmin && podeAgir && (st === 'realizada' || st === 'venda' || st === 'no_show'))
+
+  const showNoShowMenu = st === 'no_show' && (podeAgir || (isAdmin && podeExcluir))
+
+  if (!showDesfechoBlock && !showNoShowMenu && !podeExcluir) return null
+
+  return (
+    <div className="agenda-cal-pop-actions">
+      <span className="agenda-cal-pop-actions-label">{label}</span>
+
+      {st === 'no_show' && podeAgir && (
         <OutcomeBtn onClick={() => pick(onReagendar)} disabled={disabled}>
           <CalendarPlus size={16} strokeWidth={1.75} aria-hidden />
           Reagendar
         </OutcomeBtn>
-        {isAdmin && (
-          <>
-            <span className="agenda-cal-pop-actions-label">Editar desfecho</span>
-            <OutcomeBtn onClick={() => pick(() => onAdminDesfecho('realizada'))} disabled={disabled}>
-              <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
-              Realizada
-            </OutcomeBtn>
-            <OutcomeBtn onClick={() => pick(() => onAdminDesfecho('no_show'))} disabled={disabled}>
-              <UserX size={16} strokeWidth={1.65} aria-hidden />
-              No show
-            </OutcomeBtn>
-            <OutcomeBtn onClick={() => pick(() => onAdminDesfecho('venda'))} disabled={disabled} primary>
-              <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
-              Venda
-            </OutcomeBtn>
-          </>
-        )}
-      </div>
-    )
-  }
+      )}
 
-  if (a.status === 'realizada' && !isAdmin) {
-    return (
-      <div className="agenda-cal-pop-actions">
+      {podeAgir && (st === 'agendada' || st === 'reagendada') && (
+        <>
+          <OutcomeBtn onClick={() => pick(onRealizada)} disabled={disabled}>
+            <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
+            Realizada
+          </OutcomeBtn>
+          <OutcomeBtn onClick={() => pick(onNoShow)} disabled={disabled}>
+            <UserX size={16} strokeWidth={1.65} aria-hidden />
+            No show
+          </OutcomeBtn>
+          <OutcomeBtn onClick={() => pick(onVenda)} disabled={disabled} primary>
+            Venda
+          </OutcomeBtn>
+        </>
+      )}
+
+      {podeAgir && st === 'realizada' && !isAdmin && (
         <OutcomeBtn onClick={() => pick(onVenda)} disabled={disabled} primary>
           <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
           Registrar venda
         </OutcomeBtn>
-      </div>
-    )
-  }
+      )}
 
-  if (isAdmin && (a.status === 'realizada' || a.status === 'venda')) {
-    return (
-      <div className="agenda-cal-pop-actions">
-        <span className="agenda-cal-pop-actions-label">Editar desfecho</span>
-        <OutcomeBtn onClick={() => pick(() => onAdminDesfecho('realizada'))} disabled={disabled}>
-          <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
-          Realizada
-        </OutcomeBtn>
-        <OutcomeBtn onClick={() => pick(() => onAdminDesfecho('no_show'))} disabled={disabled}>
-          <UserX size={16} strokeWidth={1.65} aria-hidden />
-          No show
-        </OutcomeBtn>
-        <OutcomeBtn
-          onClick={() => pick(() => onAdminDesfecho('venda'))}
-          disabled={disabled || a.status === 'venda'}
-          primary
-        >
-          <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
-          Venda
-        </OutcomeBtn>
-      </div>
-    )
-  }
+      {isAdmin && podeAgir && (st === 'realizada' || st === 'venda' || st === 'no_show') && (
+        <>
+          {st === 'no_show' && <PopDivider />}
+          <OutcomeBtn onClick={() => pick(() => onAdminDesfecho('realizada'))} disabled={disabled}>
+            <CheckCircle2 size={16} strokeWidth={1.65} aria-hidden />
+            Realizada
+          </OutcomeBtn>
+          <OutcomeBtn
+            onClick={() => pick(() => onAdminDesfecho('no_show'))}
+            disabled={disabled || st === 'no_show'}
+          >
+            <UserX size={16} strokeWidth={1.65} aria-hidden />
+            No show
+          </OutcomeBtn>
+          <OutcomeBtn
+            onClick={() => pick(() => onAdminDesfecho('venda'))}
+            disabled={disabled || st === 'venda'}
+            primary
+          >
+            <CircleDollarSign size={16} strokeWidth={1.65} aria-hidden />
+            Venda
+          </OutcomeBtn>
+        </>
+      )}
 
-  return null
+      {podeExcluir && (
+        <>
+          <PopDivider />
+          <button
+            type="button"
+            className="agenda-cal-pop-btn agenda-cal-pop-btn--danger"
+            disabled={disabled}
+            onClick={() => pick(onExcluir)}
+          >
+            <Trash2 size={16} strokeWidth={1.75} aria-hidden style={{ marginRight: 6, verticalAlign: -2 }} />
+            Remover da agenda
+          </button>
+        </>
+      )}
+    </div>
+  )
 }
 
 export function AgendaCalEventPopover({
@@ -178,7 +197,11 @@ export function AgendaCalEventPopover({
   onNoShow,
   onVenda,
   onReagendar,
-  onAdminDesfecho
+  onAdminDesfecho,
+  onAdminQualificacao,
+  onAdminEditRegistro,
+  podeExcluir,
+  onExcluir
 }: AgendaCalEventPopoverProps) {
   const popRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ top: anchor.bottom + 6, left: anchor.left })
@@ -252,24 +275,43 @@ export function AgendaCalEventPopover({
         <span className={`badge ${AGENDAMENTO_STATUS_BADGE[a.status as AgendamentoStatus]}`}>
           {AGENDAMENTO_STATUS_LABEL[a.status]}
         </span>
-        {(a.status === 'realizada' || a.status === 'venda') && a.qualificacaoSdr && (
+        {(a.status === 'realizada' || a.status === 'venda') && (
           <p className="agenda-cal-pop-qual">
             Qualif. SDR:{' '}
-            <span className={`badge ${AGENDAMENTO_QUAL_BADGE[a.qualificacaoSdr]}`}>
-              {QUALIFICACAO_SDR_LABELS[a.qualificacaoSdr]}
-            </span>
+            {a.qualificacaoSdr ? (
+              <span className={`badge ${AGENDAMENTO_QUAL_BADGE[a.qualificacaoSdr]}`}>
+                {QUALIFICACAO_SDR_LABELS[a.qualificacaoSdr]}
+              </span>
+            ) : (
+              <span style={{ color: 'var(--text3)' }}>—</span>
+            )}
           </p>
         )}
-        {podeAgir ? (
+        {isAdmin && (a.status === 'realizada' || a.status === 'venda') && a.registroRealizadaSdrId && (
+          <div className="agenda-cal-pop-admin">
+            <button type="button" className="agenda-cal-pop-btn" onClick={() => { onClose(); onAdminQualificacao?.() }}>
+              Qualificação SDR
+            </button>
+            {onAdminEditRegistro && (
+              <button type="button" className="agenda-cal-pop-btn" onClick={() => { onClose(); onAdminEditRegistro() }}>
+                Editar registo
+              </button>
+            )}
+          </div>
+        )}
+        {(podeAgir || podeExcluir) ? (
           <PopoverActions
             a={a}
             isAdmin={isAdmin}
+            podeAgir={podeAgir}
+            podeExcluir={podeExcluir}
             disabled={disabled}
             onRealizada={onRealizada}
             onNoShow={onNoShow}
             onVenda={onVenda}
             onReagendar={onReagendar}
             onAdminDesfecho={onAdminDesfecho}
+            onExcluir={onExcluir}
             onClose={onClose}
           />
         ) : (

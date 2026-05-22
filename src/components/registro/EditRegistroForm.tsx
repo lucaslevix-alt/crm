@@ -19,9 +19,12 @@ import {
   QUALIFICACAO_SDR_LABELS,
   calcularQualificacaoSdr,
   isValidHttpsRecordingUrl,
+  parseQualificacaoSdr,
   type LeadBudgetOp,
   type QualificacaoSdr
 } from '../../lib/qualificacaoSdr'
+
+const QUAL_OPCOES: QualificacaoSdr[] = ['qualificada', 'pendente', 'nao_qualificada']
 import {
   buildLinhasByIdParaVenda,
   labelLinhaOfertaNoGrupo,
@@ -63,6 +66,7 @@ export function EditRegistroForm() {
   const [produtoItems, setProdutoItems] = useState<ProdutoSelecionadoItem[]>([])
   const [leadBudget, setLeadBudget] = useState<LeadBudgetOp | ''>('')
   const [callRecordingUrl, setCallRecordingUrl] = useState('')
+  const [adminQualificacao, setAdminQualificacao] = useState<QualificacaoSdr | ''>('')
 
   useEffect(() => {
     if (!editingRegistro) return
@@ -88,6 +92,7 @@ export function EditRegistroForm() {
     )
     setLeadBudget(editingRegistro.leadBudget ?? '')
     setCallRecordingUrl(editingRegistro.callRecordingUrl ?? '')
+    setAdminQualificacao(editingRegistro.qualificacaoSdr ?? '')
     listUsers().then(setUsers)
     Promise.all([getProdutos(), getLinhasNegociacaoAll()]).then(([p, l]) => {
       setProdutos(p)
@@ -190,7 +195,16 @@ export function EditRegistroForm() {
     let outRecordingUrl: string | null = null
     let outQualificacao: QualificacaoSdr | null = null
     if (needsSdrQualFields) {
-      if (sdrQualLocked) {
+      if (isAdmin) {
+        if (!adminQualificacao) {
+          showToast('Selecione a qualificação (admin).', 'err')
+          return
+        }
+        outLeadBudget = leadBudget || null
+        outRecordingUrl =
+          callRecordingUrl.trim() !== '' ? callRecordingUrl.trim() : null
+        outQualificacao = adminQualificacao
+      } else if (!isAdmin && sdrQualLocked) {
         outLeadBudget = editingRegistro.leadBudget ?? null
         outRecordingUrl =
           editingRegistro.callRecordingUrl != null && editingRegistro.callRecordingUrl.trim() !== ''
@@ -335,9 +349,27 @@ export function EditRegistroForm() {
           {needsSdrQualFields && (
             <div className="fg s2" style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
               <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
-                Qualificação para comissão SDR (só administradores podem alterar estes campos após o closer os preencher na
-                Agenda).
+                Qualificação para comissão SDR. Administradores podem definir a qualificação diretamente (ex.: marcar
+                vendas como qualificada).
               </div>
+              {isAdmin && (
+                <div className="fg">
+                  <label>Qualificação (admin) *</label>
+                  <select
+                    className="di"
+                    value={adminQualificacao}
+                    onChange={(e) => setAdminQualificacao(parseQualificacaoSdr(e.target.value) ?? '')}
+                    required
+                  >
+                    <option value="">—</option>
+                    {QUAL_OPCOES.map((q) => (
+                      <option key={q} value={q}>
+                        {QUALIFICACAO_SDR_LABELS[q]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="fg">
                 <label>Orçamento do lead {sdrQualLocked ? '' : '(legado: deixe vazio com URL vazio)'}</label>
                 <select

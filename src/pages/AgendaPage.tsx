@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { createPortal } from 'react-dom'
 import { CalendarClock, LayoutGrid, List, Search } from 'lucide-react'
 import {
+  excluirAgendamento,
+  getRegistroById,
   listAgendamentos,
   marcarAgendamentoNoShow,
   redefinirDesfechoAgendamentoAdmin,
@@ -9,6 +11,7 @@ import {
   type AgendamentoRow,
   type AgendamentoStatus
 } from '../firebase/firestore'
+import { AgendaAdminQualificacaoModal } from '../components/agenda/AgendaAdminQualificacaoModal'
 import { AgendaCalEventPopover } from '../components/agenda/AgendaCalEventPopover'
 import { AgendaCalendarView } from '../components/agenda/AgendaCalendarView'
 import { AgendaRowActions } from '../components/agenda/AgendaRowActions'
@@ -72,7 +75,8 @@ function fdt(s: string): string {
 }
 
 export function AgendaPage() {
-  const { currentUser, registrosVersion, showToast, incrementRegistrosVersion } = useAppStore()
+  const { currentUser, registrosVersion, showToast, incrementRegistrosVersion, openModal, setEditingRegistro } =
+    useAppStore()
   const [regPeriod, setRegPeriod] = useState<RegPeriod>('14d')
   const [customDate, setCustomDate] = useState('')
   const [fStatus, setFStatus] = useState<AgendamentoStatus | ''>('')
@@ -90,6 +94,7 @@ export function AgendaPage() {
   const [calendarYm, setCalendarYm] = useState(() => ymFromIso(todayIso()))
   const [selectedAgendamento, setSelectedAgendamento] = useState<AgendamentoRow | null>(null)
   const [calPopoverAnchor, setCalPopoverAnchor] = useState<DOMRect | null>(null)
+  const [qualificacaoPara, setQualificacaoPara] = useState<AgendamentoRow | null>(null)
 
   const isAdmin = currentUser?.cargo === 'admin'
   const isCloser = currentUser?.cargo === 'closer'
@@ -193,6 +198,43 @@ export function AgendaPage() {
     return a.squadId === mySquadId
   }
 
+  function podeExcluirAgendamento(a: AgendamentoRow): boolean {
+    if (!currentUser) return false
+    if (isAdmin) return true
+    if (
+      isSdrRole &&
+      a.sdrUserId === currentUser.id &&
+      (a.status === 'agendada' || a.status === 'reagendada')
+    ) {
+      return true
+    }
+    return false
+  }
+
+  function mensagemConfirmarExclusao(a: AgendamentoRow): string {
+    if (a.status === 'agendada' || a.status === 'reagendada') {
+      return `Remover «${a.grupoWpp}» da agenda e apagar o registo de reunião agendada?`
+    }
+    return `Remover «${a.grupoWpp}» da agenda e apagar todos os registos ligados (agendada, realizada, venda, no show, etc.)? Esta ação não pode ser desfeita.`
+  }
+
+  async function handleExcluirAgendamento(a: AgendamentoRow) {
+    if (!podeExcluirAgendamento(a)) return
+    if (!window.confirm(mensagemConfirmarExclusao(a))) return
+    setMarcandoId(a.id)
+    try {
+      await excluirAgendamento(a.id)
+      showToast('Evento removido da agenda.')
+      closeCalPopover()
+      setQualificacaoPara(null)
+      incrementRegistrosVersion()
+    } catch (e) {
+      showToast('Erro: ' + formatFirebaseOrUnknownError(e), 'err')
+    } finally {
+      setMarcandoId(null)
+    }
+  }
+
   const closeCalPopover = useCallback(() => {
     setCalPopoverAnchor(null)
     setSelectedAgendamento(null)
@@ -254,19 +296,69 @@ export function AgendaPage() {
     else setVendaPara(a)
   }
 
+  async function abrirEditarRegistroAgendamento(a: AgendamentoRow) {
+    if (!a.registroRealizadaSdrId) {
+      showToast('Este agendamento não tem registo de reunião realizada (SDR).', 'err')
+      return
+    }
+    try {
+      const rec = await getRegistroById(a.registroRealizadaSdrId)
+      if (!rec) {
+        showToast('Registo não encontrado.', 'err')
+        return
+      }
+      setEditingRegistro({
+        id: rec.id,
+        data: rec.data,
+        tipo: rec.tipo,
+        userId: rec.userId,
+        userName: rec.userName,
+        userCargo: rec.userCargo,
+        anuncio: rec.anuncio,
+        grupoWpp: rec.grupoWpp,
+        valor: rec.valor,
+        cashCollected: rec.cashCollected,
+        obs: rec.obs,
+        formaPagamento: rec.formaPagamento ?? null,
+        produtosIds: rec.produtosIds ?? [],
+        produtosDetalhes: rec.produtosDetalhes ?? [],
+        valorReferenciaVenda: rec.valorReferenciaVenda,
+        descontoCloser: rec.descontoCloser,
+        nomeCliente: rec.nomeCliente ?? null,
+        leadBudget: rec.leadBudget ?? null,
+        callRecordingUrl: rec.callRecordingUrl ?? null,
+        qualificacaoSdr: rec.qualificacaoSdr ?? null
+      })
+      closeCalPopover()
+      setQualificacaoPara(null)
+      openModal('modal-edit-reg')
+    } catch (e) {
+      showToast('Erro: ' + formatFirebaseOrUnknownError(e), 'err')
+    }
+  }
+
+  function abrirQualificacaoAdmin(a: AgendamentoRow) {
+    closeCalPopover()
+    setQualificacaoPara(a)
+  }
+
   function renderActions(a: AgendamentoRow) {
     if (!currentUser) return null
     return (
       <AgendaRowActions
         a={a}
         podeAgir={podeAgirNoItem(a)}
-        isAdmin={isAdmin}
+        isAdmin={!!isAdmin}
         disabled={marcandoId === a.id}
         onRealizada={() => setRealizadaPara(a)}
         onNoShow={() => void handleNoShow(a)}
         onVenda={() => setVendaPara(a)}
         onReagendar={() => setReagendarPara(a)}
         onAdminDesfecho={(action) => abrirDesfechoAdmin(a, action)}
+        onAdminQualificacao={isAdmin ? () => abrirQualificacaoAdmin(a) : undefined}
+        onAdminEditRegistro={isAdmin ? () => void abrirEditarRegistroAgendamento(a) : undefined}
+        podeExcluir={podeExcluirAgendamento(a)}
+        onExcluir={() => void handleExcluirAgendamento(a)}
       />
     )
   }
@@ -453,6 +545,14 @@ export function AgendaPage() {
                     setReagendarPara(selectedAgendamento)
                   }}
                   onAdminDesfecho={(action) => abrirDesfechoAdmin(selectedAgendamento, action, true)}
+                  onAdminQualificacao={
+                    isAdmin ? () => abrirQualificacaoAdmin(selectedAgendamento) : undefined
+                  }
+                  onAdminEditRegistro={
+                    isAdmin ? () => void abrirEditarRegistroAgendamento(selectedAgendamento) : undefined
+                  }
+                  podeExcluir={podeExcluirAgendamento(selectedAgendamento)}
+                  onExcluir={() => void handleExcluirAgendamento(selectedAgendamento)}
                 />,
                 document.body
               )}
@@ -541,6 +641,10 @@ export function AgendaPage() {
                           >
                             {QUALIFICACAO_SDR_LABELS[a.qualificacaoSdr]}
                           </span>
+                        ) : a.status === 'realizada' || a.status === 'venda' ? (
+                          <span className="badge b-no-show" title="Não qualificada">
+                            Não qualificada
+                          </span>
                         ) : (
                           <span style={{ color: 'var(--text3)' }}>—</span>
                         )}
@@ -590,6 +694,15 @@ export function AgendaPage() {
             agendamento={reagendarPara}
             closer={currentUser}
             onClose={() => setReagendarPara(null)}
+          />,
+          document.body
+        )}
+      {qualificacaoPara &&
+        createPortal(
+          <AgendaAdminQualificacaoModal
+            agendamento={qualificacaoPara}
+            onClose={() => setQualificacaoPara(null)}
+            onEditRegistro={() => void abrirEditarRegistroAgendamento(qualificacaoPara)}
           />,
           document.body
         )}
