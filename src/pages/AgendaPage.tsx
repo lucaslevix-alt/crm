@@ -9,6 +9,7 @@ import {
   type AgendamentoRow,
   type AgendamentoStatus
 } from '../firebase/firestore'
+import { AgendaCalEventPopover } from '../components/agenda/AgendaCalEventPopover'
 import { AgendaCalendarView } from '../components/agenda/AgendaCalendarView'
 import { AgendaRowActions } from '../components/agenda/AgendaRowActions'
 import { AgendaVendaModal } from '../components/agenda/AgendaVendaModal'
@@ -78,6 +79,7 @@ export function AgendaPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('calendario')
   const [calendarYm, setCalendarYm] = useState(() => ymFromIso(todayIso()))
   const [selectedAgendamento, setSelectedAgendamento] = useState<AgendamentoRow | null>(null)
+  const [calPopoverAnchor, setCalPopoverAnchor] = useState<DOMRect | null>(null)
 
   const isAdmin = currentUser?.cargo === 'admin'
   const isCloser = currentUser?.cargo === 'closer'
@@ -161,21 +163,27 @@ export function AgendaPage() {
     return a.squadId === mySquadId
   }
 
-  const handleSelectAgendamento = useCallback(
-    (row: AgendamentoRow | null) => {
-      if (!row) {
-        setSelectedAgendamento(null)
+  const closeCalPopover = useCallback(() => {
+    setCalPopoverAnchor(null)
+    setSelectedAgendamento(null)
+  }, [])
+
+  const handleCalendarEventClick = useCallback(
+    (row: AgendamentoRow, anchor: DOMRect) => {
+      const fresh = rows.find((r) => r.id === row.id) ?? row
+      if (selectedAgendamento?.id === fresh.id && calPopoverAnchor) {
+        closeCalPopover()
         return
       }
-      setSelectedAgendamento(rows.find((r) => r.id === row.id) ?? row)
+      setSelectedAgendamento(fresh)
+      setCalPopoverAnchor(anchor)
     },
-    [rows]
+    [rows, selectedAgendamento?.id, calPopoverAnchor, closeCalPopover]
   )
 
   useEffect(() => {
-    if (!selectedAgendamento || viewMode !== 'calendario') return
-    document.getElementById('agenda-cal-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [selectedAgendamento?.id, viewMode])
+    if (viewMode !== 'calendario') closeCalPopover()
+  }, [viewMode, closeCalPopover])
 
   async function handleNoShow(a: AgendamentoRow, adminOverride = false) {
     if (!currentUser) return
@@ -204,7 +212,8 @@ export function AgendaPage() {
     }
   }
 
-  function abrirDesfechoAdmin(a: AgendamentoRow, action: 'realizada' | 'no_show' | 'venda') {
+  function abrirDesfechoAdmin(a: AgendamentoRow, action: 'realizada' | 'no_show' | 'venda', closePopover = false) {
+    if (closePopover) closeCalPopover()
     if (action === 'no_show') {
       if (a.status === 'no_show') return
       void handleNoShow(a, true)
@@ -386,51 +395,38 @@ export function AgendaPage() {
                 calendarYm={calendarYm}
                 onCalendarYmChange={setCalendarYm}
                 selectedId={selectedAgendamento?.id ?? null}
-                onSelect={handleSelectAgendamento}
+                onEventClick={handleCalendarEventClick}
+                onClearSelection={closeCalPopover}
               />
             )}
-            {selectedAgendamento && (
-              <div id="agenda-cal-detail" className="agenda-cal-detail">
-                <div className="agenda-cal-detail-head">
-                  <div>
-                    <h3 className="agenda-cal-detail-title">{selectedAgendamento.grupoWpp}</h3>
-                    <p className="agenda-cal-detail-meta">
-                      {fdt(selectedAgendamento.data)} · {selectedAgendamento.origemLead || '—'} · SDR:{' '}
-                      {selectedAgendamento.sdrUserName}
-                      {selectedAgendamento.closerUserName
-                        ? ` · Closer: ${selectedAgendamento.closerUserName}`
-                        : ''}{' '}
-                      · {selectedAgendamento.squadNome}
-                    </p>
-                  </div>
-                  <span
-                    className={`badge ${AGENDAMENTO_STATUS_BADGE[selectedAgendamento.status]}`}
-                    title={AGENDAMENTO_STATUS_LABEL[selectedAgendamento.status]}
-                  >
-                    {AGENDAMENTO_STATUS_LABEL[selectedAgendamento.status]}
-                  </span>
-                </div>
-                {(selectedAgendamento.status === 'realizada' || selectedAgendamento.status === 'venda') &&
-                  selectedAgendamento.qualificacaoSdr && (
-                    <p style={{ fontSize: 12, marginBottom: 12 }}>
-                      Qualif. SDR:{' '}
-                      <span className={`badge ${AGENDAMENTO_QUAL_BADGE[selectedAgendamento.qualificacaoSdr]}`}>
-                        {QUALIFICACAO_SDR_LABELS[selectedAgendamento.qualificacaoSdr]}
-                      </span>
-                    </p>
-                  )}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                  {renderActions(selectedAgendamento)}
-                  {!podeAgirNoItem(selectedAgendamento) && (
-                    <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-                      {isSdrRole
-                        ? 'O closer do squad regista o desfecho neste painel.'
-                        : 'Sem permissão para alterar este agendamento.'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
+            {selectedAgendamento &&
+              calPopoverAnchor &&
+              createPortal(
+                <AgendaCalEventPopover
+                  agendamento={selectedAgendamento}
+                  anchor={calPopoverAnchor}
+                  podeAgir={podeAgirNoItem(selectedAgendamento)}
+                  isAdmin={!!isAdmin}
+                  isSdrRole={!!isSdrRole}
+                  disabled={marcandoId === selectedAgendamento.id}
+                  onClose={closeCalPopover}
+                  onRealizada={() => {
+                    closeCalPopover()
+                    setRealizadaPara(selectedAgendamento)
+                  }}
+                  onNoShow={() => void handleNoShow(selectedAgendamento)}
+                  onVenda={() => {
+                    closeCalPopover()
+                    setVendaPara(selectedAgendamento)
+                  }}
+                  onReagendar={() => {
+                    closeCalPopover()
+                    setReagendarPara(selectedAgendamento)
+                  }}
+                  onAdminDesfecho={(action) => abrirDesfechoAdmin(selectedAgendamento, action, true)}
+                />,
+                document.body
+              )}
           </div>
         )}
         {!error && viewMode === 'lista' && (rows.length > 0 || !loading) && (

@@ -25,7 +25,8 @@ export interface AgendaCalendarViewProps {
   calendarYm: string
   onCalendarYmChange: (ym: string) => void
   selectedId: string | null
-  onSelect: (row: AgendamentoRow | null) => void
+  onEventClick: (row: AgendamentoRow, anchor: DOMRect) => void
+  onClearSelection: () => void
 }
 
 export function AgendaCalendarView({
@@ -33,7 +34,8 @@ export function AgendaCalendarView({
   calendarYm,
   onCalendarYmChange,
   selectedId,
-  onSelect
+  onEventClick,
+  onClearSelection
 }: AgendaCalendarViewProps) {
   const [subView, setSubView] = useState<'mes' | 'semana'>('mes')
   const [weekStart, setWeekStart] = useState(() => mondayWeekStart(todayIso()))
@@ -98,7 +100,7 @@ export function AgendaCalendarView({
         title={`${a.grupoWpp} · ${AGENDAMENTO_STATUS_LABEL[a.status]}${closer}`}
         onClick={(e) => {
           e.stopPropagation()
-          onSelect(sel ? null : a)
+          onEventClick(a, (e.currentTarget as HTMLElement).getBoundingClientRect())
         }}
       >
         <span className="agenda-cal-ev-title">{a.grupoWpp}</span>
@@ -170,7 +172,7 @@ export function AgendaCalendarView({
                 <div
                   key={cell.iso}
                   className={`agenda-cal-cell${cell.inMonth ? '' : ' agenda-cal-cell--muted'}${cell.isToday ? ' agenda-cal-cell--today' : ''}`}
-                  onClick={() => onSelect(null)}
+                  onClick={() => onClearSelection()}
                 >
                   <div className="agenda-cal-cell-num">{parseInt(cell.iso.split('-')[2], 10)}</div>
                   <div className="agenda-cal-cell-events">
@@ -193,7 +195,7 @@ export function AgendaCalendarView({
               <div
                 key={iso}
                 className={`agenda-cal-week-col${isToday ? ' agenda-cal-week-col--today' : ''}`}
-                onClick={() => onSelect(null)}
+                onClick={() => onClearSelection()}
               >
                 <div className="agenda-cal-week-head">
                   <span className="agenda-cal-week-wd">{wd}</span>
