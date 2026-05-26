@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Plug,
   Database,
   Filter,
   Factory,
@@ -255,6 +256,19 @@ export function Sidebar() {
                         <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
                       </span>
                       <span className="nav-label">Comissões</span>
+                    </NavLink>
+                    <NavLink
+                      to="/config/crm-webhook"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Webhook CRM nativo"
+                      {...navPrefetch('/config/crm-webhook')}
+                    >
+                      <span className="nav-icon">
+                        <Plug size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">CRM nativo</span>
                     </NavLink>
                     <NavLink
                       to="/config/avisos"

@@ -8,6 +8,7 @@ import {
   ConfigHubPage,
   ConfigAvisosPage,
   ConfigTvTimersPage,
+  ConfigCrmWebhookPage,
   ConfigMetasPage,
   RelatoriosComissoesPage,
   DashboardPage,
@@ -151,6 +152,14 @@ export default function App() {
                   element={
                     <AdminOnlyRoute>
                       <RelatoriosComissoesPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="crm-webhook"
+                  element={
+                    <AdminOnlyRoute>
+                      <ConfigCrmWebhookPage />
                     </AdminOnlyRoute>
                   }
                 />

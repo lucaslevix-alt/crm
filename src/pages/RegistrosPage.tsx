@@ -440,6 +440,11 @@ export function RegistrosPage() {
                               Fora comissões
                             </span>
                           ) : null}
+                          {r.externalSource === 'crm_native' ? (
+                            <span className="badge b-closer" style={{ marginLeft: 6, fontSize: 10 }} title="CRM nativo (webhook)">
+                              API
+                            </span>
+                          ) : null}
                         </td>
                         <td>
                           <strong>{r.userName}</strong>

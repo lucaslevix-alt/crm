@@ -200,7 +200,8 @@ export function RankingSDRPage({
         if (vid) vendaIdToSdr.set(vid, ag.sdrUserId)
       }
       for (const r of vendas) {
-        const sdrId = vendaIdToSdr.get(r.id)
+        const sdrId =
+          vendaIdToSdr.get(r.id) ?? (r.vendaSdrUserId?.trim() ? r.vendaSdrUserId.trim() : '')
         if (!sdrId || !sdrIdSet.has(sdrId)) continue
         if (!m.has(sdrId)) {
           const u = usersById.get(sdrId)

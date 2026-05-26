@@ -33,12 +33,17 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchPublicSheetCsv = exports.metaGraphProxy = exports.getMetaAdsStatus = exports.clearMetaAdsToken = exports.setMetaAdsToken = void 0;
+exports.fetchPublicSheetCsv = exports.metaGraphProxy = exports.getMetaAdsStatus = exports.clearMetaAdsToken = exports.setMetaAdsToken = exports.crmNativeWebhook = void 0;
 const v2_1 = require("firebase-functions/v2");
 const https_1 = require("firebase-functions/v2/https");
+const crmWebhook_1 = require("./crmWebhook");
 const logger = __importStar(require("firebase-functions/logger"));
 const admin = __importStar(require("firebase-admin"));
 (0, v2_1.setGlobalOptions)({ region: 'us-central1', maxInstances: 20 });
+/** Webhook do CRM nativo (pipeline) → registos e rankings. Configure URL + segredo em Configurações → CRM nativo. */
+exports.crmNativeWebhook = (0, https_1.onRequest)({ cors: false, invoker: 'public' }, (req, res) => {
+    void (0, crmWebhook_1.handleCrmNativeWebhookRequest)(req, res);
+});
 if (!admin.apps.length) {
     admin.initializeApp();
 }

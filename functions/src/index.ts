@@ -1,9 +1,18 @@
 import { setGlobalOptions } from 'firebase-functions/v2'
-import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https'
+import { handleCrmNativeWebhookRequest } from './crmWebhook'
 import * as logger from 'firebase-functions/logger'
 import * as admin from 'firebase-admin'
 
 setGlobalOptions({ region: 'us-central1', maxInstances: 20 })
+
+/** Webhook do CRM nativo (pipeline) → registos e rankings. Configure URL + segredo em Configurações → CRM nativo. */
+export const crmNativeWebhook = onRequest(
+  { cors: false, invoker: 'public' },
+  (req, res) => {
+    void handleCrmNativeWebhookRequest(req, res)
+  }
+)
 
 if (!admin.apps.length) {
   admin.initializeApp()

@@ -286,6 +286,13 @@ export interface RegistroRow {
   callRecordingUrl?: string | null
   /** Comissão SDR: qualificada | pendente | nao_qualificada */
   qualificacaoSdr?: QualificacaoSdr | null
+  /** Venda via webhook CRM nativo: SDR do agendamento original */
+  vendaSdrUserId?: string | null
+  vendaSdrUserName?: string | null
+  /** Origem automática (webhook pipeline) */
+  externalSource?: string | null
+  externalOrderId?: string | null
+  externalStep?: string | null
 }
 
 export interface RegistroProdutoItem {
@@ -343,7 +350,16 @@ function docToRegistro(d: { id: string; data: () => Record<string, unknown> }): 
       x.callRecordingUrl != null && String(x.callRecordingUrl).trim() !== ''
         ? String(x.callRecordingUrl).trim()
         : null,
-    qualificacaoSdr: parseQualificacaoSdr(x.qualificacaoSdr)
+    qualificacaoSdr: parseQualificacaoSdr(x.qualificacaoSdr),
+    vendaSdrUserId:
+      x.vendaSdrUserId != null && String(x.vendaSdrUserId).trim() !== '' ? String(x.vendaSdrUserId).trim() : null,
+    vendaSdrUserName:
+      x.vendaSdrUserName != null && String(x.vendaSdrUserName).trim() !== ''
+        ? String(x.vendaSdrUserName).trim()
+        : null,
+    externalSource: x.externalSource != null ? String(x.externalSource) : null,
+    externalOrderId: x.externalOrderId != null ? String(x.externalOrderId) : null,
+    externalStep: x.externalStep != null ? String(x.externalStep) : null
   }
 }
 
@@ -2794,5 +2810,96 @@ export async function redefinirDesfechoAgendamentoAdmin(
     valorReferenciaVenda: params.valorReferenciaVenda,
     descontoCloser: params.descontoCloser
   })
+}
+
+export type CrmWebhookStepKind = 'agendada' | 'realizada' | 'venda'
+
+export interface CrmWebhookConfigRow {
+  enabled: boolean
+  secret: string
+  stepMappings: Record<CrmWebhookStepKind, string[]>
+}
+
+export interface CrmWebhookLogRow {
+  id: string
+  level?: string
+  commercialOrderId?: string
+  event?: string
+  step?: string
+  responsible?: string
+  message?: string
+  result?: Record<string, unknown>
+  ts?: { seconds: number }
+}
+
+const crmWebhookConfigRef = doc(db, 'config', 'crm_webhook')
+
+const DEFAULT_CRM_WEBHOOK_MAPPINGS: Record<CrmWebhookStepKind, string[]> = {
+  agendada: ['reunião agendada', 'reuniao agendada', 'agendada', 'agendado'],
+  realizada: ['reunião realizada', 'reuniao realizada', 'realizada', 'realizado'],
+  venda: ['venda', 'vendas', 'fechado', 'ganho', 'won']
+}
+
+export async function getCrmWebhookConfig(): Promise<CrmWebhookConfigRow> {
+  const snap = await getDoc(crmWebhookConfigRef)
+  const x = snap.data() ?? {}
+  const mappings = (x.stepMappings ?? {}) as Partial<Record<CrmWebhookStepKind, string[]>>
+  return {
+    enabled: x.enabled !== false,
+    secret: String(x.secret ?? ''),
+    stepMappings: {
+      agendada:
+        Array.isArray(mappings.agendada) && mappings.agendada.length > 0
+          ? mappings.agendada.map(String)
+          : DEFAULT_CRM_WEBHOOK_MAPPINGS.agendada,
+      realizada:
+        Array.isArray(mappings.realizada) && mappings.realizada.length > 0
+          ? mappings.realizada.map(String)
+          : DEFAULT_CRM_WEBHOOK_MAPPINGS.realizada,
+      venda:
+        Array.isArray(mappings.venda) && mappings.venda.length > 0
+          ? mappings.venda.map(String)
+          : DEFAULT_CRM_WEBHOOK_MAPPINGS.venda
+    }
+  }
+}
+
+export async function setCrmWebhookConfig(params: CrmWebhookConfigRow): Promise<void> {
+  await setDoc(
+    crmWebhookConfigRef,
+    {
+      enabled: params.enabled,
+      secret: params.secret.trim(),
+      stepMappings: params.stepMappings,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  )
+}
+
+export async function listCrmWebhookLogs(limitN = 40): Promise<CrmWebhookLogRow[]> {
+  const q = query(collection(db, 'crm_webhook_logs'), orderBy('ts', 'desc'), limit(limitN))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => {
+    const x = d.data()
+    const ts = x.ts as Timestamp | undefined
+    return {
+      id: d.id,
+      level: x.level != null ? String(x.level) : undefined,
+      commercialOrderId: x.commercialOrderId != null ? String(x.commercialOrderId) : undefined,
+      event: x.event != null ? String(x.event) : undefined,
+      step: x.step != null ? String(x.step) : undefined,
+      responsible: x.responsible != null ? String(x.responsible) : undefined,
+      message: x.message != null ? String(x.message) : undefined,
+      result: x.result && typeof x.result === 'object' ? (x.result as Record<string, unknown>) : undefined,
+      ts: ts ? { seconds: ts.seconds } : undefined
+    }
+  })
+}
+
+export function buildCrmNativeWebhookPublicUrl(projectId: string, region = 'us-central1'): string {
+  const pid = projectId.trim()
+  if (!pid) return ''
+  return `https://${region}-${pid}.cloudfunctions.net/crmNativeWebhook`
 }
 
