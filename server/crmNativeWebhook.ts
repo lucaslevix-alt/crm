@@ -1,14 +1,4 @@
-import * as logger from 'firebase-functions/logger'
-import type { Request, Response } from 'express'
-import * as admin from 'firebase-admin'
-
-// Este módulo é importado antes do `initializeApp()` em `index.ts` durante a análise do deploy.
-// Portanto, precisamos garantir que o Admin SDK esteja inicializado antes de usar Firestore.
-if (!admin.apps.length) {
-  admin.initializeApp()
-}
-
-const db = admin.firestore()
+import { admin, getFirestoreDb } from './firebaseAdmin'
 
 export type CrmWebhookStepKind = 'agendada' | 'realizada' | 'venda'
 
@@ -48,6 +38,10 @@ const DEFAULT_MAPPINGS: Record<CrmWebhookStepKind, string[]> = {
   venda: ['venda', 'vendas', 'vendido', 'fechado', 'ganho', 'won', 'closed won', 'closed-won', 'deal won']
 }
 
+function db() {
+  return getFirestoreDb()
+}
+
 export function normalizeStepLabel(raw: string): string {
   return String(raw ?? '')
     .trim()
@@ -79,7 +73,7 @@ function isoToDateYmd(iso: string | undefined): string {
 }
 
 export async function loadCrmWebhookConfig(): Promise<CrmWebhookConfig> {
-  const snap = await db.doc(CONFIG_DOC).get()
+  const snap = await db().doc(CONFIG_DOC).get()
   const data = snap.data() ?? {}
   const envSecret = String(process.env.CRM_WEBHOOK_SECRET ?? '').trim()
   const mappings = (data.stepMappings ?? {}) as Partial<Record<CrmWebhookStepKind, string[]>>
@@ -166,7 +160,7 @@ type CrmUserRow = { id: string; nome: string; email: string; cargo: string }
 async function findUserByEmail(email: string): Promise<CrmUserRow | null> {
   const normalized = email.toLowerCase().trim()
   if (!normalized || !normalized.includes('@')) return null
-  const snap = await db.collection('usuarios').where('email', '==', normalized).limit(1).get()
+  const snap = await db().collection('usuarios').where('email', '==', normalized).limit(1).get()
   if (snap.empty) return null
   const d = snap.docs[0]
   const x = d.data()
@@ -187,19 +181,19 @@ function isCloserCargo(cargo: string): boolean {
 }
 
 async function wasProcessed(dedupKey: string): Promise<boolean> {
-  const snap = await db.collection(PROCESSED_COLLECTION).doc(dedupKey).get()
+  const snap = await db().collection(PROCESSED_COLLECTION).doc(dedupKey).get()
   return snap.exists
 }
 
 async function markProcessed(dedupKey: string, meta: Record<string, unknown>): Promise<void> {
-  await db.collection(PROCESSED_COLLECTION).doc(dedupKey).set({
+  await db().collection(PROCESSED_COLLECTION).doc(dedupKey).set({
     ...meta,
     processedAt: admin.firestore.FieldValue.serverTimestamp()
   })
 }
 
 async function appendLog(entry: Record<string, unknown>): Promise<void> {
-  await db.collection(LOG_COLLECTION).add({
+  await db().collection(LOG_COLLECTION).add({
     ...entry,
     ts: admin.firestore.FieldValue.serverTimestamp()
   })
@@ -213,17 +207,16 @@ type OrderLink = {
   grupoWpp?: string | null
   origemLead?: string | null
   pipeline?: string | null
-  updatedAt?: admin.firestore.FieldValue
 }
 
 async function getOrderLink(orderId: string): Promise<OrderLink | null> {
-  const snap = await db.collection(ORDER_COLLECTION).doc(orderId).get()
+  const snap = await db().collection(ORDER_COLLECTION).doc(orderId).get()
   if (!snap.exists) return null
   return snap.data() as OrderLink
 }
 
 async function saveOrderLink(orderId: string, patch: Partial<OrderLink>): Promise<void> {
-  await db.collection(ORDER_COLLECTION).doc(orderId).set(
+  await db().collection(ORDER_COLLECTION).doc(orderId).set(
     {
       commercialOrderId: orderId,
       ...patch,
@@ -250,7 +243,7 @@ async function createRegistroFromWebhook(params: {
   externalStep: string
   externalEvent: string
 }): Promise<string> {
-  const ref = await db.collection('registros').add({
+  const ref = await db().collection('registros').add({
     data: params.data,
     tipo: params.tipo,
     userId: params.user.id,
@@ -261,7 +254,7 @@ async function createRegistroFromWebhook(params: {
     valor: params.valor ?? 0,
     cashCollected: params.cashCollected ?? 0,
     obs: params.obs,
-    formaPagamento: params.tipo === 'venda' ? null : null,
+    formaPagamento: null,
     nomeCliente: params.tipo === 'venda' && params.nomeCliente ? params.nomeCliente : null,
     produtosIds: [],
     produtosDetalhes: [],
@@ -373,7 +366,7 @@ export async function processCrmNativeWebhook(parsed: ParsedWebhook, cfg: CrmWeb
     if (orderLink?.sdrUserId) {
       const dedupSdr = `${orderId}_reuniao_realizada`
       if (!(await wasProcessed(dedupSdr))) {
-        const sdrUser = await db.collection('usuarios').doc(orderLink.sdrUserId).get()
+        const sdrUser = await db().collection('usuarios').doc(orderLink.sdrUserId).get()
         const sdrData = sdrUser.data()
         if (sdrUser.exists && sdrData) {
           const sdr: CrmUserRow = {
@@ -479,46 +472,51 @@ export async function processCrmNativeWebhook(parsed: ParsedWebhook, cfg: CrmWeb
   return { ok: true, skipped: true, reason: 'sem_acao' }
 }
 
-function extractSecret(req: Request): string {
-  const h = req.headers['x-crm-webhook-secret'] ?? req.headers['x-webhook-secret']
-  if (typeof h === 'string' && h.trim()) return h.trim()
-  if (Array.isArray(h) && h[0]) return String(h[0]).trim()
-  const q = req.query.secret
-  if (typeof q === 'string') return q.trim()
-  return ''
+function headerSecret(headers: Record<string, string | undefined>, query: Record<string, string | undefined>): string {
+  const h1 = headers['x-crm-webhook-secret'] ?? headers['X-Crm-Webhook-Secret']
+  const h2 = headers['x-webhook-secret'] ?? headers['X-Webhook-Secret']
+  const fromHeader = (h1 ?? h2)?.trim()
+  if (fromHeader) return fromHeader
+  const q = query.secret?.trim()
+  return q ?? ''
 }
 
-export async function handleCrmNativeWebhookRequest(req: Request, res: Response): Promise<void> {
-  if (req.method === 'GET') {
-    res.status(200).json({ ok: true, service: 'crm-native-webhook' })
-    return
+export type WebhookHttpInput = {
+  method: string
+  headers: Record<string, string | undefined>
+  query?: Record<string, string | undefined>
+  body: unknown
+}
+
+export async function runCrmNativeWebhookHttp(
+  input: WebhookHttpInput
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const method = input.method.toUpperCase()
+  const query = input.query ?? {}
+
+  if (method === 'GET') {
+    return { status: 200, body: { ok: true, service: 'crm-native-webhook' } }
   }
-  if (req.method !== 'POST') {
-    res.status(405).json({ ok: false, error: 'method_not_allowed' })
-    return
+  if (method !== 'POST') {
+    return { status: 405, body: { ok: false, error: 'method_not_allowed' } }
   }
 
   try {
     const cfg = await loadCrmWebhookConfig()
     if (!cfg.enabled) {
-      res.status(503).json({ ok: false, error: 'webhook_desativado' })
-      return
+      return { status: 503, body: { ok: false, error: 'webhook_desativado' } }
     }
     if (!cfg.secret) {
-      logger.error('CRM webhook: secret não configurado')
-      res.status(503).json({ ok: false, error: 'secret_nao_configurado' })
-      return
+      return { status: 503, body: { ok: false, error: 'secret_nao_configurado' } }
     }
-    const provided = extractSecret(req)
+    const provided = headerSecret(input.headers, query)
     if (!provided || provided !== cfg.secret) {
-      res.status(401).json({ ok: false, error: 'nao_autorizado' })
-      return
+      return { status: 401, body: { ok: false, error: 'nao_autorizado' } }
     }
 
-    const parsed = parseWebhookBody(req.body)
+    const parsed = parseWebhookBody(input.body)
     if (!parsed) {
-      res.status(400).json({ ok: false, error: 'payload_invalido' })
-      return
+      return { status: 400, body: { ok: false, error: 'payload_invalido' } }
     }
 
     const result = await processCrmNativeWebhook(parsed, cfg)
@@ -531,13 +529,13 @@ export async function handleCrmNativeWebhookRequest(req: Request, res: Response)
       result
     })
 
-    res.status(200).json({ ...result, ok: result.ok })
+    return { status: 200, body: { ...result, ok: result.ok } }
   } catch (e) {
-    logger.error('crmNativeWebhook', e)
+    console.error('crmNativeWebhook', e)
     await appendLog({
       level: 'error',
       message: e instanceof Error ? e.message : String(e)
     }).catch(() => {})
-    res.status(500).json({ ok: false, error: 'erro_interno' })
+    return { status: 500, body: { ok: false, error: 'erro_interno' } }
   }
 }

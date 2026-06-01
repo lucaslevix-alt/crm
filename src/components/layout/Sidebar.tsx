@@ -245,6 +245,19 @@ export function Sidebar() {
                 {configNavOpen && (
                   <div className="nav-config-nest-children" role="group" aria-label="Itens de configuração">
                     <NavLink
+                      to="/config/rankings-mensal"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Rankings mensais"
+                      {...navPrefetch('/config/rankings-mensal')}
+                    >
+                      <span className="nav-icon">
+                        <Trophy size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Rankings mensais</span>
+                    </NavLink>
+                    <NavLink
                       to="/config/relatorios-comissoes"
                       className={({ isActive }) =>
                         `nav-item nav-item--sub${isActive ? ' active' : ''}`

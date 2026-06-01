@@ -9,6 +9,7 @@ import {
   ConfigAvisosPage,
   ConfigTvTimersPage,
   ConfigCrmWebhookPage,
+  ConfigRankingOverviewPage,
   ConfigMetasPage,
   RelatoriosComissoesPage,
   DashboardPage,
@@ -152,6 +153,14 @@ export default function App() {
                   element={
                     <AdminOnlyRoute>
                       <RelatoriosComissoesPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="rankings-mensal"
+                  element={
+                    <AdminOnlyRoute>
+                      <ConfigRankingOverviewPage />
                     </AdminOnlyRoute>
                   }
                 />

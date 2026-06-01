@@ -2897,9 +2897,12 @@ export async function listCrmWebhookLogs(limitN = 40): Promise<CrmWebhookLogRow[
   })
 }
 
-export function buildCrmNativeWebhookPublicUrl(projectId: string, region = 'us-central1'): string {
-  const pid = projectId.trim()
-  if (!pid) return ''
-  return `https://${region}-${pid}.cloudfunctions.net/crmNativeWebhook`
+/** URL do webhook (Netlify Function — não exige Firebase Blaze). */
+export function buildCrmNativeWebhookPublicUrl(siteUrl?: string): string {
+  const site = (siteUrl ?? (import.meta.env.VITE_SITE_URL as string | undefined) ?? '')
+    .trim()
+    .replace(/\/$/, '')
+  if (site) return `${site}/.netlify/functions/crm-native-webhook`
+  return ''
 }
 

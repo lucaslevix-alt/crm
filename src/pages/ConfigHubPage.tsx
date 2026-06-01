@@ -38,6 +38,21 @@ export function ConfigHubPage() {
 
       <div className="config-hub-grid" role="navigation" aria-label="Secções de configuração">
         {isAdmin && (
+          <Link to="/config/rankings-mensal" className="config-hub-card">
+            <span className="config-hub-card-ic">
+              <Trophy size={22} strokeWidth={1.65} aria-hidden />
+            </span>
+            <span className="config-hub-card-body">
+              <span className="config-hub-card-title">Rankings mensais</span>
+              <span className="config-hub-card-text">
+                Overview por mês: SDR (agendadas, realizadas, vendas, valor) e Closer (vendas, conversão) com export CSV.
+              </span>
+            </span>
+            <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
+          </Link>
+        )}
+
+        {isAdmin && (
           <Link to="/config/relatorios-comissoes" className="config-hub-card">
             <span className="config-hub-card-ic">
               <FileSpreadsheet size={22} strokeWidth={1.65} aria-hidden />

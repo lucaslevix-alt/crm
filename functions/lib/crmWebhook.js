@@ -41,6 +41,11 @@ exports.processCrmNativeWebhook = processCrmNativeWebhook;
 exports.handleCrmNativeWebhookRequest = handleCrmNativeWebhookRequest;
 const logger = __importStar(require("firebase-functions/logger"));
 const admin = __importStar(require("firebase-admin"));
+// Este módulo é importado antes do `initializeApp()` em `index.ts` durante a análise do deploy.
+// Portanto, precisamos garantir que o Admin SDK esteja inicializado antes de usar Firestore.
+if (!admin.apps.length) {
+    admin.initializeApp();
+}
 const db = admin.firestore();
 const CONFIG_DOC = 'config/crm_webhook';
 const ORDER_COLLECTION = 'crm_webhook_orders';

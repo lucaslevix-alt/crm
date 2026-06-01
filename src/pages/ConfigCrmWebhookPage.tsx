@@ -37,8 +37,8 @@ const STEP_LABELS: Record<CrmWebhookStepKind, string> = {
 
 export function ConfigCrmWebhookPage() {
   const { showToast } = useAppStore()
-  const projectId = (import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined)?.trim() ?? ''
-  const webhookUrl = useMemo(() => buildCrmNativeWebhookPublicUrl(projectId), [projectId])
+  const siteUrl = (import.meta.env.VITE_SITE_URL as string | undefined)?.trim() ?? ''
+  const webhookUrl = useMemo(() => buildCrmNativeWebhookPublicUrl(siteUrl), [siteUrl])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -48,6 +48,12 @@ export function ConfigCrmWebhookPage() {
   const [mapRealizada, setMapRealizada] = useState('')
   const [mapVenda, setMapVenda] = useState('')
   const [logs, setLogs] = useState<CrmWebhookLogRow[]>([])
+
+  const webhookUrlWithSecret = useMemo(() => {
+    if (!webhookUrl || !secret.trim()) return ''
+    const sep = webhookUrl.includes('?') ? '&' : '?'
+    return `${webhookUrl}${sep}secret=${encodeURIComponent(secret.trim())}`
+  }, [webhookUrl, secret])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -97,17 +103,20 @@ export function ConfigCrmWebhookPage() {
 
   function copyUrl() {
     if (!webhookUrl) {
-      showToast('Project ID Firebase em falta no .env', 'err')
+      showToast('Defina VITE_SITE_URL no Netlify (URL do site)', 'err')
       return
     }
     void navigator.clipboard.writeText(webhookUrl)
     showToast('URL copiada')
   }
 
-  function copySecret() {
-    if (!secret.trim()) return
-    void navigator.clipboard.writeText(secret)
-    showToast('Segredo copiado')
+  function copyUrlWithSecret() {
+    if (!webhookUrlWithSecret) {
+      showToast('Gere e salve o segredo, e defina VITE_SITE_URL no Netlify', 'err')
+      return
+    }
+    void navigator.clipboard.writeText(webhookUrlWithSecret)
+    showToast('URL com segredo copiada — cole no CRM nativo')
   }
 
   return (
@@ -121,9 +130,34 @@ export function ConfigCrmWebhookPage() {
           CRM nativo (webhook)
         </h2>
         <p style={{ color: 'var(--text2)', maxWidth: 720, lineHeight: 1.5 }}>
-          O time usa só o CRM nativo. Quando um negócio muda de coluna no pipeline, o webhook cria registos aqui
-          (agendada, realizada, venda) e atualiza a Classificação — sem N8N.
+          O time usa só o CRM nativo. O webhook roda na <strong>Netlify</strong> (não precisa do plano Blaze do Firebase).
+          Quando um negócio muda de coluna, criamos registos aqui e a Classificação atualiza sozinha.
         </p>
+      </div>
+
+      <div
+        className="card"
+        style={{
+          marginBottom: 16,
+          padding: '14px 16px',
+          borderColor: 'var(--border2)',
+          background: 'var(--card-bg, rgba(128,128,128,.04))'
+        }}
+      >
+        <p style={{ fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>Checklist de configuração</p>
+        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: 'var(--text2)', lineHeight: 1.65 }}>
+          <li>
+            Netlify: <code>VITE_SITE_URL</code> + <code>FIREBASE_SERVICE_ACCOUNT_JSON</code> → novo deploy do site
+          </li>
+          <li>
+            Aqui: gerar <strong>segredo</strong>, mapear nomes das colunas, <strong>Salvar</strong>
+          </li>
+          <li>
+            CRM nativo → <strong>Novo webhook de saída</strong> → colar <strong>só a URL</strong> (Copiar URL) →
+            eventos Comercial
+          </li>
+          <li>Testar: mover negócio no pipeline → ver log abaixo e Classificação</li>
+        </ol>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
@@ -152,21 +186,47 @@ export function ConfigCrmWebhookPage() {
             </label>
 
             <div className="fg">
-              <label>URL (cole no CRM nativo → Webhooks)</label>
+              <label>URL para o CRM nativo (recomendado — já inclui o segredo)</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <input className="di" style={{ flex: 1, minWidth: 220 }} readOnly value={webhookUrl || '—'} />
-                <button type="button" className="btn btn-ghost btn-sm" onClick={copyUrl} disabled={!webhookUrl}>
+                <input
+                  className="di"
+                  style={{ flex: 1, minWidth: 220, fontSize: 11 }}
+                  readOnly
+                  value={webhookUrlWithSecret || 'Gere o segredo e salve para ver a URL completa'}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={copyUrlWithSecret}
+                  disabled={!webhookUrlWithSecret}
+                >
                   <Copy size={14} aria-hidden style={{ marginRight: 4, verticalAlign: -2 }} />
                   Copiar URL
                 </button>
               </div>
               <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
-                Após o deploy das Functions: <code>firebase deploy --only functions:crmNativeWebhook</code>
+                Cole no campo <strong>Url</strong> do webhook de saída. O CRM nativo normalmente não tem campo de
+                header — por isso o segredo vai na própria URL (<code>?secret=...</code>).
               </p>
+              {!siteUrl && (
+                <p style={{ fontSize: 11, color: 'var(--amber)', marginTop: 6 }}>
+                  <code>VITE_SITE_URL</code> não está definido no build — faça deploy no Netlify com essa variável.
+                </p>
+              )}
             </div>
 
+            <details style={{ fontSize: 12, color: 'var(--text3)' }}>
+              <summary style={{ cursor: 'pointer', color: 'var(--text2)' }}>URL base (sem segredo)</summary>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                <input className="di" style={{ flex: 1, minWidth: 220 }} readOnly value={webhookUrl || '—'} />
+                <button type="button" className="btn btn-ghost btn-sm" onClick={copyUrl} disabled={!webhookUrl}>
+                  Copiar
+                </button>
+              </div>
+            </details>
+
             <div className="fg">
-              <label>Segredo (header HTTP)</label>
+              <label>Segredo (vai dentro da URL — o CRM nativo não precisa de campo extra)</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <input
                   className="di"
@@ -179,12 +239,10 @@ export function ConfigCrmWebhookPage() {
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSecret(randomSecret())}>
                   Gerar
                 </button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={copySecret} disabled={!secret.trim()}>
-                  Copiar
-                </button>
               </div>
-              <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
-                No CRM nativo, envie o header <code>X-Crm-Webhook-Secret</code> com este valor em cada POST.
+              <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 6, lineHeight: 1.45 }}>
+                No CRM nativo você só cola <strong>uma URL</strong>. O segredo já entra no final, assim:{' '}
+                <code>?secret=SEU_TOKEN</code>. Use o botão <strong>Copiar URL</strong> acima — não monte na mão.
               </p>
             </div>
 

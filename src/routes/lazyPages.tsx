@@ -74,6 +74,9 @@ export const ConfigTvTimersPage = lazy(() =>
 export const ConfigCrmWebhookPage = lazy(() =>
   import('../pages/ConfigCrmWebhookPage').then((m) => ({ default: m.ConfigCrmWebhookPage }))
 )
+export const ConfigRankingOverviewPage = lazy(() =>
+  import('../pages/ConfigRankingOverviewPage').then((m) => ({ default: m.ConfigRankingOverviewPage }))
+)
 export const RelatoriosComissoesPage = lazy(() =>
   import('../pages/RelatoriosComissoesPage').then((m) => ({ default: m.RelatoriosComissoesPage }))
 )
