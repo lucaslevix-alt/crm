@@ -28,6 +28,7 @@ export function ConfigTvTimersPage() {
   const [saving, setSaving] = useState(false)
   const [rankingsSec, setRankingsSec] = useState('30')
   const [avisosSec, setAvisosSec] = useState('10')
+  const [eventosSec, setEventosSec] = useState('8')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -35,6 +36,7 @@ export function ConfigTvTimersPage() {
       const cfg = await getTvTimersConfig()
       setRankingsSec(String(toSeconds(cfg.rankingsRotateMs)))
       setAvisosSec(String(toSeconds(cfg.avisosRotateMs)))
+      setEventosSec(String(toSeconds(cfg.eventosFotosRotateMs)))
     } catch (err) {
       showToast(formatFirebaseOrUnknownError(err) || 'Erro ao carregar', 'err')
     } finally {
@@ -49,6 +51,7 @@ export function ConfigTvTimersPage() {
   async function salvar() {
     const rankingsRotateMs = toMsFromSecondsInput(rankingsSec)
     const avisosRotateMs = toMsFromSecondsInput(avisosSec)
+    const eventosFotosRotateMs = toMsFromSecondsInput(eventosSec)
     if (rankingsRotateMs == null) {
       showToast('Informe o intervalo (segundos) para trocar de ranking.', 'err')
       return
@@ -57,10 +60,14 @@ export function ConfigTvTimersPage() {
       showToast('Informe o intervalo (segundos) para trocar de aviso.', 'err')
       return
     }
+    if (eventosFotosRotateMs == null) {
+      showToast('Informe o intervalo (segundos) para trocar foto de evento.', 'err')
+      return
+    }
 
     setSaving(true)
     try {
-      await setTvTimersConfig({ rankingsRotateMs, avisosRotateMs })
+      await setTvTimersConfig({ rankingsRotateMs, avisosRotateMs, eventosFotosRotateMs })
       showToast('Temporizadores salvos. Recarregue a TV para aplicar.')
       await load()
     } catch (err) {
@@ -81,7 +88,8 @@ export function ConfigTvTimersPage() {
           Temporizadores do modo TV
         </h2>
         <p style={{ color: 'var(--text2)' }}>
-          Controla o tempo de troca automática no menu Classificação → TV (rankings) e no slide de Avisos.
+          Controla o tempo de troca automática no menu Classificação → TV (rankings), no slide de Avisos e no slide
+          de Fotos dos eventos.
         </p>
       </div>
 
@@ -131,6 +139,21 @@ export function ConfigTvTimersPage() {
               />
               <span style={{ color: 'var(--text3)', fontSize: 12 }}>
                 Mínimo 3s, máximo 120s.
+              </span>
+            </label>
+
+            <label style={{ gridColumn: 'span 6', display: 'grid', gap: 6, fontSize: 13 }}>
+              Trocar foto de evento (segundos)
+              <input
+                className="di"
+                inputMode="numeric"
+                placeholder="Ex.: 8"
+                value={eventosSec}
+                disabled={saving}
+                onChange={(e) => setEventosSec(e.target.value)}
+              />
+              <span style={{ color: 'var(--text3)', fontSize: 12 }}>
+                Mínimo 3s, máximo 60s.
               </span>
             </label>
 

@@ -4,6 +4,7 @@ import {
   Database,
   Factory,
   FileSpreadsheet,
+  Images,
   Megaphone,
   Package,
   Plug,
@@ -104,6 +105,21 @@ export function ConfigHubPage() {
               <span className="config-hub-card-title">Avisos</span>
               <span className="config-hub-card-text">
                 Recados, comunicados e operação — aparecem como ticker/destaque no modo TV da Classificação.
+              </span>
+            </span>
+            <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
+          </Link>
+        )}
+
+        {isAdmin && (
+          <Link to="/config/eventos-fotos" className="config-hub-card">
+            <span className="config-hub-card-ic">
+              <Images size={22} strokeWidth={1.65} aria-hidden />
+            </span>
+            <span className="config-hub-card-body">
+              <span className="config-hub-card-title">Fotos dos eventos</span>
+              <span className="config-hub-card-text">
+                Galeria mensal LVX no telão — links do Google Drive, rotação no modo TV (slide Eventos LVX).
               </span>
             </span>
             <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />

@@ -200,11 +200,162 @@ export async function deleteAviso(id: string): Promise<void> {
   await deleteDoc(doc(db, 'avisos', id))
 }
 
+export interface EventoFotoRow {
+  id: string
+  /** Nome do evento (ex.: LVX Day — Maio 2026) */
+  evento: string
+  /** Legenda opcional no telão */
+  legenda: string
+  /** Link colado pelo admin (Google Drive ou URL direta) */
+  link: string
+  ativo: boolean
+  /** Maior = aparece primeiro no telão */
+  ordem: number
+  criadoPorId: string
+  criadoPorNome: string
+  criadoEm?: { seconds: number } | null
+}
+
+function docToEventoFoto(d: { id: string; data: () => Record<string, unknown> }): EventoFotoRow {
+  const x = d.data()
+  const ts = x.criadoEm as Timestamp | undefined
+  return {
+    id: d.id,
+    evento: String(x.evento ?? '').trim(),
+    legenda: String(x.legenda ?? '').trim(),
+    link: String(x.link ?? '').trim(),
+    ativo: x.ativo !== false,
+    ordem: Number.isFinite(Number(x.ordem)) ? Math.floor(Number(x.ordem)) : 0,
+    criadoPorId: String(x.criadoPorId ?? '').trim(),
+    criadoPorNome: String(x.criadoPorNome ?? '').trim() || '—',
+    criadoEm: ts ? { seconds: ts.seconds } : null
+  }
+}
+
+function normalizeEventoFotoPayload(params: {
+  evento: string
+  legenda: string
+  link: string
+  ativo: boolean
+  ordem: number
+}) {
+  const evento = params.evento.trim()
+  const legenda = params.legenda.trim()
+  const link = params.link.trim()
+  if (!evento) throw new Error('Informe o nome do evento.')
+  if (!link) throw new Error('Informe o link da foto (Google Drive).')
+  if (!/^https?:\/\//i.test(link)) throw new Error('O link deve começar com http:// ou https://')
+  return {
+    evento,
+    legenda,
+    link,
+    ativo: params.ativo,
+    ordem: Math.max(0, Math.min(999_999, Math.floor(params.ordem)))
+  }
+}
+
+export async function listEventoFotos(params?: {
+  limitCount?: number
+  includeInactive?: boolean
+}): Promise<EventoFotoRow[]> {
+  const limitCount = Math.max(1, Math.min(300, params?.limitCount ?? 120))
+  const includeInactive = params?.includeInactive === true
+  const q = query(collection(db, 'evento_fotos'), orderBy('criadoEm', 'desc'), limit(limitCount))
+  const snap = await getDocs(q)
+  const rows = snap.docs.map((d) => docToEventoFoto({ id: d.id, data: () => d.data() as Record<string, unknown> }))
+  const filtered = includeInactive ? rows : rows.filter((r) => r.ativo)
+  return filtered.sort((a, b) => b.ordem - a.ordem || (b.criadoEm?.seconds ?? 0) - (a.criadoEm?.seconds ?? 0))
+}
+
+export async function addEventoFoto(params: {
+  evento: string
+  legenda?: string
+  link: string
+  ativo?: boolean
+  ordem?: number
+  criadoPor: { id: string; nome: string }
+}): Promise<string> {
+  const payload = normalizeEventoFotoPayload({
+    evento: params.evento,
+    legenda: params.legenda ?? '',
+    link: params.link,
+    ativo: params.ativo !== false,
+    ordem: params.ordem ?? 0
+  })
+  const ref = await addDoc(collection(db, 'evento_fotos'), {
+    ...payload,
+    criadoPorId: params.criadoPor.id,
+    criadoPorNome: params.criadoPor.nome,
+    criadoEm: serverTimestamp()
+  })
+  return ref.id
+}
+
+export async function addEventoFotosBatch(params: {
+  evento: string
+  legenda?: string
+  links: string[]
+  ativo?: boolean
+  /** Ordem da primeira foto; as seguintes decrementam (primeira linha = maior prioridade no telão). */
+  ordemBase?: number
+  criadoPor: { id: string; nome: string }
+}): Promise<{ created: number; failed: { link: string; message: string }[] }> {
+  const links = params.links.map((l) => l.trim()).filter((l) => l.length > 0)
+  if (!links.length) throw new Error('Informe pelo menos um link.')
+  const base = Math.max(0, Math.min(999_999, Math.floor(params.ordemBase ?? 0)))
+  let created = 0
+  const failed: { link: string; message: string }[] = []
+  for (let i = 0; i < links.length; i++) {
+    try {
+      await addEventoFoto({
+        evento: params.evento,
+        legenda: params.legenda,
+        link: links[i],
+        ativo: params.ativo,
+        ordem: Math.max(0, base - i),
+        criadoPor: params.criadoPor
+      })
+      created++
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : typeof err === 'string' ? err : 'Erro ao salvar'
+      failed.push({ link: links[i], message })
+    }
+  }
+  if (created === 0 && failed.length) {
+    throw new Error(failed[0]?.message || 'Nenhuma foto foi criada.')
+  }
+  return { created, failed }
+}
+
+export async function updateEventoFoto(
+  id: string,
+  params: {
+    evento: string
+    legenda: string
+    link: string
+    ativo: boolean
+    ordem: number
+  }
+): Promise<void> {
+  const payload = normalizeEventoFotoPayload(params)
+  await updateDoc(doc(db, 'evento_fotos', id), {
+    ...payload,
+    atualizadoEm: serverTimestamp()
+  })
+}
+
+export async function deleteEventoFoto(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'evento_fotos', id))
+}
+
 export interface TvTimersConfig {
   /** Intervalo de troca de ranking no modo TV, em milissegundos */
   rankingsRotateMs: number
   /** Intervalo de troca de aviso no slide "Avisos", em milissegundos */
   avisosRotateMs: number
+  /** Intervalo de troca de foto no slide "Eventos LVX", em milissegundos */
+  eventosFotosRotateMs: number
 }
 
 const tvTimersConfigRef = doc(db, 'config', 'tv_timers')
@@ -220,7 +371,8 @@ export async function getTvTimersConfig(): Promise<TvTimersConfig> {
   const raw = snap.exists() ? (snap.data() as Record<string, unknown>) : {}
   return {
     rankingsRotateMs: clampMs(raw.rankingsRotateMs, 30_000, 5_000, 300_000),
-    avisosRotateMs: clampMs(raw.avisosRotateMs, 10_000, 3_000, 120_000)
+    avisosRotateMs: clampMs(raw.avisosRotateMs, 10_000, 3_000, 120_000),
+    eventosFotosRotateMs: clampMs(raw.eventosFotosRotateMs, 8_000, 3_000, 60_000)
   }
 }
 
@@ -228,6 +380,9 @@ export async function setTvTimersConfig(params: Partial<TvTimersConfig>): Promis
   const body: Record<string, number> = {}
   if (params.rankingsRotateMs != null) body.rankingsRotateMs = clampMs(params.rankingsRotateMs, 30_000, 5_000, 300_000)
   if (params.avisosRotateMs != null) body.avisosRotateMs = clampMs(params.avisosRotateMs, 10_000, 3_000, 120_000)
+  if (params.eventosFotosRotateMs != null) {
+    body.eventosFotosRotateMs = clampMs(params.eventosFotosRotateMs, 8_000, 3_000, 60_000)
+  }
   await setDoc(tvTimersConfigRef, body, { merge: true })
 }
 

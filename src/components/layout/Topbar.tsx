@@ -23,6 +23,7 @@ function getPageTitle(pathname: string): string {
   const parts = pathname.replace(/^\//, '').split('/').filter(Boolean)
   if (parts[0] === 'config') {
     if (parts[1] === 'rankings-mensal') return 'Rankings mensais'
+    if (parts[1] === 'eventos-fotos') return 'Fotos dos eventos'
     if (parts[1] === 'relatorios-comissoes') return 'Relatórios para comissões'
     if (parts[1] === 'crm-webhook') return 'CRM nativo (webhook)'
     if (parts[1] === 'metas') return 'Configuração de metas'

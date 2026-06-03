@@ -16,6 +16,7 @@ import { RankingOperacaoPage } from './RankingOperacaoPage'
 import { RankingBasePage } from './RankingBasePage'
 import { RankingGTsPage } from './RankingGTsPage'
 import { RankingsAvisosTVSlide } from './RankingsAvisosTVSlide'
+import { RankingsEventoFotosTVSlide } from './RankingsEventoFotosTVSlide'
 
 const REFRESH_MS = 60_000
 const TV_SLIDES_STORAGE = 'rankingsTvSlideKeys'
@@ -55,7 +56,8 @@ const ALL_TV_SLIDES = [
   { key: 'base', label: 'Base', Component: RankingBasePage },
   { key: 'gts', label: 'GTs', Component: RankingGTsPage },
   { key: 'operacao', label: 'Operação', Component: RankingOperacaoPage },
-  { key: 'avisos', label: 'Avisos', Component: RankingsAvisosTVSlide }
+  { key: 'avisos', label: 'Avisos', Component: RankingsAvisosTVSlide },
+  { key: 'eventos', label: 'Eventos LVX', Component: RankingsEventoFotosTVSlide }
 ] as const
 
 type TvSlideKey = (typeof ALL_TV_SLIDES)[number]['key']
@@ -93,6 +95,7 @@ export function RankingTVPage() {
   const [avisos, setAvisos] = useState<AvisoRow[]>([])
   const [rankingsRotateMs, setRankingsRotateMs] = useState(30_000)
   const [avisosRotateMs, setAvisosRotateMs] = useState(10_000)
+  const [eventosFotosRotateMs, setEventosFotosRotateMs] = useState(8_000)
 
   const slides = useMemo(() => ALL_TV_SLIDES.filter((s) => slideKeys.includes(s.key)), [slideKeys])
 
@@ -124,6 +127,7 @@ export function RankingTVPage() {
         if (!alive) return
         setRankingsRotateMs(cfg.rankingsRotateMs)
         setAvisosRotateMs(cfg.avisosRotateMs)
+        setEventosFotosRotateMs(cfg.eventosFotosRotateMs)
         const rows = await listAvisosRecentes({ includeInactive: false, limitCount: 80 })
         if (!alive) return
         setAvisos(rows)
@@ -221,7 +225,12 @@ export function RankingTVPage() {
         )}
         {slides.map((s, i) => {
           const Cmp = s.Component
-          const avisoProps = s.key === 'avisos' ? { rotateMs: avisosRotateMs } : null
+          const avisoProps =
+            s.key === 'avisos'
+              ? { rotateMs: avisosRotateMs }
+              : s.key === 'eventos'
+                ? { rotateMs: eventosFotosRotateMs }
+                : null
           return (
             <div
               key={s.key}

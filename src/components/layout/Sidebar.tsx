@@ -23,7 +23,8 @@ import {
   Users,
   UsersRound,
   Zap,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Images
 } from 'lucide-react'
 import { getAuth, signOut } from 'firebase/auth'
 import { initFirebaseApp } from '../../firebase/config'
@@ -295,6 +296,19 @@ export function Sidebar() {
                         <Megaphone size={16} strokeWidth={1.5} aria-hidden />
                       </span>
                       <span className="nav-label">Avisos</span>
+                    </NavLink>
+                    <NavLink
+                      to="/config/eventos-fotos"
+                      className={({ isActive }) =>
+                        `nav-item nav-item--sub${isActive ? ' active' : ''}`
+                      }
+                      title="Fotos dos eventos (modo TV)"
+                      {...navPrefetch('/config/eventos-fotos')}
+                    >
+                      <span className="nav-icon">
+                        <Images size={16} strokeWidth={1.5} aria-hidden />
+                      </span>
+                      <span className="nav-label">Fotos eventos</span>
                     </NavLink>
                     <NavLink
                       to="/config/tv"

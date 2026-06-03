@@ -68,6 +68,9 @@ export const ConfigMetasPage = lazy(() =>
 export const ConfigAvisosPage = lazy(() =>
   import('../pages/ConfigAvisosPage').then((m) => ({ default: m.ConfigAvisosPage }))
 )
+export const ConfigEventoFotosPage = lazy(() =>
+  import('../pages/ConfigEventoFotosPage').then((m) => ({ default: m.ConfigEventoFotosPage }))
+)
 export const ConfigTvTimersPage = lazy(() =>
   import('../pages/ConfigTvTimersPage').then((m) => ({ default: m.ConfigTvTimersPage }))
 )

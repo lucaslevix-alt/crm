@@ -7,6 +7,7 @@ import {
   AuditoriaPage,
   ConfigHubPage,
   ConfigAvisosPage,
+  ConfigEventoFotosPage,
   ConfigTvTimersPage,
   ConfigCrmWebhookPage,
   ConfigRankingOverviewPage,
@@ -129,6 +130,14 @@ export default function App() {
                   element={
                     <AdminOnlyRoute>
                       <ConfigAvisosPage />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="eventos-fotos"
+                  element={
+                    <AdminOnlyRoute>
+                      <ConfigEventoFotosPage />
                     </AdminOnlyRoute>
                   }
                 />
