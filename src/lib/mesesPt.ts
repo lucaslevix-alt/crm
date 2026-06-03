@@ -19,6 +19,15 @@ export function labelMesAno(mes: number, ano: number): string {
   return `${nome} ${ano}`
 }
 
+export function labelPeriodYm(periodYm: string): string {
+  const parts = periodYm.trim().split('-')
+  if (parts.length < 2) return periodYm
+  const y = parseInt(parts[0], 10)
+  const m = parseInt(parts[1], 10)
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return periodYm
+  return labelMesAno(m, y)
+}
+
 export function mesAnterior(ano: number, mes: number): { ano: number; mes: number } {
   if (mes <= 1) return { ano: ano - 1, mes: 12 }
   return { ano, mes: mes - 1 }

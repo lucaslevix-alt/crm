@@ -37,7 +37,7 @@ export function RankingsPage() {
             Classificação
           </h2>
           <p style={{ color: 'var(--text2)', marginBottom: 0 }}>
-            SDRs, Closers, Squads, base de clientes, GTs (churn), modo TV e metas por squad
+            SDRs, Closers, Squads, base de clientes, GTs (vendas), modo TV e metas por squad
           </p>
         </div>
         <nav className="rankings-tabs" aria-label="Tipo de ranking">

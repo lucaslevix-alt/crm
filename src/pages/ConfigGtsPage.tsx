@@ -1,55 +1,50 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, Factory, Trophy, Users } from 'lucide-react'
+import { ChevronRight, Minus, Plus, RotateCcw, Trophy, Users } from 'lucide-react'
 import {
-  ajustarChurnGtOperacaoMes,
-  getChurnGtOperacaoMes,
-  getGtsChurnOperacao,
+  ajustarVendasGtAtual,
+  currentGtsVendasPeriodYm,
+  getGtsVendasAtual,
+  getVendasGtAtual,
   listUsers,
-  setChurnGtOperacaoMes,
-  type GtsChurnOperacaoDoc
+  resetGtsVendasAtual,
+  type GtsVendasAtualDoc
 } from '../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
-import { NOME_MES } from '../lib/mesesPt'
+import { labelPeriodYm } from '../lib/mesesPt'
 import type { CrmUser } from '../store/useAppStore'
 import { useAppStore } from '../store/useAppStore'
 
-function parseIntSafe(raw: string): number {
-  const n = parseInt(raw.replace(/\D/g, ''), 10)
-  return Number.isFinite(n) ? Math.max(0, n) : 0
-}
-
 export function ConfigGtsPage() {
   const { showToast } = useAppStore()
-  const currentY = new Date().getFullYear()
-  const [ano, setAno] = useState(currentY)
   const [users, setUsers] = useState<CrmUser[]>([])
-  const [selectedGtId, setSelectedGtId] = useState('')
-  const [churnDoc, setChurnDoc] = useState<GtsChurnOperacaoDoc>({ anos: {} })
+  const [vendasDoc, setVendasDoc] = useState<GtsVendasAtualDoc>({
+    periodYm: currentGtsVendasPeriodYm(),
+    totals: {}
+  })
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
-
-  const [novoPorMes, setNovoPorMes] = useState<Record<number, string>>({})
-  const [addPorMes, setAddPorMes] = useState<Record<number, string>>({})
-  const [remPorMes, setRemPorMes] = useState<Record<number, string>>({})
-  const [busyMes, setBusyMes] = useState<number | null>(null)
+  const [actionErr, setActionErr] = useState<string | null>(null)
+  const [busyGtId, setBusyGtId] = useState<string | null>(null)
+  const [resetting, setResetting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setErr(null)
     try {
-      const [list, doc] = await Promise.all([listUsers(), getGtsChurnOperacao()])
-      const gts = list.filter((u) => u.cargo === 'gt').sort((a, b) => a.nome.localeCompare(b.nome))
+      const [list, vendas] = await Promise.all([
+        listUsers(),
+        getGtsVendasAtual({ fromServer: true })
+      ])
+      const gts = list
+        .filter((u) => String(u.cargo ?? '').trim().toLowerCase() === 'gt')
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
       setUsers(gts)
-      setChurnDoc(doc)
-      setSelectedGtId((prev) => {
-        if (prev && gts.some((u) => u.id === prev)) return prev
-        return gts[0]?.id ?? ''
-      })
+      setVendasDoc(vendas)
     } catch (e) {
       setErr(formatFirebaseOrUnknownError(e) || 'Erro ao carregar')
       setUsers([])
-      setChurnDoc({ anos: {} })
+      setVendasDoc({ periodYm: currentGtsVendasPeriodYm(), totals: {} })
     } finally {
       setLoading(false)
     }
@@ -59,68 +54,69 @@ export function ConfigGtsPage() {
     load()
   }, [load])
 
-  useEffect(() => {
-    setNovoPorMes({})
-    setAddPorMes({})
-    setRemPorMes({})
-  }, [selectedGtId, ano])
-
-  function totalMes(mes: number): number {
-    if (!selectedGtId) return 0
-    return getChurnGtOperacaoMes(churnDoc.anos, ano, mes, selectedGtId)
-  }
-
-  async function salvarDefinir(mes: number) {
-    if (!selectedGtId) {
-      showToast('Selecione um GT.', 'err')
+  async function ajustarVenda(userId: string, delta: 1 | -1) {
+    if (!userId) {
+      setActionErr('Gestor inválido.')
       return
     }
-    const raw = (novoPorMes[mes] ?? '').trim()
-    if (!raw) {
-      showToast('Informe a quantidade de churn.', 'err')
-      return
-    }
-    const v = parseIntSafe(raw)
-    setBusyMes(mes)
+    const prevTot = getVendasGtAtual(vendasDoc, userId)
+    if (delta < 0 && prevTot <= 0) return
+
+    const optimistic = Math.max(0, prevTot + delta)
+    setActionErr(null)
+    setBusyGtId(userId)
+    setVendasDoc((prev) => ({
+      periodYm: prev.periodYm || currentGtsVendasPeriodYm(),
+      totals: { ...prev.totals, [userId]: optimistic }
+    }))
+
     try {
-      await setChurnGtOperacaoMes(ano, mes, selectedGtId, v)
-      showToast(`${NOME_MES[mes - 1]}: churn definido para ${v.toLocaleString('pt-BR')}.`)
-      setNovoPorMes((p) => ({ ...p, [mes]: '' }))
-      await load()
-    } catch (err) {
-      showToast(formatFirebaseOrUnknownError(err) || 'Erro ao salvar', 'err')
+      const add = delta > 0 ? 1 : 0
+      const rem = delta < 0 ? 1 : 0
+      const novo = await ajustarVendasGtAtual(userId, add, rem)
+      setVendasDoc((prev) => ({
+        periodYm: prev.periodYm || currentGtsVendasPeriodYm(),
+        totals: { ...prev.totals, [userId]: novo }
+      }))
+      const gt = users.find((u) => u.id === userId)
+      showToast(`${gt?.nome ?? 'GT'}: ${novo} venda(s).`)
+    } catch (e) {
+      setVendasDoc((prev) => ({
+        periodYm: prev.periodYm || currentGtsVendasPeriodYm(),
+        totals: { ...prev.totals, [userId]: prevTot }
+      }))
+      const msg = formatFirebaseOrUnknownError(e) || 'Erro ao ajustar vendas'
+      setActionErr(msg)
+      showToast(msg, 'err')
     } finally {
-      setBusyMes(null)
+      setBusyGtId(null)
     }
   }
 
-  async function aplicarAjuste(mes: number) {
-    if (!selectedGtId) {
-      showToast('Selecione um GT.', 'err')
+  async function handleReset() {
+    if (
+      !window.confirm(
+        'Zerar as vendas de todos os GTs e reiniciar a disputa do mês? Use isto no início de um novo mês.'
+      )
+    ) {
       return
     }
-    const a = parseIntSafe(addPorMes[mes] ?? '')
-    const r = parseIntSafe(remPorMes[mes] ?? '')
-    if (a <= 0 && r <= 0) {
-      showToast('Informe quantidade a adicionar ou a remover.', 'err')
-      return
-    }
-    setBusyMes(mes)
+    setActionErr(null)
+    setResetting(true)
     try {
-      const novo = await ajustarChurnGtOperacaoMes(ano, mes, selectedGtId, a, r)
-      showToast(`${NOME_MES[mes - 1]}: ajuste aplicado. Total agora: ${novo.toLocaleString('pt-BR')}.`)
-      setAddPorMes((p) => ({ ...p, [mes]: '' }))
-      setRemPorMes((p) => ({ ...p, [mes]: '' }))
-      await load()
-    } catch (err) {
-      showToast(formatFirebaseOrUnknownError(err) || 'Erro ao ajustar', 'err')
+      const next = await resetGtsVendasAtual()
+      setVendasDoc(next)
+      showToast(`Disputa reiniciada — ${labelPeriodYm(next.periodYm)}.`)
+    } catch (e) {
+      const msg = formatFirebaseOrUnknownError(e) || 'Erro ao resetar'
+      setActionErr(msg)
+      showToast(msg, 'err')
     } finally {
-      setBusyMes(null)
+      setResetting(false)
     }
   }
 
-  const anosOpts = Array.from({ length: 7 }, (_, i) => currentY - 3 + i)
-  const selectedGt = users.find((u) => u.id === selectedGtId)
+  const periodLabel = vendasDoc.periodYm ? labelPeriodYm(vendasDoc.periodYm) : '—'
 
   return (
     <div className="content">
@@ -130,13 +126,29 @@ export function ConfigGtsPage() {
         </Link>
         <h2 className="page-title-row" style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, marginTop: 10 }}>
           <Trophy size={24} strokeWidth={1.65} aria-hidden />
-          GTs — churn (quantidade)
+          GTs — vendas
         </h2>
         <p style={{ color: 'var(--text2)', maxWidth: 720 }}>
-          Cadastro mensal por gestor: número de churn (log), não valores em R$. O mesmo modelo da Base: definir total ou
-          adicionar/remover. Alimenta a Classificação → GTs.
+          Lista de gestores com <b>+1</b> / <b>−1</b> ao lado do nome. Apenas admin. Alimenta a Classificação → GTs.
         </p>
       </div>
+
+      {actionErr && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 16,
+            padding: '12px 16px',
+            borderColor: 'rgba(239, 68, 68, .35)',
+            background: 'rgba(239, 68, 68, .08)',
+            color: 'var(--red)',
+            fontSize: 14
+          }}
+          role="alert"
+        >
+          {actionErr}
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
@@ -165,157 +177,107 @@ export function ConfigGtsPage() {
             </span>
             <ChevronRight size={18} aria-hidden />
           </Link>
-          <Link
-            to="/config/gestao-op"
-            className="btn btn-ghost"
-            style={{ justifyContent: 'space-between', display: 'flex', alignItems: 'center' }}
-          >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <Factory size={18} strokeWidth={1.65} aria-hidden />
-              Gestão OP (saldo do squad em R$)
-            </span>
-            <ChevronRight size={18} aria-hidden />
-          </Link>
         </div>
       </div>
 
-      <div className="card mb" style={{ marginBottom: 16 }}>
-        <div className="card-header" style={{ alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span className="card-title">Gestor e ano</span>
-          <select
-            className="di"
-            style={{ minWidth: 200, maxWidth: 320 }}
-            value={selectedGtId}
-            onChange={(e) => setSelectedGtId(e.target.value)}
-            disabled={loading || users.length === 0}
-          >
-            {users.length === 0 ? (
-              <option value="">Nenhum GT — crie em Usuários</option>
-            ) : (
-              users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.nome}
-                </option>
-              ))
-            )}
-          </select>
-          <select className="di" style={{ maxWidth: 140 }} value={ano} onChange={(e) => setAno(Number(e.target.value))}>
-            {anosOpts.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
+      {loading && (
+        <div className="loading card" style={{ padding: 24 }}>
+          <div className="spin" /> Carregando...
         </div>
-        {selectedGt && (
-          <p style={{ padding: '0 18px 14px', margin: 0, fontSize: 13, color: 'var(--text3)' }}>
-            A editar: <strong style={{ color: 'var(--text)' }}>{selectedGt.nome}</strong>
+      )}
+      {err && (
+        <div className="empty card">
+          <p>{err}</p>
+        </div>
+      )}
+      {!loading && !err && users.length === 0 && (
+        <div className="card" style={{ padding: 24 }}>
+          <p style={{ color: 'var(--text3)' }}>Ainda não há utilizadores com cargo GT. Crie ou edite em Usuários.</p>
+        </div>
+      )}
+      {!loading && !err && users.length > 0 && (
+        <div className="card">
+          <div
+            className="card-header"
+            style={{ alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'space-between' }}
+          >
+            <div>
+              <span className="card-title">Gestores</span>
+              <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text3)' }}>
+                Disputa ativa: <strong style={{ color: 'var(--text)' }}>{periodLabel}</strong>
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={resetting || busyGtId != null}
+              onClick={() => void handleReset()}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            >
+              <RotateCcw size={16} strokeWidth={1.65} aria-hidden />
+              Resetar disputa
+            </button>
+          </div>
+          <div style={{ padding: '0 0 8px' }}>
+            {users.map((u) => {
+              const tot = getVendasGtAtual(vendasDoc, u.id)
+              const busy = busyGtId === u.id
+              return (
+                <div
+                  key={u.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    padding: '14px 18px',
+                    borderTop: '1px solid var(--border)',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <span style={{ flex: 1, minWidth: 160, fontWeight: 600, fontSize: 15 }}>{u.nome}</span>
+                  <span
+                    style={{
+                      minWidth: 48,
+                      textAlign: 'center',
+                      fontSize: 22,
+                      fontWeight: 800,
+                      fontVariantNumeric: 'tabular-nums',
+                      opacity: busy ? 0.55 : 1
+                    }}
+                  >
+                    {tot}
+                  </span>
+                  <div style={{ display: 'inline-flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      title="Remover 1 venda"
+                      disabled={busy || resetting || tot <= 0}
+                      onClick={() => void ajustarVenda(u.id, -1)}
+                      aria-label={`Remover 1 venda de ${u.nome}`}
+                    >
+                      <Minus size={18} strokeWidth={2.25} aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      title="Adicionar 1 venda"
+                      disabled={busy || resetting}
+                      onClick={() => void ajustarVenda(u.id, 1)}
+                      aria-label={`Adicionar 1 venda de ${u.nome}`}
+                    >
+                      <Plus size={18} strokeWidth={2.25} aria-hidden />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <p style={{ padding: '8px 18px 16px', margin: 0, fontSize: 12, color: 'var(--text3)' }}>
+            No início de cada mês, use <b>Resetar disputa</b> para zerar todos e começar a contagem de novo.
           </p>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title">Churn por mês (quantidade)</span>
         </div>
-        {loading && (
-          <div className="loading" style={{ padding: 24 }}>
-            <div className="spin" /> Carregando...
-          </div>
-        )}
-        {err && (
-          <div className="empty">
-            <p>{err}</p>
-          </div>
-        )}
-        {!loading && !err && users.length === 0 && (
-          <div style={{ padding: 24 }}>
-            <p style={{ color: 'var(--text3)' }}>Ainda não há utilizadores com cargo GT. Crie ou edite em Usuários.</p>
-          </div>
-        )}
-        {!loading && !err && users.length > 0 && (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="rank-perf-table" style={{ width: '100%', minWidth: 720, fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <th className="rank-perf-th">Mês</th>
-                  <th className="rank-perf-th rank-perf-th--num">Qtd. atual</th>
-                  <th className="rank-perf-th">Definir quantidade</th>
-                  <th className="rank-perf-th">Adicionar / Remover</th>
-                </tr>
-              </thead>
-              <tbody>
-                {NOME_MES.map((nome, i) => {
-                  const mes = i + 1
-                  const tot = totalMes(mes)
-                  const busy = busyMes === mes
-                  return (
-                    <tr key={mes}>
-                      <td className="rank-perf-td" style={{ fontWeight: 600 }}>
-                        {nome}
-                      </td>
-                      <td className="rank-perf-td rank-perf-td--num">{tot.toLocaleString('pt-BR')}</td>
-                      <td className="rank-perf-td">
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                          <input
-                            className="di"
-                            style={{ width: 120, margin: 0 }}
-                            inputMode="numeric"
-                            placeholder="Nova qtd."
-                            value={novoPorMes[mes] ?? ''}
-                            onChange={(e) => setNovoPorMes((p) => ({ ...p, [mes]: e.target.value }))}
-                            disabled={busy || !selectedGtId}
-                          />
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            disabled={busy || !selectedGtId}
-                            onClick={() => salvarDefinir(mes)}
-                          >
-                            Salvar
-                          </button>
-                        </div>
-                      </td>
-                      <td className="rank-perf-td">
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                          <input
-                            className="di"
-                            style={{ width: 88, margin: 0 }}
-                            inputMode="numeric"
-                            placeholder="+ Qtd"
-                            title="Somar ao total de churn"
-                            value={addPorMes[mes] ?? ''}
-                            onChange={(e) => setAddPorMes((p) => ({ ...p, [mes]: e.target.value }))}
-                            disabled={busy || !selectedGtId}
-                          />
-                          <input
-                            className="di"
-                            style={{ width: 88, margin: 0 }}
-                            inputMode="numeric"
-                            placeholder="− Qtd"
-                            title="Subtrair do total de churn"
-                            value={remPorMes[mes] ?? ''}
-                            onChange={(e) => setRemPorMes((p) => ({ ...p, [mes]: e.target.value }))}
-                            disabled={busy || !selectedGtId}
-                          />
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            disabled={busy || !selectedGtId}
-                            onClick={() => aplicarAjuste(mes)}
-                          >
-                            Aplicar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }

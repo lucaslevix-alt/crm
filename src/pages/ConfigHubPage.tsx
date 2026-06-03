@@ -201,7 +201,7 @@ export function ConfigHubPage() {
             <span className="config-hub-card-body">
               <span className="config-hub-card-title">GTs</span>
               <span className="config-hub-card-text">
-                Cadastro mensal de churn por gestor (quantidade), como a Base — alimenta a classificação.
+                Lista de gestores com +1 / −1 nas vendas e reset no início do mês — alimenta a classificação GTs.
               </span>
             </span>
             <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
