@@ -343,13 +343,7 @@ export function ConfigEventoFotosPage() {
               <img
                 src={previewSrc}
                 alt="Pré-visualização"
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: 220,
-                  objectFit: 'contain',
-                  borderRadius: 12,
-                  border: '1px solid var(--border)'
-                }}
+                className="evento-foto-preview"
                 onError={() => {
                   if (!previewThumb) {
                     setPreviewThumb(true)
@@ -450,13 +444,7 @@ function EventoFotoTableRow({
           <img
             src={src}
             alt=""
-            style={{
-              width: 56,
-              height: 40,
-              objectFit: 'cover',
-              borderRadius: 8,
-              border: '1px solid var(--border)'
-            }}
+            className="evento-foto-thumb"
             onError={() => {
               if (!thumb) {
                 setThumb(true)

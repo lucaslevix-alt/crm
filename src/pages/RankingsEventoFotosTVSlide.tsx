@@ -80,19 +80,23 @@ export function RankingsEventoFotosTVSlide({
 
   return (
     <div className="rankings-tv-eventos-slide">
-      {imgSrc ? (
-        <img
-          key={`${current.id}-${useThumb ? 't' : 'v'}`}
-          className="rankings-tv-eventos-img"
-          src={imgSrc}
-          alt={current.legenda || current.evento}
-          onError={onImgError}
-        />
-      ) : (
-        <div className="rankings-tv-eventos-empty">
-          <p>Não foi possível carregar esta foto. Verifique o link e a partilha no Google Drive.</p>
+      <div className="rankings-tv-eventos-frame" aria-hidden={!imgSrc}>
+        <div className="rankings-tv-eventos-frame-inner">
+          {imgSrc ? (
+            <img
+              key={`${current.id}-${useThumb ? 't' : 'v'}`}
+              className="rankings-tv-eventos-img"
+              src={imgSrc}
+              alt=""
+              onError={onImgError}
+            />
+          ) : (
+            <div className="rankings-tv-eventos-frame-placeholder">
+              <p>Não foi possível carregar esta foto. Verifique o link e a partilha no Google Drive.</p>
+            </div>
+          )}
         </div>
-      )}
+      </div>
       <div className="rankings-tv-eventos-caption">
         <div className="rankings-tv-eventos-evento">{current.evento}</div>
         {current.legenda ? <div className="rankings-tv-eventos-legenda">{current.legenda}</div> : null}
