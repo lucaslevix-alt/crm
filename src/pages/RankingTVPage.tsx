@@ -66,17 +66,24 @@ function allSlideKeys(): TvSlideKey[] {
   return ALL_TV_SLIDES.map((s) => s.key)
 }
 
+function persistSlideKeys(keys: TvSlideKey[]): void {
+  try {
+    localStorage.setItem(TV_SLIDES_STORAGE, JSON.stringify(keys))
+  } catch {
+    /* ignore */
+  }
+}
+
 function loadSlideKeys(): TvSlideKey[] {
   const all = allSlideKeys()
   try {
     const raw = localStorage.getItem(TV_SLIDES_STORAGE)
-    if (!raw) return all
+    if (raw === null) return all
     const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed) || parsed.length === 0) return all
+    if (!Array.isArray(parsed)) return all
+    if (parsed.length === 0) return []
     const filtered = parsed.filter((k): k is TvSlideKey => typeof k === 'string' && (all as readonly string[]).includes(k))
-    if (!filtered.length) return all
-    // Se o utilizador já escolheu slides no passado, mas adicionámos um slide novo (ex.: "Avisos"),
-    // inclui-o por padrão para não "sumir" na TV por causa do localStorage antigo.
+    if (!filtered.length) return []
     const next = [...filtered]
     for (const k of all) {
       if (!next.includes(k)) next.push(k)
@@ -154,16 +161,20 @@ export function RankingTVPage() {
   function toggleSlideKey(key: TvSlideKey) {
     setSlideKeys((prev) => {
       const has = prev.includes(key)
-      let next = has ? prev.filter((k) => k !== key) : [...prev, key]
-      if (next.length === 0) next = prev
-      try {
-        localStorage.setItem(TV_SLIDES_STORAGE, JSON.stringify(next))
-      } catch {
-        /* ignore */
-      }
+      const next = has ? prev.filter((k) => k !== key) : [...prev, key]
+      persistSlideKeys(next)
       return next
     })
   }
+
+  function setAllSlideKeys(enabled: boolean) {
+    const next = enabled ? allSlideKeys() : []
+    persistSlideKeys(next)
+    setSlideKeys(next)
+  }
+
+  const allSlidesEnabled = slideKeys.length === allSlideKeys().length
+  const noSlidesEnabled = slideKeys.length === 0
 
   const activeIndex = slides.length ? slide % slides.length : 0
   const activeAvisos = useMemo(() => {
@@ -223,6 +234,12 @@ export function RankingTVPage() {
             </div>
           </div>
         )}
+        {noSlidesEnabled && !destaque && (
+          <div className="rankings-tv-idle" role="status">
+            <div className="rankings-tv-idle-title">Telão em pausa</div>
+            <p>Nenhuma classificação ou slide está ativo. Ative opções abaixo ou use só avisos em destaque.</p>
+          </div>
+        )}
         {slides.map((s, i) => {
           const Cmp = s.Component
           const avisoProps =
@@ -260,9 +277,39 @@ export function RankingTVPage() {
           Classificações neste TV
         </summary>
         <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginTop: 12,
+            marginBottom: 12,
+            alignItems: 'center'
+          }}
+        >
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setAllSlideKeys(false)}
+            disabled={noSlidesEnabled}
+          >
+            Desativar todas
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setAllSlideKeys(true)}
+            disabled={allSlidesEnabled}
+          >
+            Ativar todas
+          </button>
+          {noSlidesEnabled && (
+            <span style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>Nenhuma opção ativa</span>
+          )}
+        </div>
+        <div
           role="group"
           aria-label="Escolher rankings no modo TV"
-          style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', marginTop: 12 }}
+          style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px' }}
         >
           {ALL_TV_SLIDES.map((s) => (
             <label
@@ -279,7 +326,8 @@ export function RankingTVPage() {
           ))}
         </div>
         <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 10, marginBottom: 0 }}>
-          Pelo menos uma opção deve ficar marcada. A escolha é guardada neste dispositivo.
+          Pode desativar tudo para pausar o telão (só ticker/destaque de avisos, se houver). A escolha fica guardada neste
+          dispositivo.
         </p>
       </details>
       <p className="rankings-tv-exit-hint">
