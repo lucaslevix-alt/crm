@@ -431,7 +431,7 @@ export function RelatoriosComissoesPage() {
                     <th>SDR</th>
                     <th>Cliente / lead</th>
                     <th>Origem</th>
-                    <th>Orçamento</th>
+                    <th>Qualificada?</th>
                     <th>Gravação</th>
                     <th>Qualif.</th>
                   </tr>

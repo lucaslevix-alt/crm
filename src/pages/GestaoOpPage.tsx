@@ -573,8 +573,8 @@ export function GestaoOpPage() {
               </h3>
               <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>
                 Saldo atual: {fmtBRLSaldoOp(retirarTarget.bonusSaldo)}. Para cada tipo com valor, indique o nome do cliente. Retiradas
-                diminuem o saldo; crédito no bônus aumenta. Tudo é guardado no histórico. O ranking de GTs por quantidade de churn é
-                cadastrado em Configurações → GTs (não usa estes valores em R$).
+                diminuem o saldo; crédito no bônus aumenta. Tudo é guardado no histórico. O ranking de GTs (vendas na carteira) é
+                contabilizado em Configurações → GTs — não usa estes valores em R$.
               </p>
 
               <LancamentoLinhaRetirada

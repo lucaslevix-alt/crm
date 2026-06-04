@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import { AuthSync } from './components/auth/AuthSync'
-import { Target } from 'lucide-react'
 import { BrowserRouter, Route, Routes, Navigate, Outlet } from 'react-router-dom'
 import { LoginPage } from './pages/LoginPage'
 import {
@@ -9,14 +8,12 @@ import {
   ConfigAvisosPage,
   ConfigEventoFotosPage,
   ConfigTvTimersPage,
-  ConfigCrmWebhookPage,
   ConfigRankingOverviewPage,
   ConfigMetasPage,
   RelatoriosComissoesPage,
   DashboardPage,
   FunilPage,
   MetaAdsPage,
-  LeadsMetaSheetPage,
   MetasPage,
   ProdutosPage,
   RankingCloserPage,
@@ -174,14 +171,6 @@ export default function App() {
                   }
                 />
                 <Route
-                  path="crm-webhook"
-                  element={
-                    <AdminOnlyRoute>
-                      <ConfigCrmWebhookPage />
-                    </AdminOnlyRoute>
-                  }
-                />
-                <Route
                   path="usuarios"
                   element={
                     <AdminOnlyRoute>
@@ -233,7 +222,8 @@ export default function App() {
               <Route path="produtos" element={<Navigate to="/config/produtos" replace />} />
               <Route path="auditoria" element={<AuditoriaPage />} />
               <Route path="meta-ads" element={<MetaAdsPage />} />
-              <Route path="leads-meta" element={<LeadsMetaSheetPage />} />
+              <Route path="leads-meta" element={<Navigate to="/dashboard" replace />} />
+              <Route path="config/crm-webhook" element={<Navigate to="/config" replace />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -247,20 +237,6 @@ export default function App() {
         </Modal>
         <Modal id="modal-meta-config">
           <MetaConfigModal />
-        </Modal>
-        <Modal id="modal-leads">
-          <div style={{ padding: 24 }}>
-            <h3 className="page-title-row" style={{ marginBottom: 12, fontSize: 18 }}>
-              <Target size={22} strokeWidth={1.65} aria-hidden />
-              Registrar Leads
-            </h3>
-            <p style={{ color: 'var(--text2)', fontSize: 13 }}>
-              Formulário de registro de leads em breve. Use a barra rápida ou a página de Registros para lançamentos.
-            </p>
-            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => useAppStore.getState().closeModal()}>
-              Fechar
-            </button>
-          </div>
         </Modal>
         <Modal id="modal-usuario">
           <UserFormModal />

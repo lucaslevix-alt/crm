@@ -49,10 +49,6 @@ export const GestaoOpPage = lazy(() =>
 )
 export const SquadsPage = lazy(() => import('../pages/SquadsPage').then((m) => ({ default: m.SquadsPage })))
 export const MetaAdsPage = lazy(() => import('../pages/MetaAdsPage').then((m) => ({ default: m.MetaAdsPage })))
-export const MetaLeadsPage = lazy(() => import('../pages/MetaLeadsPage').then((m) => ({ default: m.MetaLeadsPage })))
-export const LeadsMetaSheetPage = lazy(() =>
-  import('../pages/LeadsMetaSheetPage').then((m) => ({ default: m.LeadsMetaSheetPage }))
-)
 export const UsuariosPage = lazy(() =>
   import('../pages/UsuariosPage').then((m) => ({ default: m.UsuariosPage }))
 )
@@ -73,9 +69,6 @@ export const ConfigEventoFotosPage = lazy(() =>
 )
 export const ConfigTvTimersPage = lazy(() =>
   import('../pages/ConfigTvTimersPage').then((m) => ({ default: m.ConfigTvTimersPage }))
-)
-export const ConfigCrmWebhookPage = lazy(() =>
-  import('../pages/ConfigCrmWebhookPage').then((m) => ({ default: m.ConfigCrmWebhookPage }))
 )
 export const ConfigRankingOverviewPage = lazy(() =>
   import('../pages/ConfigRankingOverviewPage').then((m) => ({ default: m.ConfigRankingOverviewPage }))

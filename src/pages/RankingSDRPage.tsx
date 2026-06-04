@@ -8,9 +8,8 @@ import {
 import { formatFirebaseOrUnknownError } from '../lib/firebaseUserFacingError'
 import { contaParaComissao } from '../lib/registroComissao'
 import { today, mRange, wRange } from '../lib/dates'
-import { useAppStore } from '../store/useAppStore'
 import type { CrmUser } from '../store/useAppStore'
-import { Target, Trophy } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import { RankingPodiumThree } from '../components/ranking/RankingPodium'
 import { RankMarker } from '../components/ui/RankMarker'
 
@@ -97,7 +96,6 @@ export function RankingSDRPage({
   tvMode,
   tvRefreshKey
 }: { tvMode?: boolean; tvRefreshKey?: number } = {}) {
-  const { openModal } = useAppStore()
   const [period, setPeriod] = useState<RpPeriod>('mes')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -246,17 +244,6 @@ export function RankingSDRPage({
     <>
       {!tvMode && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              style={{ width: 'auto', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              onClick={() => openModal('modal-leads')}
-            >
-              <Target size={16} strokeWidth={1.65} aria-hidden />
-              Registrar Leads
-            </button>
-          </div>
           <div className="ctrl-row" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
             <span className="ctrl-label">Período:</span>
             {(['mes', 'semana', 'hoje'] as const).map((p) => (

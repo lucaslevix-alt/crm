@@ -1,18 +1,28 @@
-/** Orçamento do lead (Agenda — reunião realizada). */
+/** Resposta «qualificada?» na agenda (reunião realizada); valores legados em Firestore. */
 export type LeadBudgetOp = 'budget_yes' | 'budget_open' | 'budget_no'
 
 /** Qualificação para comissão SDR em `reuniao_realizada`. */
 export type QualificacaoSdr = 'qualificada' | 'pendente' | 'nao_qualificada'
 
+/** Agenda — desfecho «realizada»: Sim / Não (mapeia para budget_yes / budget_no). */
+export const AGENDA_QUALIFICADA_OPTIONS: { value: 'budget_yes' | 'budget_no'; label: string }[] = [
+  { value: 'budget_yes', label: 'Sim' },
+  { value: 'budget_no', label: 'Não' }
+]
+
+/** Edição de registo (admin / legado): inclui opção antiga «não foi abordado». */
 export const LEAD_BUDGET_OPTIONS: { value: LeadBudgetOp; label: string }[] = [
   { value: 'budget_yes', label: 'Sim' },
-  { value: 'budget_open', label: 'Não foi abordado' },
-  { value: 'budget_no', label: 'Não — Está fora do orçamento' }
+  { value: 'budget_no', label: 'Não' },
+  { value: 'budget_open', label: 'Não foi abordado (legado)' }
 ]
 
 export function labelLeadBudget(v: LeadBudgetOp | null | undefined): string {
   if (v == null) return '—'
-  return LEAD_BUDGET_OPTIONS.find((o) => o.value === v)?.label ?? v
+  if (v === 'budget_yes') return 'Sim'
+  if (v === 'budget_no') return 'Não'
+  if (v === 'budget_open') return 'Não foi abordado'
+  return v
 }
 
 export const QUALIFICACAO_SDR_LABELS: Record<QualificacaoSdr, string> = {

@@ -7,11 +7,6 @@
         { "fieldPath": "tipo", "order": "ASCENDING" },
         { "fieldPath": "data", "order": "ASCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "crm_webhook_logs",
-      "queryScope": "COLLECTION",
-      "fields": [{ "fieldPath": "ts", "order": "DESCENDING" }]
     }
   ],
   "fieldOverrides": []

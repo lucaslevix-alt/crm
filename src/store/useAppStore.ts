@@ -84,10 +84,8 @@ interface AppStoreState {
   produtosVersion: number
   metaConnectedAt: number
   quickRegTipo: string | null
-  quickRegistroPrompt: { tipo: string; title: string; mode: 'modal' | 'save' } | null
   newRegistroDefaults: { tipo?: string; anuncio?: string } | null
   setQuickRegTipo: (tipo: string | null) => void
-  setQuickRegistroPrompt: (p: { tipo: string; title: string; mode: 'modal' | 'save' } | null) => void
   setNewRegistroDefaults: (d: { tipo?: string; anuncio?: string } | null) => void
   setCurrentUser: (user: CrmUser | null) => void
   setAuthSessionReady: (ready: boolean) => void
@@ -183,10 +181,8 @@ export const useAppStore = create<AppStoreState>((set) => ({
   produtosVersion: 0,
   metaConnectedAt: 0,
   quickRegTipo: null,
-  quickRegistroPrompt: null,
   newRegistroDefaults: null,
   setQuickRegTipo: (tipo) => set({ quickRegTipo: tipo }),
-  setQuickRegistroPrompt: (p) => set({ quickRegistroPrompt: p }),
   setNewRegistroDefaults: (d) => set({ newRegistroDefaults: d }),
 
   setCurrentUser: (user) => {

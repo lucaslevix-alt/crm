@@ -8,7 +8,7 @@ import {
 import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import type { CrmUser } from '../../store/useAppStore'
 import { useAppStore } from '../../store/useAppStore'
-import { LEAD_BUDGET_OPTIONS, type LeadBudgetOp } from '../../lib/qualificacaoSdr'
+import { AGENDA_QUALIFICADA_OPTIONS, type LeadBudgetOp } from '../../lib/qualificacaoSdr'
 
 interface AgendaRealizadaModalProps {
   agendamento: AgendamentoRow
@@ -25,8 +25,8 @@ export function AgendaRealizadaModal({ agendamento, closer, adminOverride, onClo
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!leadBudget) {
-      showToast('Selecione o orçamento do lead', 'err')
+    if (!leadBudget || leadBudget === 'budget_open') {
+      showToast('Selecione se a reunião é qualificada (Sim ou Não)', 'err')
       return
     }
     const url = callRecordingUrl.trim()
@@ -91,20 +91,21 @@ export function AgendaRealizadaModal({ agendamento, closer, adminOverride, onClo
           SDR: {agendamento.sdrUserName} · Squad: {agendamento.squadNome}
         </p>
         <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 16 }}>
-          Para concluir, indique o orçamento percebido do lead e o link <strong>https</strong> da gravação da chamada.
+          Para concluir, indique se a reunião é <strong>qualificada</strong> e o link <strong>https</strong> da gravação da
+          chamada.
         </p>
         <form onSubmit={handleSubmit}>
           <div className="fg2">
             <div className="fg">
-              <label>Orçamento do lead *</label>
+              <label>Qualificada? *</label>
               <select
                 className="di"
-                value={leadBudget}
+                value={leadBudget === 'budget_open' ? '' : leadBudget}
                 onChange={(e) => setLeadBudget(e.target.value as LeadBudgetOp | '')}
                 required
               >
                 <option value="">Selecionar…</option>
-                {LEAD_BUDGET_OPTIONS.map((o) => (
+                {AGENDA_QUALIFICADA_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

@@ -219,12 +219,12 @@ export function EditRegistroForm() {
           outRecordingUrl = null
           outQualificacao = null
         } else if (lbEmpty !== urlEmpty) {
-          showToast('Em realizada: preencha orçamento e URL https em conjunto, ou limpe ambos (registo legado).', 'err')
+          showToast('Em realizada: indique Qualificada? (Sim/Não) e URL https em conjunto, ou limpe ambos (registo legado).', 'err')
           return
         } else {
           const url = callRecordingUrl.trim()
           if (!leadBudget) {
-            showToast('Em realizada: preencha orçamento e URL https em conjunto, ou limpe ambos (registo legado).', 'err')
+            showToast('Em realizada: indique Qualificada? (Sim/Não) e URL https em conjunto, ou limpe ambos (registo legado).', 'err')
             return
           }
           if (!isValidHttpsRecordingUrl(url)) {
@@ -371,7 +371,7 @@ export function EditRegistroForm() {
                 </div>
               )}
               <div className="fg">
-                <label>Orçamento do lead {sdrQualLocked ? '' : '(legado: deixe vazio com URL vazio)'}</label>
+                <label>Qualificada? {sdrQualLocked ? '' : '(legado: deixe vazio com URL vazio)'}</label>
                 <select
                   className="di"
                   value={leadBudget}

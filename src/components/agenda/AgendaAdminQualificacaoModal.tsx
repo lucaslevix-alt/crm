@@ -6,7 +6,7 @@ import {
 } from '../../firebase/firestore'
 import { formatFirebaseOrUnknownError } from '../../lib/firebaseUserFacingError'
 import {
-  LEAD_BUDGET_OPTIONS,
+  AGENDA_QUALIFICADA_OPTIONS,
   QUALIFICACAO_SDR_LABELS,
   type LeadBudgetOp,
   type QualificacaoSdr
@@ -89,18 +89,21 @@ export function AgendaAdminQualificacaoModal({
             </select>
           </div>
           <div className="fg">
-            <label>Orçamento do lead</label>
+            <label>Qualificada? (resposta no desfecho)</label>
             <select
               className="di"
-              value={leadBudget}
+              value={leadBudget === 'budget_open' ? '' : leadBudget}
               onChange={(e) => setLeadBudget((e.target.value as LeadBudgetOp) || '')}
             >
               <option value="">—</option>
-              {LEAD_BUDGET_OPTIONS.map((o) => (
+              {AGENDA_QUALIFICADA_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
+              {agendamento.leadBudget === 'budget_open' && (
+                <option value="budget_open">Não foi abordado (legado)</option>
+              )}
             </select>
           </div>
           <div className="fg">

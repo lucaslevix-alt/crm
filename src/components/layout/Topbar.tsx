@@ -15,8 +15,7 @@ const ROUTE_TITLES: Record<string, string> = {
   produtos: 'Produtos',
   config: 'Configurações',
   auditoria: 'Auditoria',
-  'meta-ads': 'Meta Ads',
-  'leads-meta': 'Leads Meta'
+  'meta-ads': 'Meta Ads'
 }
 
 function getPageTitle(pathname: string): string {
@@ -25,7 +24,6 @@ function getPageTitle(pathname: string): string {
     if (parts[1] === 'rankings-mensal') return 'Rankings mensais'
     if (parts[1] === 'eventos-fotos') return 'Fotos dos eventos'
     if (parts[1] === 'relatorios-comissoes') return 'Relatórios para comissões'
-    if (parts[1] === 'crm-webhook') return 'CRM nativo (webhook)'
     if (parts[1] === 'metas') return 'Configuração de metas'
     if (parts[1] === 'usuarios') return 'Usuários'
     if (parts[1] === 'squads') return 'Squads'

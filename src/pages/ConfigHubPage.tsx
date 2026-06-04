@@ -7,7 +7,6 @@ import {
   Images,
   Megaphone,
   Package,
-  Plug,
   Settings,
   Target,
   Timer,
@@ -62,21 +61,6 @@ export function ConfigHubPage() {
               <span className="config-hub-card-title">Relatórios para comissões</span>
               <span className="config-hub-card-text">
                 Exportar SDR (agendadas, realizadas, leads) e closer (vendas e valores) por período.
-              </span>
-            </span>
-            <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
-          </Link>
-        )}
-
-        {isAdmin && (
-          <Link to="/config/crm-webhook" className="config-hub-card">
-            <span className="config-hub-card-ic">
-              <Plug size={22} strokeWidth={1.65} aria-hidden />
-            </span>
-            <span className="config-hub-card-body">
-              <span className="config-hub-card-title">CRM nativo (webhook)</span>
-              <span className="config-hub-card-text">
-                Sincronizar reuniões agendadas, realizadas e vendas do pipeline para a Classificação.
               </span>
             </span>
             <ChevronRight className="config-hub-card-arrow" size={18} strokeWidth={1.75} aria-hidden />
